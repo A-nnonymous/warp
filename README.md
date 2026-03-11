@@ -88,6 +88,29 @@ The built assets in `runtime/web/static/` are what the Python runtime serves in 
 
 ## Quickstart
 
+### Standalone usage
+
+Use `warp` as an independent repository and point it at the target codebase you want to coordinate.
+
+From the `warp` repo root:
+
+- start only the dashboard: `python3 runtime/control_plane.py serve`
+- start dashboard and worker launch flow: `python3 runtime/control_plane.py up`
+- stop workers only: `python3 runtime/control_plane.py stop-agents`
+- close the listener but keep workers alive: `python3 runtime/control_plane.py silent`
+- stop everything: `python3 runtime/control_plane.py stop-all`
+
+If the machine does not already have the control-plane Python dependency installed, use the self-contained launcher form:
+
+- `uv run --no-project --with 'PyYAML>=6.0.2' python runtime/control_plane.py serve`
+
+On first run, `warp` will fall back to `runtime/config_template.yaml` when `runtime/local_config.yaml` is absent. Save a real config from the Settings page, or create `runtime/local_config.yaml` manually, then set at minimum:
+
+- `project.local_repo_root` to the target repository you want `warp` to manage
+- any shared reference workspace path you actually need
+- provider credentials or session-backed provider settings
+- worker worktree paths and branches, if you do not want A0 to derive them
+
 ## Common operations
 
 These are the normal operator commands:

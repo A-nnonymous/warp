@@ -6,5 +6,6 @@ runtime/generated_wrappers/
 runtime/logs/
 runtime/web/node_modules/
 runtime/__pycache__/
+state/provider_stats.yaml
 *.py[cod]
 .DS_Store
