@@ -24974,7 +24974,7 @@ function stringifyQueue(values) {
   return (values || []).join(", ");
 }
 function launchStrategyLabel(strategy) {
-  if (strategy === "initial_copilot") {
+  if (strategy === "initial_provider") {
     return "Initial Provider";
   }
   if (strategy === "selected_model") {
@@ -26020,7 +26020,7 @@ function SettingsTab({
         /* @__PURE__ */ (0, import_jsx_runtime.jsx)("p", { className: "small muted", children: "These values apply to every worker unless a row below overrides them. Blank fields are auto-filled from runtime conventions or sensible defaults where possible, so the main path should stay sparse." }),
         /* @__PURE__ */ (0, import_jsx_runtime.jsxs)("div", { className: "field-grid compact-field-grid", children: [
           /* @__PURE__ */ (0, import_jsx_runtime.jsx)(Field, { label: "Default Pool", value: workerDefaults.resource_pool || "", onChange: (value) => onWorkerChange(-1, "worker_defaults.resource_pool", value), issues: issues["worker_defaults.resource_pool"], helpText: "Leave blank to rely on pool queue or per-worker overrides." }),
-          /* @__PURE__ */ (0, import_jsx_runtime.jsx)(Field, { label: "Default Pool Queue", value: stringifyQueue(workerDefaults.resource_pool_queue), onChange: (value) => onWorkerChange(-1, "worker_defaults.resource_pool_queue", value), issues: issues["worker_defaults.resource_pool_queue"], placeholder: "copilot_pool, claude_pool" }),
+          /* @__PURE__ */ (0, import_jsx_runtime.jsx)(Field, { label: "Default Pool Queue", value: stringifyQueue(workerDefaults.resource_pool_queue), onChange: (value) => onWorkerChange(-1, "worker_defaults.resource_pool_queue", value), issues: issues["worker_defaults.resource_pool_queue"], placeholder: "ducc_pool" }),
           /* @__PURE__ */ (0, import_jsx_runtime.jsx)(SelectField, { label: "Default Environment", value: workerDefaults.environment_type || "uv", onChange: (value) => onWorkerChange(-1, "worker_defaults.environment_type", value), options: ["uv", "venv", "none"] }),
           /* @__PURE__ */ (0, import_jsx_runtime.jsx)(Field, { label: "Default Environment Path", value: workerDefaults.environment_path || "", onChange: (value) => onWorkerChange(-1, "worker_defaults.environment_path", value), issues: issues["worker_defaults.environment_path"] })
         ] }),
@@ -26453,8 +26453,8 @@ function App() {
   const [data, setData] = (0, import_react.useState)(null);
   const [draftConfig, setDraftConfig] = (0, import_react.useState)({ project: {}, providers: {}, resource_pools: {}, worker_defaults: {}, workers: [] });
   const [configDirty, setConfigDirty] = (0, import_react.useState)(false);
-  const [launchStrategy, setLaunchStrategy] = (0, import_react.useState)("initial_copilot");
-  const [launchProvider, setLaunchProvider] = (0, import_react.useState)("copilot");
+  const [launchStrategy, setLaunchStrategy] = (0, import_react.useState)("initial_provider");
+  const [launchProvider, setLaunchProvider] = (0, import_react.useState)("ducc");
   const [launchModel, setLaunchModel] = (0, import_react.useState)("");
   const [launchDirty, setLaunchDirty] = (0, import_react.useState)(false);
   const [autoRefresh, setAutoRefresh] = (0, import_react.useState)(true);
@@ -27112,7 +27112,7 @@ function App() {
                     onChange: (event) => {
                       setLaunchDirty(true);
                       setLaunchStrategy(event.target.value);
-                      if (event.target.value === "initial_copilot") {
+                      if (event.target.value === "initial_provider") {
                         setLaunchProvider(preferredLaunchProvider(data.launch_policy));
                       }
                     },
@@ -27127,7 +27127,7 @@ function App() {
                   {
                     className: "field-input compact-input",
                     value: launchProvider,
-                    disabled: launchStrategy === "initial_copilot",
+                    disabled: launchStrategy === "initial_provider",
                     onChange: (event) => {
                       setLaunchDirty(true);
                       setLaunchProvider(event.target.value);

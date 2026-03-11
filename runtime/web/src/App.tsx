@@ -523,7 +523,7 @@ function stringifyQueue(values: string[] | undefined): string {
 }
 
 function launchStrategyLabel(strategy: LaunchStrategy): string {
-  if (strategy === 'initial_copilot') {
+  if (strategy === 'initial_provider') {
     return 'Initial Provider';
   }
   if (strategy === 'selected_model') {
@@ -1685,7 +1685,7 @@ function SettingsTab({
             <p className="small muted">These values apply to every worker unless a row below overrides them. Blank fields are auto-filled from runtime conventions or sensible defaults where possible, so the main path should stay sparse.</p>
             <div className="field-grid compact-field-grid">
               <Field label="Default Pool" value={workerDefaults.resource_pool || ''} onChange={(value) => onWorkerChange(-1, 'worker_defaults.resource_pool', value)} issues={issues['worker_defaults.resource_pool']} helpText="Leave blank to rely on pool queue or per-worker overrides." />
-              <Field label="Default Pool Queue" value={stringifyQueue(workerDefaults.resource_pool_queue)} onChange={(value) => onWorkerChange(-1, 'worker_defaults.resource_pool_queue', value)} issues={issues['worker_defaults.resource_pool_queue']} placeholder="copilot_pool, claude_pool" />
+              <Field label="Default Pool Queue" value={stringifyQueue(workerDefaults.resource_pool_queue)} onChange={(value) => onWorkerChange(-1, 'worker_defaults.resource_pool_queue', value)} issues={issues['worker_defaults.resource_pool_queue']} placeholder="ducc_pool" />
               <SelectField label="Default Environment" value={workerDefaults.environment_type || 'uv'} onChange={(value) => onWorkerChange(-1, 'worker_defaults.environment_type', value)} options={['uv', 'venv', 'none']} />
               <Field label="Default Environment Path" value={workerDefaults.environment_path || ''} onChange={(value) => onWorkerChange(-1, 'worker_defaults.environment_path', value)} issues={issues['worker_defaults.environment_path']} />
             </div>
@@ -2075,8 +2075,8 @@ export function App() {
   const [data, setData] = useState<DashboardState | null>(null);
   const [draftConfig, setDraftConfig] = useState<ConfigShape>({ project: {}, providers: {}, resource_pools: {}, worker_defaults: {}, workers: [] });
   const [configDirty, setConfigDirty] = useState(false);
-  const [launchStrategy, setLaunchStrategy] = useState<LaunchStrategy>('initial_copilot');
-  const [launchProvider, setLaunchProvider] = useState('copilot');
+  const [launchStrategy, setLaunchStrategy] = useState<LaunchStrategy>('initial_provider');
+  const [launchProvider, setLaunchProvider] = useState('ducc');
   const [launchModel, setLaunchModel] = useState('');
   const [launchDirty, setLaunchDirty] = useState(false);
   const [autoRefresh, setAutoRefresh] = useState(true);
@@ -2818,7 +2818,7 @@ export function App() {
                       onChange={(event) => {
                         setLaunchDirty(true);
                         setLaunchStrategy(event.target.value as LaunchStrategy);
-                        if (event.target.value === 'initial_copilot') {
+                        if (event.target.value === 'initial_provider') {
                           setLaunchProvider(preferredLaunchProvider(data.launch_policy));
                         }
                       }}
@@ -2834,7 +2834,7 @@ export function App() {
                       <select
                         className="field-input compact-input"
                         value={launchProvider}
-                        disabled={launchStrategy === 'initial_copilot'}
+                        disabled={launchStrategy === 'initial_provider'}
                         onChange={(event) => {
                           setLaunchDirty(true);
                           setLaunchProvider(event.target.value);

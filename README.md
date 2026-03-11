@@ -305,7 +305,7 @@ The local webpage now provides:
 
 - a compact top bar for launch, restart, stop agents, stop all, refresh, and command copy actions
 - a `Silent Mode` action that closes the listener without stopping workers
-- launch modes for first-run Copilot, explicit provider/model pinning, or elastic provider selection
+- launch modes for the default initial provider, explicit provider/model pinning, or elastic provider selection
 - an `Overview` page that shows agent dashboards, overall delivery progress, and branch merge status at a glance
 - an `Operations` page for commands, validation, provider queue, merge queue, runtime state, heartbeats, backlog, and manager report
 - a `Settings` page with responsive editable project, pool, merge-policy, worker-default, and worker-override forms
@@ -324,7 +324,7 @@ For actual SonicMoE FP8 multi-agent delivery, the normal manager loop is:
 
 1. bring the control plane up with `serve`
 2. verify Settings and validation output are clean, starting with shared `worker_defaults`
-3. use `Initial Copilot` for the first fleet launch, then switch to `Selected Model` or `Elastic` as needed before pressing `Launch`
+3. use `Initial Provider` for the first fleet launch so the default ducc-backed pool comes up immediately, then switch to `Selected Model` or `Elastic` as needed before pressing `Launch`
 4. monitor agent health, backlog progress, and branch merge status from `Overview`
 5. inspect provider routing, runtime topology, and heartbeats in `Operations`
 6. press `Stop Agents` or run `stop-agents` when you want to pause the worker fleet without losing dashboard state

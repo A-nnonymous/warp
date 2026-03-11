@@ -255,16 +255,16 @@ class ControlPlaneIntegrationTest(unittest.TestCase):
             "task_policies": {
                 "defaults": {
                     "task_type": "default",
-                    "preferred_providers": ["copilot", "claude_code", "ducc", "opencode"],
+                    "preferred_providers": ["ducc", "claude_code", "opencode", "copilot"],
                     "suggested_test_command": "uv run pytest tests/moe_test.py -k test_moe",
                 },
                 "types": {
                     "protocol": {
-                        "preferred_providers": ["copilot", "claude_code", "ducc", "opencode"],
+                        "preferred_providers": ["ducc", "claude_code", "opencode", "copilot"],
                         "suggested_test_command": "uv run pytest tests/reference_layers/standalone_moe_layer/tests/test_imports_and_interfaces.py",
                     },
                     "audit_hopper": {
-                        "preferred_providers": ["copilot", "claude_code", "ducc", "opencode"],
+                        "preferred_providers": ["ducc", "claude_code", "opencode", "copilot"],
                         "suggested_test_command": "uv run pytest tests/moe_test.py -k test_moe",
                     },
                 },
@@ -303,7 +303,8 @@ class ControlPlaneIntegrationTest(unittest.TestCase):
                 },
             },
             "worker_defaults": {
-                "resource_pool_queue": ["copilot_pool", "ducc_pool", "opencode_pool", "claude_pool"],
+                "resource_pool": "ducc_pool",
+                "resource_pool_queue": ["ducc_pool"],
                 "environment_type": "none",
                 "sync_command": "none",
                 "submit_strategy": "patch_handoff",
@@ -589,7 +590,7 @@ class ControlPlaneIntegrationTest(unittest.TestCase):
     def test_single_worker_shutdown_updates_cleanup_state(self) -> None:
         launch_result = read_json(f"{self.base_url}/api/launch", {"restart": False})
         self.assertTrue(launch_result["ok"])
-        self.wait_for_agent_state(expected_provider="copilot", expected_model="gpt-5.4")
+        self.wait_for_agent_state(expected_provider="ducc", expected_model="claude-sonnet-4-5")
 
         shutdown = read_json(
             f"{self.base_url}/api/workers/stop",
@@ -611,7 +612,7 @@ class ControlPlaneIntegrationTest(unittest.TestCase):
     def test_team_cleanup_requires_ready_state(self) -> None:
         launch_result = read_json(f"{self.base_url}/api/launch", {"restart": False})
         self.assertTrue(launch_result["ok"])
-        self.wait_for_agent_state(expected_provider="copilot", expected_model="gpt-5.4")
+        self.wait_for_agent_state(expected_provider="ducc", expected_model="claude-sonnet-4-5")
 
         status_code, blocked_cleanup = request_json_allow_error(
             f"{self.base_url}/api/team-cleanup",
@@ -691,7 +692,7 @@ class ControlPlaneIntegrationTest(unittest.TestCase):
     def test_stop_agents_cli_stops_workers_and_keeps_listener(self) -> None:
         launch_result = read_json(f"{self.base_url}/api/launch", {"restart": False})
         self.assertTrue(launch_result["ok"])
-        self.wait_for_agent_state(expected_provider="copilot", expected_model="gpt-5.4")
+        self.wait_for_agent_state(expected_provider="ducc", expected_model="claude-sonnet-4-5")
 
         stop_result = self.run_cli_command("stop-agents")
         stop_payload = json.loads(stop_result.stdout)
@@ -779,7 +780,10 @@ class ControlPlaneIntegrationTest(unittest.TestCase):
         save_result = read_json(f"{self.base_url}/api/config", {"config": broken_config})
         self.assertTrue(save_result["ok"])
 
-        status_code, failed_launch = request_json_allow_error(f"{self.base_url}/api/launch", {"restart": False})
+        status_code, failed_launch = request_json_allow_error(
+            f"{self.base_url}/api/launch",
+            {"restart": False, "strategy": "selected_model", "provider": "copilot", "model": "gpt-5.4"},
+        )
         self.assertEqual(status_code, 400)
         self.assertFalse(failed_launch["ok"])
         self.assertEqual(len(failed_launch["failures"]), 2)
@@ -931,11 +935,14 @@ class ControlPlaneIntegrationTest(unittest.TestCase):
         self.assertTrue(any("Approve protocol name freeze" in item["body"] for item in refreshed["a0_console"]["messages"]))
 
     def test_process_exit_surfaces_escalation_in_attention_summary(self) -> None:
-        failing_binary = self.bin_dir / "copilot"
+        failing_binary = self.bin_dir / "opencode"
         failing_binary.write_text("#!/bin/sh\nexit 7\n", encoding="utf-8")
         failing_binary.chmod(0o755)
 
-        launch_result = read_json(f"{self.base_url}/api/launch", {"restart": False})
+        launch_result = read_json(
+            f"{self.base_url}/api/launch",
+            {"restart": False, "strategy": "selected_model", "provider": "opencode", "model": "o4-mini"},
+        )
         self.assertTrue(launch_result["ok"])
 
         wait_for(
@@ -1035,7 +1042,7 @@ class ControlPlaneIntegrationTest(unittest.TestCase):
     def test_worker_prompt_forbids_nested_agent_orchestration(self) -> None:
         launch_result = read_json(f"{self.base_url}/api/launch", {"restart": False})
         self.assertTrue(launch_result["ok"])
-        self.wait_for_agent_state(expected_provider="copilot", expected_model="gpt-5.4")
+        self.wait_for_agent_state(expected_provider="ducc", expected_model="claude-sonnet-4-5")
 
         prompt_path = self.warp_root / "runtime" / "generated_prompts" / "A1.md"
         prompt_text = prompt_path.read_text(encoding="utf-8")
@@ -1083,7 +1090,7 @@ class ControlPlaneIntegrationTest(unittest.TestCase):
     def test_silent_and_stop_all_cli_preserve_then_release_workers(self) -> None:
         launch_result = read_json(f"{self.base_url}/api/launch", {"restart": False})
         self.assertTrue(launch_result["ok"])
-        self.wait_for_agent_state(expected_provider="copilot", expected_model="gpt-5.4")
+        self.wait_for_agent_state(expected_provider="ducc", expected_model="claude-sonnet-4-5")
 
         silent_result = self.run_cli_command("silent")
         silent_payload = json.loads(silent_result.stdout)
@@ -1108,23 +1115,23 @@ class ControlPlaneIntegrationTest(unittest.TestCase):
 
     def test_multi_agent_launch_policies_and_heartbeats(self) -> None:
         initial_state = self.fetch_state()
-        self.assertEqual(initial_state["launch_policy"]["default_strategy"], "initial_copilot")
+        self.assertEqual(initial_state["launch_policy"]["default_strategy"], "initial_provider")
         resolved_workers = {item["agent"]: item for item in initial_state["resolved_workers"]}
         self.assertEqual(
             resolved_workers["A1"]["test_command"],
             "uv run pytest tests/reference_layers/standalone_moe_layer/tests/test_imports_and_interfaces.py",
         )
         self.assertEqual(resolved_workers["A1"]["task_type"], "protocol")
-        self.assertEqual(resolved_workers["A1"]["locked_pool"], "copilot_pool")
+        self.assertEqual(resolved_workers["A1"]["locked_pool"], "ducc_pool")
         self.assertEqual(resolved_workers["A2"]["test_command"], "uv run pytest tests/moe_test.py -k test_moe")
         self.assertEqual(resolved_workers["A2"]["task_type"], "audit_hopper")
-        self.assertEqual(resolved_workers["A2"]["locked_pool"], "copilot_pool")
+        self.assertEqual(resolved_workers["A2"]["locked_pool"], "ducc_pool")
 
         launch_result = read_json(f"{self.base_url}/api/launch", {"restart": False})
         self.assertTrue(launch_result["ok"])
-        self.assertEqual(launch_result["launch_policy"]["strategy"], "initial_copilot")
+        self.assertEqual(launch_result["launch_policy"]["strategy"], "initial_provider")
 
-        state = self.wait_for_agent_state(expected_provider="copilot", expected_model="gpt-5.4")
+        state = self.wait_for_agent_state(expected_provider="ducc", expected_model="claude-sonnet-4-5")
         runtime_workers = {item["agent"]: item for item in state["runtime"]["workers"]}
         self.assertEqual(runtime_workers["A1"]["status"], "healthy")
         self.assertEqual(runtime_workers["A2"]["status"], "healthy")
@@ -1147,10 +1154,10 @@ class ControlPlaneIntegrationTest(unittest.TestCase):
 
         elastic_result = read_json(f"{self.base_url}/api/launch", {"restart": False, "strategy": "elastic"})
         self.assertTrue(elastic_result["ok"])
-        elastic_state = self.wait_for_agent_state(expected_provider="copilot", expected_model="gpt-5.4")
+        elastic_state = self.wait_for_agent_state(expected_provider="ducc", expected_model="claude-sonnet-4-5")
         elastic_runtime = {item["agent"]: item for item in elastic_state["runtime"]["workers"]}
-        self.assertEqual(elastic_runtime["A1"]["provider"], "copilot")
-        self.assertEqual(elastic_runtime["A2"]["provider"], "copilot")
+        self.assertEqual(elastic_runtime["A1"]["provider"], "ducc")
+        self.assertEqual(elastic_runtime["A2"]["provider"], "ducc")
 
         self.stop_workers()
 

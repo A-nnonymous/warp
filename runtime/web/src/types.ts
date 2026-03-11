@@ -7,7 +7,7 @@ export type CommandMap = {
   up: string;
 };
 
-export type LaunchStrategy = 'initial_copilot' | 'selected_model' | 'elastic';
+export type LaunchStrategy = 'initial_provider' | 'selected_model' | 'elastic';
 
 export type LaunchPolicyState = {
   default_strategy: LaunchStrategy;

@@ -52,8 +52,8 @@ PROVIDER_STATS_PATH = STATE_DIR / "provider_stats.yaml"
 CONTROL_PLANE_RUNTIME = "uv run --no-project --with 'PyYAML>=6.0.2' python"
 WEB_STATIC_DIR = RUNTIME_DIR / "web" / "static"
 WEB_INDEX_FILE = WEB_STATIC_DIR / "index.html"
-DEFAULT_INITIAL_PROVIDER = "copilot"
-LAUNCH_STRATEGIES = {"initial_copilot", "selected_model", "elastic"}
+DEFAULT_INITIAL_PROVIDER = "ducc"
+LAUNCH_STRATEGIES = {"initial_provider", "selected_model", "elastic"}
 CONFIG_SECTIONS = {"project", "merge_policy", "resource_pools", "worker_defaults", "workers"}
 PROVIDER_AUTH_MODES = {"api_key", "session"}
 CONTROL_PLANE_WORKER_CONTEXT_ENV = "CONTROL_PLANE_WORKER_CONTEXT"
@@ -2772,19 +2772,21 @@ class ControlPlaneService:
 
     def default_launch_policy(self) -> LaunchPolicy:
         if not self.has_launch_history():
-            return LaunchPolicy(strategy="initial_copilot", provider=self.initial_provider_name())
+            return LaunchPolicy(strategy="initial_provider", provider=self.initial_provider_name())
         return LaunchPolicy(strategy="elastic")
 
     def parse_launch_policy(self, payload: dict[str, Any]) -> LaunchPolicy:
         default_policy = self.default_launch_policy()
         raw_strategy = str(payload.get("strategy") or default_policy.strategy).strip() or default_policy.strategy
+        if raw_strategy == "initial_copilot":
+            raw_strategy = "initial_provider"
         if raw_strategy not in LAUNCH_STRATEGIES:
             raise ValueError(f"unknown launch strategy: {raw_strategy}")
 
         provider = str(payload.get("provider") or "").strip() or None
         model = str(payload.get("model") or "").strip() or None
 
-        if raw_strategy == "initial_copilot":
+        if raw_strategy == "initial_provider":
             provider = self.initial_provider_name()
         elif raw_strategy == "selected_model":
             if not provider:
