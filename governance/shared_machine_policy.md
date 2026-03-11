@@ -37,7 +37,7 @@ An experiment may be inserted only if all checks pass.
 
 ## Recording requirements
 
-Every experiment must be recorded in `experiments/registry.yaml` with:
+Every experiment must be recorded in `governance/experiments/registry.yaml` with:
 
 - experiment ID
 - owner

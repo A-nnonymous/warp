@@ -9,7 +9,7 @@ policy:
     - reports/manager_report.md
     - governance/decisions.md
     - checkpoints/manager/latest.md
-    - experiments/registry.yaml
+    - governance/experiments/registry.yaml
 locks:
   - path: strategy/integration_plan.md
     owner: A0
@@ -46,7 +46,7 @@ locks:
     state: free
     intent: manager checkpoint
     updated_at: 2026-03-10
-  - path: experiments/registry.yaml
+  - path: governance/experiments/registry.yaml
     owner: A0
     state: free
     intent: experiment ledger

@@ -29,7 +29,7 @@ Paste the following into the next chat session:
 8. 阅读 state/agent_runtime.yaml
 9. 阅读 status/agents/ 下全部 agent 状态文件
 10. 阅读 checkpoints/agents/ 下全部 agent checkpoint
-11. 阅读 experiments/registry.yaml
+11. 阅读 governance/experiments/registry.yaml
 12. 阅读 strategy/integration_plan.md
 13. 阅读 strategy/baseline_trace.md
 14. 阅读 governance/operating_model.md

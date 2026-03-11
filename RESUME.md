@@ -17,7 +17,7 @@ For a first-time startup on a clean machine, use `new_machine_prompt.md`.
 7. `state/agent_runtime.yaml`
 8. `status/agents/`
 9. `checkpoints/agents/`
-10. `experiments/registry.yaml`
+10. `governance/experiments/registry.yaml`
 11. `strategy/integration_plan.md`
 12. `strategy/baseline_trace.md`
 
@@ -36,7 +36,7 @@ Paste this into the next chat session after migration:
 7. 阅读 state/agent_runtime.yaml
 8. 阅读 status/agents/ 下全部 agent 状态
 9. 阅读 checkpoints/agents/ 下全部 agent checkpoint
-10. 阅读 experiments/registry.yaml
+10. 阅读 governance/experiments/registry.yaml
 11. 阅读 strategy/integration_plan.md
 12. 阅读 strategy/baseline_trace.md
 

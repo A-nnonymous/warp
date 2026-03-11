@@ -33,7 +33,7 @@ Default target repository name: `target-repo`
 7. `state/agent_runtime.yaml`
 8. `status/agents/`
 9. `checkpoints/agents/`
-10. `experiments/registry.yaml`
+10. `governance/experiments/registry.yaml`
 11. `strategy/integration_plan.md`
 12. `strategy/baseline_trace.md`
 

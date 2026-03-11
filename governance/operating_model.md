@@ -135,7 +135,7 @@ The following files are high-conflict and must be treated as single-writer files
 - `reports/manager_report.md`
 - `governance/decisions.md`
 - `checkpoints/manager/latest.md`
-- `experiments/registry.yaml`
+- `governance/experiments/registry.yaml`
 
 Only the current owner recorded in `state/edit_locks.yaml` may edit a single-writer file.
 
