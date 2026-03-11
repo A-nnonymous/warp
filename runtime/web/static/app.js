@@ -24989,15 +24989,23 @@ function slugify(value) {
   return value.toLowerCase().replace(/[^a-z0-9]+/g, "_").replace(/^_+|_+$/g, "").replace(/_{2,}/g, "_");
 }
 function deriveWorktreePath(config, agent) {
-  const project = config.project || {};
-  const localRepoRoot = String(project.local_repo_root || "").trim();
-  if (!localRepoRoot) {
+  const normalizedAgent = normalizedText(agent).toLowerCase();
+  if (!normalizedAgent) {
     return "";
   }
-  const normalizedRoot = localRepoRoot.replace(/\/$/, "");
-  const parent = normalizedRoot.includes("/") ? normalizedRoot.slice(0, normalizedRoot.lastIndexOf("/")) : normalizedRoot;
-  const baseName = String(project.repository_name || normalizedRoot.split("/").pop() || "target-repo");
-  return `${parent}/${slugify(baseName)}_${agent.toLowerCase()}`;
+  const existingWorkers = config.workers || [];
+  for (const worker of existingWorkers) {
+    const workerAgent = normalizedText(worker.agent).toLowerCase();
+    const worktreePath = normalizedText(worker.worktree_path);
+    if (!workerAgent || !worktreePath || isPlaceholderPath(worktreePath)) {
+      continue;
+    }
+    const suffix = `_${workerAgent}`;
+    if (worktreePath.endsWith(suffix)) {
+      return `${worktreePath.slice(0, -suffix.length)}_${normalizedAgent}`;
+    }
+  }
+  return "";
 }
 function deriveBranchName(agent, title, taskId) {
   const branchSuffix = slugify(title || taskId || agent) || agent.toLowerCase();
@@ -25023,13 +25031,25 @@ function normalizeDerivedPaths(config) {
   next.workers = (next.workers || []).map((worker) => {
     const worktreePath = normalizedText(worker.worktree_path);
     const environmentPath = normalizedText(worker.environment_path);
+    const derivedWorktreePath = deriveWorktreePath(next, worker.agent);
     return {
       ...worker,
-      worktree_path: !worktreePath || isPlaceholderPath(worktreePath) ? deriveWorktreePath(next, worker.agent) : worker.worktree_path,
+      worktree_path: !worktreePath || isPlaceholderPath(worktreePath) ? derivedWorktreePath || void 0 : worker.worktree_path,
       environment_path: !environmentPath || isPlaceholderPath(environmentPath) ? void 0 : worker.environment_path
     };
   });
   return next;
+}
+function summarizeValidationMessages(issues, launchBlockers) {
+  const launchSummary = launchBlockers.slice(0, 4);
+  if (launchSummary.length) {
+    return `${launchSummary.join("; ")}${launchBlockers.length > launchSummary.length ? `; ... (+${launchBlockers.length - launchSummary.length} more)` : ""}`;
+  }
+  const issueSummary = issues.slice(0, 4).map((issue) => `${issue.field}: ${issue.message}`);
+  if (issueSummary.length) {
+    return `${issueSummary.join("; ")}${issues.length > issueSummary.length ? `; ... (+${issues.length - issueSummary.length} more)` : ""}`;
+  }
+  return "settings validation failed";
 }
 function formatLaunchErrorMessage(error) {
   const message = error instanceof Error ? error.message : String(error);
@@ -25206,6 +25226,7 @@ function buildPlannedWorkers(data, config) {
     return [];
   }
   const byAgent = /* @__PURE__ */ new Map();
+  const configuredByAgent = new Map((config.workers || []).map((worker) => [normalizedText(worker.agent), worker]));
   (data.backlog.items || []).forEach((item) => {
     const agent = String(item.owner || "").trim();
     if (!agent || agent === "A0") {
@@ -25217,7 +25238,7 @@ function buildPlannedWorkers(data, config) {
         task_id: item.id,
         title: item.title,
         branch: deriveBranchName(agent, item.title, item.id),
-        worktree_path: deriveWorktreePath(config, agent)
+        worktree_path: firstMeaningfulPath(configuredByAgent.get(agent)?.worktree_path, deriveWorktreePath(config, agent))
       });
     }
   });
@@ -25231,7 +25252,7 @@ function buildPlannedWorkers(data, config) {
       task_id: `${agent}-001`,
       title: item.branch || agent,
       branch: item.branch || deriveBranchName(agent, item.branch || agent, `${agent}-001`),
-      worktree_path: deriveWorktreePath(config, agent)
+      worktree_path: firstMeaningfulPath(configuredByAgent.get(agent)?.worktree_path, deriveWorktreePath(config, agent))
     });
   });
   return Array.from(byAgent.values()).sort((left, right) => left.agent.localeCompare(right.agent, void 0, { numeric: true }));
@@ -26603,7 +26624,10 @@ function App() {
           const previousDerived = deriveWorktreePath(current, worker.agent);
           const nextDerived = deriveWorktreePath(next, worker.agent);
           const currentPath = normalizedText(worker.worktree_path);
-          return !currentPath || isPlaceholderPath(currentPath) || currentPath === previousDerived ? nextDerived : worker.worktree_path;
+          if (!currentPath || isPlaceholderPath(currentPath) || currentPath === previousDerived) {
+            return nextDerived || void 0;
+          }
+          return worker.worktree_path;
         })()
       }));
       return normalizeDerivedPaths(next);
@@ -26705,7 +26729,7 @@ function App() {
           worker.branch = nextDerivedBranch;
         }
         if (!previousWorktreePath || previousWorktreePath === previousDerivedWorktreePath) {
-          worker.worktree_path = nextDerivedWorktreePath;
+          worker.worktree_path = nextDerivedWorktreePath || void 0;
         }
       }
       workers[index] = worker;
@@ -26725,7 +26749,7 @@ function App() {
           task_id: plannedCandidate.task_id,
           resource_pool: "",
           resource_pool_queue: [],
-          worktree_path: plannedCandidate.worktree_path,
+          worktree_path: plannedCandidate.worktree_path || void 0,
           branch: plannedCandidate.branch
         });
       } else {
@@ -26735,7 +26759,7 @@ function App() {
           task_id: `${nextAgent}-001`,
           resource_pool: "",
           resource_pool_queue: [],
-          worktree_path: deriveWorktreePath(next, nextAgent),
+          worktree_path: deriveWorktreePath(next, nextAgent) || void 0,
           branch: deriveBranchName(nextAgent, nextAgent, `${nextAgent}-001`)
         });
       }
@@ -26776,11 +26800,24 @@ function App() {
       const next = normalizeConfig(current);
       next.workers = (next.workers || []).map((worker) => ({
         ...worker,
-        worktree_path: !normalizedText(worker.worktree_path) || isPlaceholderPath(worker.worktree_path) ? deriveWorktreePath(next, worker.agent) : worker.worktree_path
+        worktree_path: !normalizedText(worker.worktree_path) || isPlaceholderPath(worker.worktree_path) ? deriveWorktreePath(next, worker.agent) || void 0 : worker.worktree_path
       }));
       return normalizeDerivedPaths(next);
     });
     setStampedStatus("missing worktree paths filled from local repo root");
+  };
+  const persistDirtyDraft = async () => {
+    const effectiveDraft = normalizeDerivedPaths(draftConfig);
+    const validation = await validateConfig(effectiveDraft);
+    setBackendIssues(validation.validation_issues || []);
+    if (!validation.ok) {
+      throw new Error(`Current settings cannot be launched yet: ${summarizeValidationMessages(validation.validation_issues || [], validation.launch_blockers || [])}`);
+    }
+    await saveConfig(effectiveDraft);
+    const nextData = await refreshStateOnly();
+    setDraftConfig(hydrateConfigForA0(nextData, cloneConfig(nextData.config)));
+    setConfigDirty(false);
+    return nextData;
   };
   const onResetWorkerDefaults = () => {
     updateConfig((current) => ({
@@ -26894,6 +26931,9 @@ function App() {
   });
   const onLaunch = (restart) => void runAction(restart ? "restarting workers" : "launching workers", async () => {
     try {
+      if (configDirty) {
+        await persistDirtyDraft();
+      }
       const response = await launchWorkers(restart, {
         strategy: launchStrategy,
         provider: launchStrategy === "elastic" ? void 0 : launchProvider,

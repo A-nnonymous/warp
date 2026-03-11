@@ -377,6 +377,9 @@ button:disabled {
 .agent-card {
   padding: 14px;
 }
+.merge-card {
+  min-width: 0;
+}
 .agent-card {
   min-height: 148px;
 }
@@ -406,9 +409,26 @@ button:disabled {
   display: grid;
   gap: 6px;
 }
+.merge-card-header {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  align-items: start;
+  gap: 12px;
+}
+.merge-card-header > div {
+  min-width: 0;
+}
 .agent-meta,
 .merge-meta {
   font-size: 13px;
+}
+.merge-meta {
+  grid-template-columns: repeat(auto-fit, minmax(180px, 1fr));
+  gap: 10px;
+}
+.merge-meta > div {
+  min-width: 0;
+  overflow-wrap: anywhere;
 }
 .agent-meta strong,
 .merge-meta strong {
@@ -506,8 +526,13 @@ button:disabled {
 .merge-branch {
   font-size: 18px;
   font-weight: 700;
+  overflow-wrap: anywhere;
 }
 .merge-track {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  row-gap: 4px;
   font-size: 12px;
   color: #b8c8e6;
 }
@@ -519,6 +544,7 @@ button:disabled {
   padding-top: 4px;
   color: #a7b5d6;
   font-size: 12px;
+  overflow-wrap: anywhere;
 }
 .merge-attention,
 .merge-list-block {
@@ -529,6 +555,7 @@ button:disabled {
   border: 1px solid rgba(120, 147, 194, 0.16);
   font-size: 12px;
   color: #d8e4ff;
+  overflow-wrap: anywhere;
 }
 .merge-attention strong,
 .merge-list-block strong {

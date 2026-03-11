@@ -1244,6 +1244,17 @@ class ControlPlaneService:
                 return provider_name
         return configured_initial or DEFAULT_INITIAL_PROVIDER
 
+    def target_repo_root(self, config: dict[str, Any] | None = None) -> Path:
+        cfg = config or self.config
+        project = cfg.get("project", {}) if isinstance(cfg, dict) else {}
+        if isinstance(project, dict):
+            raw_path = str(project.get("local_repo_root") or "").strip()
+            if raw_path and not is_placeholder_path(raw_path):
+                path = Path(raw_path).expanduser()
+                if path.exists():
+                    return path
+        return REPO_ROOT
+
     def task_policy_defaults(self, config: dict[str, Any] | None = None) -> dict[str, Any]:
         policy_config = self.task_policy_config(config)
         defaults = policy_config.get("defaults", {})
@@ -2961,9 +2972,10 @@ class ControlPlaneService:
         }
 
     def current_repo_branch(self) -> str:
+        repo_root = self.target_repo_root()
         result = subprocess.run(
             ["git", "rev-parse", "--abbrev-ref", "HEAD"],
-            cwd=REPO_ROOT,
+            cwd=repo_root,
             capture_output=True,
             text=True,
             check=False,
@@ -3614,9 +3626,10 @@ Primary test command:
         return strip_command_args(command, flags_to_strip)
 
     def branch_exists(self, branch: str) -> bool:
+        repo_root = self.target_repo_root()
         result = subprocess.run(
             ["git", "show-ref", "--verify", f"refs/heads/{branch}"],
-            cwd=REPO_ROOT,
+            cwd=repo_root,
             stdout=subprocess.DEVNULL,
             stderr=subprocess.DEVNULL,
             check=False,
@@ -3624,16 +3637,25 @@ Primary test command:
         return result.returncode == 0
 
     def ensure_worktree(self, worker: dict[str, Any]) -> None:
+        repo_root = self.target_repo_root()
         worktree_path = Path(worker["worktree_path"])
         if worktree_path.exists():
-            return
+            git_marker = worktree_path / ".git"
+            if git_marker.exists():
+                return
+            if worktree_path.is_dir() and not any(worktree_path.iterdir()):
+                pass
+            else:
+                raise RuntimeError(f"worktree path exists but is not an initialized git worktree: {worktree_path}")
+        else:
+            worktree_path.parent.mkdir(parents=True, exist_ok=True)
         branch = worker["branch"]
         base_branch = self.project.get("base_branch", "main")
         if self.branch_exists(branch):
             command = ["git", "worktree", "add", str(worktree_path), branch]
         else:
             command = ["git", "worktree", "add", str(worktree_path), "-b", branch, base_branch]
-        subprocess.run(command, cwd=REPO_ROOT, check=True)
+        subprocess.run(command, cwd=repo_root, check=True)
 
     def ensure_environment(self, worker: dict[str, Any]) -> None:
         sync_command = worker.get("sync_command")
