@@ -5,4 +5,6 @@ runtime/generated_prompts/
 runtime/generated_wrappers/
 runtime/logs/
 runtime/web/node_modules/
+runtime/__pycache__/
+*.py[cod]
 .DS_Store
