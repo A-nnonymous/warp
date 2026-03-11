@@ -111,6 +111,10 @@ On first run, `warp` will fall back to `runtime/config_template.yaml` when `runt
 - provider credentials or session-backed provider settings
 - worker worktree paths and branches, if you do not want A0 to derive them
 
+By default, A0 now derives every worker worktree under `warp/worktrees/`, not next to the target repository. For a target named `sonic-moe`, the derived paths look like `warp/worktrees/sonic_moe_a1`, `warp/worktrees/sonic_moe_a2`, and so on.
+
+The checked-in template also pins the default worker pool to `ducc_pool` and prefers `ducc` first. That means the dashboard and config are immediately usable, but worker launch still requires a `ducc` binary to be installed on the machine.
+
 ## Common operations
 
 These are the normal operator commands:

@@ -7,5 +7,7 @@ runtime/logs/
 runtime/web/node_modules/
 runtime/__pycache__/
 state/provider_stats.yaml
+worktrees/*
+!worktrees/.gitkeep
 *.py[cod]
 .DS_Store

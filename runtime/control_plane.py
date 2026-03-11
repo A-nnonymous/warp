@@ -38,6 +38,7 @@ RUNTIME_DIR = CONTROL_ROOT / "runtime"
 CONFIG_TEMPLATE_PATH = RUNTIME_DIR / "config_template.yaml"
 DEFAULT_DASHBOARD_HOST = "0.0.0.0"
 DEFAULT_DASHBOARD_PORT = 8233
+DEFAULT_WORKTREE_DIR = CONTROL_ROOT / "worktrees"
 PROMPT_DIR = RUNTIME_DIR / "generated_prompts"
 WRAPPER_DIR = RUNTIME_DIR / "generated_wrappers"
 LOG_DIR = RUNTIME_DIR / "logs"
@@ -1130,11 +1131,11 @@ class ControlPlaneService:
         repository_name = str(project.get("repository_name", "")).strip()
         if not agent or not local_repo_root or is_placeholder_path(local_repo_root):
             return ""
+        DEFAULT_WORKTREE_DIR.mkdir(parents=True, exist_ok=True)
         root_path = Path(local_repo_root).expanduser()
-        parent = root_path.parent if root_path.parent != root_path else root_path
         base_name = repository_name or root_path.name or "workspace"
         safe_base_name = "_".join(part for part in base_name.replace("-", "_").split("_") if part) or "workspace"
-        return str((parent / f"{safe_base_name}_{agent.lower()}").resolve())
+        return str((DEFAULT_WORKTREE_DIR / f"{safe_base_name}_{agent.lower()}").resolve())
 
     def merge_worker_config(self, worker: dict[str, Any], defaults: dict[str, Any] | None = None) -> dict[str, Any]:
         if not isinstance(worker, dict):

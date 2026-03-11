@@ -1,6 +1,7 @@
 project:
   repository_name: target-repo
   local_repo_root: /absolute/path/to/local/target-repo
+  initial_provider: ducc
   reference_workspace_root: /absolute/path/to/reference/workspace
   reference_inputs:
     - tests/reference_layers/standalone_moe_layer
@@ -163,10 +164,11 @@ task_policies:
       task_ids: [A7-001]
 
 worker_defaults:
+  resource_pool: ducc_pool
   resource_pool_queue:
+    - ducc_pool
     - copilot_pool
     - claude_pool
-    - ducc_pool
     - opencode_pool
   environment_type: uv
   environment_path: /absolute/path/to/local/target-repo/.venv
@@ -180,31 +182,31 @@ worker_defaults:
 workers:
   - agent: A1
     task_id: A1-001
-    worktree_path: /absolute/path/to/supersonic_moe_a1
+    worktree_path: /absolute/path/to/warp/worktrees/target_repo_a1
     branch: a1_freeze_fp8_protocol
     test_command: uv run pytest tests/moe_test.py -k protocol
   - agent: A2
     task_id: A2-001
-    worktree_path: /absolute/path/to/supersonic_moe_a2
+    worktree_path: /absolute/path/to/warp/worktrees/target_repo_a2
     branch: a2_audit_hopper_float8_path
   - agent: A3
     task_id: A3-001
     resource_pool: claude_pool
-    worktree_path: /absolute/path/to/supersonic_moe_a3
+    worktree_path: /absolute/path/to/warp/worktrees/target_repo_a3
     branch: a3_audit_blackwell_quack_path
   - agent: A4
     task_id: A4-001
-    worktree_path: /absolute/path/to/supersonic_moe_a4
+    worktree_path: /absolute/path/to/warp/worktrees/target_repo_a4
     branch: a4_build_reference_path
   - agent: A5
     task_id: A5-001
     resource_pool: opencode_pool
-    worktree_path: /absolute/path/to/supersonic_moe_a5
+    worktree_path: /absolute/path/to/warp/worktrees/target_repo_a5
     branch: a5_build_baseline_aligned_tests
   - agent: A6
     task_id: A6-001
     resource_pool: claude_pool
-    worktree_path: /absolute/path/to/supersonic_moe_a6
+    worktree_path: /absolute/path/to/warp/worktrees/target_repo_a6
     branch: a6_freeze_baseline_trace
     test_command: uv run pytest tests/moe_test.py -k baseline
     git_identity:
@@ -212,5 +214,5 @@ workers:
       email: a6-baseline@example.com
   - agent: A7
     task_id: A7-001
-    worktree_path: /absolute/path/to/supersonic_moe_a7
+    worktree_path: /absolute/path/to/warp/worktrees/target_repo_a7
     branch: a7_build_benchmark_skeleton
