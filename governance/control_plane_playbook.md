@@ -9,17 +9,19 @@ Operate or evolve the FP8 control plane without losing the simplified workflow t
 - bringing the control plane up on a new machine
 - resuming control-plane work in a new session
 - changing launch, stop, settings, validation, or worker-planning behavior
+- changing agent collaboration or approval mechanics
 - reviewing whether a proposed change matches the intended operator workflow
 
 ## Read Order
 
 1. `README.md`
-2. `governance/worker_launch_playbook.md`
-3. `runtime/control_plane.py`
-4. `runtime/config_template.yaml`
-5. `runtime/web/src/App.tsx`
-6. `state/backlog.yaml`
-7. `state/agent_runtime.yaml`
+2. `governance/agent_team_patterns.md`
+3. `governance/worker_launch_playbook.md`
+4. `runtime/control_plane.py`
+5. `runtime/config_template.yaml`
+6. `runtime/web/src/App.tsx`
+7. `state/backlog.yaml`
+8. `state/agent_runtime.yaml`
 
 ## Working Rules
 

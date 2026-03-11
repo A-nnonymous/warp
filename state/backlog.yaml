@@ -8,6 +8,10 @@ items:
     task_type: protocol
     owner: A1
     status: pending
+    claim_state: unclaimed
+    claimed_by: ''
+    plan_required: true
+    plan_state: none
     gate: G0
     priority: P0
     dependencies: []
@@ -25,6 +29,10 @@ items:
     task_type: baseline
     owner: A6
     status: pending
+    claim_state: unclaimed
+    claimed_by: ''
+    plan_required: true
+    plan_state: none
     gate: G0
     priority: P0
     dependencies: []
@@ -42,6 +50,10 @@ items:
     task_type: reference
     owner: A4
     status: blocked
+    claim_state: unclaimed
+    claimed_by: ''
+    plan_required: false
+    plan_state: none
     gate: G1
     priority: P0
     dependencies: [A1-001, A6-001]
@@ -58,6 +70,10 @@ items:
     task_type: audit_hopper
     owner: A2
     status: pending
+    claim_state: unclaimed
+    claimed_by: ''
+    plan_required: false
+    plan_state: none
     gate: G2
     priority: P0
     dependencies: [A1-001]
@@ -73,6 +89,10 @@ items:
     task_type: audit_blackwell
     owner: A3
     status: pending
+    claim_state: unclaimed
+    claimed_by: ''
+    plan_required: false
+    plan_state: none
     gate: G3
     priority: P0
     dependencies: [A1-001]
@@ -88,6 +108,10 @@ items:
     task_type: tests
     owner: A5
     status: blocked
+    claim_state: unclaimed
+    claimed_by: ''
+    plan_required: false
+    plan_state: none
     gate: G4
     priority: P0
     dependencies: [A4-001, A6-001]
@@ -103,6 +127,10 @@ items:
     task_type: benchmark
     owner: A7
     status: pending
+    claim_state: unclaimed
+    claimed_by: ''
+    plan_required: false
+    plan_state: none
     gate: G6
     priority: P1
     dependencies: [A1-001]

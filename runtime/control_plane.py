@@ -44,6 +44,7 @@ WRAPPER_DIR = RUNTIME_DIR / "generated_wrappers"
 LOG_DIR = RUNTIME_DIR / "logs"
 MANAGER_REPORT = CONTROL_ROOT / "reports" / "manager_report.md"
 MANAGER_CONSOLE_PATH = STATE_DIR / "manager_console.yaml"
+TEAM_MAILBOX_PATH = STATE_DIR / "team_mailbox.yaml"
 STATUS_DIR = CONTROL_ROOT / "status" / "agents"
 CHECKPOINT_DIR = CONTROL_ROOT / "checkpoints" / "agents"
 SESSION_STATE = RUNTIME_DIR / "session_state.json"
@@ -61,6 +62,12 @@ CONTROL_PLANE_RECURSION_POLICY_ENV = "CONTROL_PLANE_RECURSION_POLICY"
 CONTROL_PLANE_ALLOW_NESTED_ENV = "CONTROL_PLANE_ALLOW_NESTED"
 CONTROL_PLANE_WRAPPED_PROVIDER_ENV = "CONTROL_PLANE_WRAPPED_PROVIDER"
 CONTROL_PLANE_GUARD_MODE_ENV = "CONTROL_PLANE_GUARD_MODE"
+BACKLOG_COMPLETED_STATUSES = {"done", "completed", "closed", "merged"}
+BACKLOG_ACTIVE_STATUSES = {"active", "in_progress", "in-progress"}
+BACKLOG_PENDING_STATUSES = {"", "pending", "queued", "not-started", "not_started"}
+BACKLOG_CLAIM_STATES = {"unclaimed", "claimed", "in_progress", "review", "completed"}
+BACKLOG_PLAN_STATES = {"none", "pending_review", "approved", "rejected"}
+MAILBOX_ACK_STATES = {"pending", "seen", "resolved"}
 
 
 def now_iso() -> str:
@@ -826,9 +833,347 @@ class ControlPlaneService:
         }
 
     def backlog_items(self) -> list[dict[str, Any]]:
-        backlog = load_yaml(STATE_DIR / "backlog.yaml")
-        items = backlog.get("items", [])
-        return items if isinstance(items, list) else []
+        return self.load_backlog_state().get("items", [])
+
+    def default_backlog_state(self) -> dict[str, Any]:
+        return {
+            "project": "",
+            "last_updated": "",
+            "manager": "A0",
+            "phase": "",
+            "items": [],
+        }
+
+    def normalize_backlog_item(self, item: dict[str, Any]) -> dict[str, Any]:
+        normalized = dict(item)
+        status = str(normalized.get("status") or "pending").strip() or "pending"
+        claim_state = str(normalized.get("claim_state") or "").strip()
+        claimed_by = str(normalized.get("claimed_by") or "").strip()
+        if claim_state not in BACKLOG_CLAIM_STATES:
+            if status in BACKLOG_COMPLETED_STATUSES:
+                claim_state = "completed"
+            elif status == "review":
+                claim_state = "review"
+            elif status in BACKLOG_ACTIVE_STATUSES:
+                claim_state = "in_progress"
+            elif claimed_by:
+                claim_state = "claimed"
+            else:
+                claim_state = "unclaimed"
+        if claim_state == "completed" and status not in BACKLOG_COMPLETED_STATUSES:
+            status = "completed"
+        elif claim_state == "review":
+            status = "review"
+        elif claim_state == "in_progress" and status in BACKLOG_PENDING_STATUSES:
+            status = "active"
+
+        plan_required = bool(normalized.get("plan_required", False))
+        plan_state = str(normalized.get("plan_state") or "none").strip() or "none"
+        if plan_state not in BACKLOG_PLAN_STATES:
+            plan_state = "none"
+
+        normalized["id"] = str(normalized.get("id") or "").strip()
+        normalized["title"] = str(normalized.get("title") or normalized["id"] or "unassigned task").strip()
+        normalized["task_type"] = str(normalized.get("task_type") or "default").strip() or "default"
+        normalized["owner"] = str(normalized.get("owner") or "").strip()
+        normalized["status"] = status
+        normalized["gate"] = str(normalized.get("gate") or "").strip()
+        normalized["priority"] = str(normalized.get("priority") or "").strip()
+        normalized["dependencies"] = dedupe_strings(normalized.get("dependencies") or [])
+        normalized["outputs"] = [str(value).strip() for value in normalized.get("outputs") or [] if str(value).strip()]
+        normalized["done_when"] = [str(value).strip() for value in normalized.get("done_when") or [] if str(value).strip()]
+        normalized["claim_state"] = claim_state
+        normalized["claimed_by"] = claimed_by
+        normalized["claimed_at"] = str(normalized.get("claimed_at") or "").strip()
+        normalized["claim_note"] = str(normalized.get("claim_note") or "").strip()
+        normalized["plan_required"] = plan_required
+        normalized["plan_state"] = plan_state
+        normalized["plan_summary"] = str(normalized.get("plan_summary") or "").strip()
+        normalized["plan_review_note"] = str(normalized.get("plan_review_note") or "").strip()
+        normalized["plan_reviewed_at"] = str(normalized.get("plan_reviewed_at") or "").strip()
+        normalized["review_requested_at"] = str(normalized.get("review_requested_at") or "").strip()
+        normalized["review_note"] = str(normalized.get("review_note") or "").strip()
+        normalized["completed_at"] = str(normalized.get("completed_at") or "").strip()
+        normalized["completed_by"] = str(normalized.get("completed_by") or "").strip()
+        normalized["updated_at"] = str(normalized.get("updated_at") or "").strip()
+        return normalized
+
+    def load_backlog_state(self) -> dict[str, Any]:
+        state = self.default_backlog_state()
+        if not (STATE_DIR / "backlog.yaml").exists():
+            return state
+        data = load_yaml(STATE_DIR / "backlog.yaml")
+        if not isinstance(data, dict):
+            return state
+        for key, value in data.items():
+            if key != "items":
+                state[key] = value
+        items = data.get("items", [])
+        state["items"] = [self.normalize_backlog_item(item) for item in items if isinstance(item, dict)]
+        return state
+
+    def persist_backlog_state(self, state: dict[str, Any]) -> None:
+        payload = self.default_backlog_state()
+        if isinstance(state, dict):
+            for key, value in state.items():
+                if key != "items":
+                    payload[key] = value
+        payload["last_updated"] = now_iso()
+        items = state.get("items", []) if isinstance(state, dict) else []
+        payload["items"] = [self.normalize_backlog_item(item) for item in items if isinstance(item, dict)]
+        dump_yaml(STATE_DIR / "backlog.yaml", payload)
+
+    def update_backlog_item(self, task_id: str, updater: Any) -> dict[str, Any]:
+        with self.lock:
+            backlog = self.load_backlog_state()
+            items = backlog.get("items", [])
+            for index, item in enumerate(items):
+                if str(item.get("id") or "").strip() != task_id:
+                    continue
+                next_item = updater(dict(item))
+                if not isinstance(next_item, dict):
+                    raise ValueError("task update must return a mapping")
+                next_item["updated_at"] = now_iso()
+                items[index] = self.normalize_backlog_item(next_item)
+                backlog["items"] = items
+                self.persist_backlog_state(backlog)
+                return items[index]
+        raise ValueError(f"unknown task id {task_id}")
+
+    def default_team_mailbox_state(self) -> dict[str, Any]:
+        return {"messages": []}
+
+    def normalize_team_mailbox_message(self, message: dict[str, Any]) -> dict[str, Any]:
+        normalized = dict(message)
+        topic = str(normalized.get("topic") or "status_note").strip() or "status_note"
+        scope = str(normalized.get("scope") or "direct").strip() or "direct"
+        if scope not in {"direct", "broadcast", "manager"}:
+            scope = "direct"
+        ack_state = str(normalized.get("ack_state") or "pending").strip() or "pending"
+        if ack_state not in MAILBOX_ACK_STATES:
+            ack_state = "pending"
+        sender = str(normalized.get("from") or "unknown").strip() or "unknown"
+        recipient = str(normalized.get("to") or ("A0" if scope == "manager" else "all")).strip() or "all"
+        created_at = str(normalized.get("created_at") or now_iso()).strip() or now_iso()
+        message_id = str(normalized.get("id") or "").strip() or slugify(f"{sender}_{recipient}_{topic}_{created_at}")
+        return {
+            **normalized,
+            "id": message_id,
+            "from": sender,
+            "to": recipient,
+            "scope": scope,
+            "topic": topic,
+            "body": str(normalized.get("body") or "").strip(),
+            "related_task_ids": dedupe_strings(normalized.get("related_task_ids") or []),
+            "created_at": created_at,
+            "ack_state": ack_state,
+            "resolution_note": str(normalized.get("resolution_note") or "").strip(),
+            "acked_at": str(normalized.get("acked_at") or "").strip(),
+        }
+
+    def load_team_mailbox_state(self) -> dict[str, Any]:
+        if not TEAM_MAILBOX_PATH.exists():
+            return self.default_team_mailbox_state()
+        data = load_yaml(TEAM_MAILBOX_PATH)
+        if not isinstance(data, dict):
+            return self.default_team_mailbox_state()
+        messages = data.get("messages", [])
+        return {"messages": [self.normalize_team_mailbox_message(item) for item in messages if isinstance(item, dict)]}
+
+    def persist_team_mailbox_state(self, state: dict[str, Any]) -> None:
+        messages = state.get("messages", []) if isinstance(state, dict) else []
+        dump_yaml(TEAM_MAILBOX_PATH, {"messages": [self.normalize_team_mailbox_message(item) for item in messages if isinstance(item, dict)]})
+
+    def append_team_mailbox_message(
+        self,
+        sender: str,
+        recipient: str,
+        topic: str,
+        body: str,
+        related_task_ids: list[str] | None = None,
+        scope: str = "direct",
+    ) -> dict[str, Any]:
+        with self.lock:
+            state = self.load_team_mailbox_state()
+            message = self.normalize_team_mailbox_message(
+                {
+                    "from": sender,
+                    "to": recipient,
+                    "scope": scope,
+                    "topic": topic,
+                    "body": body,
+                    "related_task_ids": related_task_ids or [],
+                    "created_at": now_iso(),
+                }
+            )
+            messages = state.setdefault("messages", [])
+            messages.append(message)
+            state["messages"] = messages[-200:]
+            self.persist_team_mailbox_state(state)
+            return message
+
+    def acknowledge_team_mailbox_message(self, message_id: str, ack_state: str, resolution_note: str = "") -> dict[str, Any]:
+        if ack_state not in MAILBOX_ACK_STATES:
+            raise ValueError(f"invalid ack state {ack_state}")
+        with self.lock:
+            state = self.load_team_mailbox_state()
+            messages = state.get("messages", [])
+            for index, item in enumerate(messages):
+                if str(item.get("id") or "").strip() != message_id:
+                    continue
+                updated = dict(item)
+                updated["ack_state"] = ack_state
+                updated["acked_at"] = now_iso()
+                if resolution_note:
+                    updated["resolution_note"] = resolution_note
+                messages[index] = self.normalize_team_mailbox_message(updated)
+                state["messages"] = messages
+                self.persist_team_mailbox_state(state)
+                return messages[index]
+        raise ValueError(f"unknown message id {message_id}")
+
+    def team_mailbox_catalog(self) -> dict[str, Any]:
+        state = self.load_team_mailbox_state()
+        messages = state.get("messages", [])
+        pending_messages = [item for item in messages if str(item.get("ack_state") or "") != "resolved"]
+        a0_messages = [
+            item
+            for item in pending_messages
+            if str(item.get("to") or "") in {"A0", "a0", "manager", "all"} or str(item.get("scope") or "") in {"broadcast", "manager"}
+        ]
+        return {
+            "messages": messages[-50:],
+            "pending_count": len(pending_messages),
+            "a0_pending_count": len(a0_messages),
+            "last_updated": now_iso(),
+        }
+
+    def edit_lock_state(self) -> dict[str, Any]:
+        path = STATE_DIR / "edit_locks.yaml"
+        if not path.exists():
+            return {"policy": {}, "locks": [], "last_updated": ""}
+        data = load_yaml(path)
+        if not isinstance(data, dict):
+            return {"policy": {}, "locks": [], "last_updated": ""}
+        locks = data.get("locks", [])
+        normalized_locks = []
+        for item in locks if isinstance(locks, list) else []:
+            if not isinstance(item, dict):
+                continue
+            normalized_locks.append(
+                {
+                    "path": str(item.get("path") or "").strip(),
+                    "owner": str(item.get("owner") or "").strip(),
+                    "state": str(item.get("state") or "free").strip() or "free",
+                    "intent": str(item.get("intent") or "").strip(),
+                    "updated_at": str(item.get("updated_at") or "").strip(),
+                }
+            )
+        return {
+            "policy": data.get("policy") if isinstance(data.get("policy"), dict) else {},
+            "locks": normalized_locks,
+            "last_updated": str(data.get("last_updated") or "").strip(),
+        }
+
+    def cleanup_status(self) -> dict[str, Any]:
+        runtime_state = self.dashboard_runtime_state()
+        heartbeat_state = self.dashboard_heartbeats_state()
+        runtime_workers = {
+            str(item.get("agent") or "").strip(): item
+            for item in runtime_state.get("workers", [])
+            if isinstance(item, dict)
+        }
+        heartbeat_workers = {
+            str(item.get("agent") or "").strip(): item
+            for item in heartbeat_state.get("agents", [])
+            if isinstance(item, dict)
+        }
+        locks_state = self.edit_lock_state()
+        plan_reviews_by_agent: dict[str, list[str]] = {}
+        task_reviews_by_agent: dict[str, list[str]] = {}
+        pending_plan_reviews: list[str] = []
+        pending_task_reviews: list[str] = []
+        for item in self.backlog_items():
+            task_id = str(item.get("id") or "").strip()
+            responsible_agent = str(item.get("claimed_by") or item.get("owner") or "").strip()
+            if str(item.get("plan_state") or "") == "pending_review":
+                pending_plan_reviews.append(task_id)
+                if responsible_agent:
+                    plan_reviews_by_agent.setdefault(responsible_agent, []).append(task_id)
+            if str(item.get("status") or "") == "review" or str(item.get("claim_state") or "") == "review":
+                pending_task_reviews.append(task_id)
+                if responsible_agent:
+                    task_reviews_by_agent.setdefault(responsible_agent, []).append(task_id)
+
+        active_workers = sorted(
+            agent for agent, worker in self.processes.items() if worker.process.poll() is None
+        )
+
+        locked_files: list[dict[str, str]] = []
+        locked_files_by_owner: dict[str, list[str]] = {}
+        for item in locks_state.get("locks", []):
+            state = str(item.get("state") or "free").strip() or "free"
+            if state == "free":
+                continue
+            path = str(item.get("path") or "").strip()
+            owner = str(item.get("owner") or "").strip() or "unassigned"
+            locked_files.append({"path": path, "owner": owner, "state": state})
+            locked_files_by_owner.setdefault(owner, []).append(path)
+
+        worker_rows = []
+        for worker in self.workers:
+            agent = str(worker.get("agent") or "").strip()
+            runtime_entry = runtime_workers.get(agent, {})
+            heartbeat_entry = heartbeat_workers.get(agent, {})
+            worker_plan_reviews = plan_reviews_by_agent.get(agent, [])
+            worker_task_reviews = task_reviews_by_agent.get(agent, [])
+            worker_locked_files = locked_files_by_owner.get(agent, [])
+            blockers: list[str] = []
+            if agent in active_workers:
+                blockers.append("process is still alive")
+            if worker_plan_reviews:
+                blockers.append(f"pending plan approvals: {summarize_list(worker_plan_reviews)}")
+            if worker_task_reviews:
+                blockers.append(f"pending task reviews: {summarize_list(worker_task_reviews)}")
+            if worker_locked_files:
+                blockers.append(f"locks still held: {summarize_list(worker_locked_files)}")
+            worker_rows.append(
+                {
+                    "agent": agent,
+                    "ready": len(blockers) == 0,
+                    "active": agent in active_workers,
+                    "runtime_status": str(runtime_entry.get("status") or "").strip(),
+                    "heartbeat_state": str(heartbeat_entry.get("state") or "").strip(),
+                    "pending_plan_reviews": worker_plan_reviews,
+                    "pending_task_reviews": worker_task_reviews,
+                    "locked_files": worker_locked_files,
+                    "blockers": blockers,
+                }
+            )
+
+        blockers: list[str] = []
+        if active_workers:
+            blockers.append(f"active workers must be stopped: {', '.join(active_workers)}")
+        if pending_plan_reviews:
+            blockers.append(f"pending plan approvals: {summarize_list(pending_plan_reviews)}")
+        if pending_task_reviews:
+            blockers.append(f"pending task reviews: {summarize_list(pending_task_reviews)}")
+        if locked_files:
+            blocker_summary = summarize_list(
+                [f"{item['path']} ({item['owner']})" for item in locked_files]
+            )
+            blockers.append(f"outstanding single-writer locks: {blocker_summary}")
+
+        return {
+            "ready": len(blockers) == 0,
+            "blockers": blockers,
+            "active_workers": active_workers,
+            "pending_plan_reviews": pending_plan_reviews,
+            "pending_task_reviews": pending_task_reviews,
+            "locked_files": locked_files,
+            "workers": worker_rows,
+            "last_updated": now_iso(),
+        }
 
     def runtime_worker_entries(self) -> list[dict[str, Any]]:
         runtime = load_yaml(STATE_DIR / "agent_runtime.yaml")
@@ -975,9 +1320,171 @@ class ControlPlaneService:
             if len(owned) == 1:
                 return owned[0]
             for item in owned:
-                if str(item.get("status", "")).strip() in {"pending", "blocked", "active", "in_progress"}:
+                if str(item.get("status", "")).strip() in {"pending", "blocked", "active", "in_progress", "review"}:
                     return item
         return {}
+
+    def perform_task_action(self, task_id: str, action: str, agent: str = "", note: str = "") -> dict[str, Any]:
+        actor = str(agent or "A0").strip() or "A0"
+        action_name = str(action or "").strip()
+        if action_name not in {"claim", "release", "start", "submit_plan", "approve_plan", "reject_plan", "request_review", "complete", "reopen"}:
+            raise ValueError(f"unsupported task action {action_name}")
+
+        def mutate(item: dict[str, Any]) -> dict[str, Any]:
+            next_item = dict(item)
+            current_claimant = str(next_item.get("claimed_by") or "").strip()
+            status = str(next_item.get("status") or "pending").strip() or "pending"
+            if action_name == "claim":
+                if current_claimant and current_claimant != actor and str(next_item.get("claim_state") or "") in {"claimed", "in_progress", "review"}:
+                    raise ValueError(f"task {task_id} is already claimed by {current_claimant}")
+                next_item["claimed_by"] = actor
+                next_item["claimed_at"] = now_iso()
+                next_item["claim_state"] = "claimed"
+                next_item["claim_note"] = note
+            elif action_name == "release":
+                if current_claimant and current_claimant != actor and actor != "A0":
+                    raise ValueError(f"task {task_id} is claimed by {current_claimant}")
+                next_item["claimed_by"] = ""
+                next_item["claimed_at"] = ""
+                next_item["claim_note"] = note
+                next_item["claim_state"] = "unclaimed"
+                if status in {"active", "in_progress", "review"}:
+                    next_item["status"] = "pending"
+            elif action_name == "start":
+                next_item["claimed_by"] = actor
+                next_item["claimed_at"] = next_item.get("claimed_at") or now_iso()
+                next_item["claim_state"] = "in_progress"
+                next_item["claim_note"] = note or next_item.get("claim_note") or "implementation started"
+                if status in BACKLOG_PENDING_STATUSES or status == "blocked":
+                    next_item["status"] = "active"
+            elif action_name == "submit_plan":
+                next_item["claimed_by"] = actor
+                next_item["claimed_at"] = next_item.get("claimed_at") or now_iso()
+                next_item["claim_state"] = "claimed"
+                next_item["plan_required"] = True
+                next_item["plan_state"] = "pending_review"
+                next_item["plan_summary"] = note
+            elif action_name == "approve_plan":
+                next_item["plan_state"] = "approved"
+                next_item["plan_review_note"] = note
+                next_item["plan_reviewed_at"] = now_iso()
+            elif action_name == "reject_plan":
+                next_item["plan_state"] = "rejected"
+                next_item["plan_review_note"] = note
+                next_item["plan_reviewed_at"] = now_iso()
+                if not next_item.get("claimed_by"):
+                    next_item["claimed_by"] = actor
+            elif action_name == "request_review":
+                next_item["claimed_by"] = current_claimant or actor
+                next_item["claim_state"] = "review"
+                next_item["status"] = "review"
+                next_item["review_note"] = note
+                next_item["review_requested_at"] = now_iso()
+            elif action_name == "complete":
+                if bool(next_item.get("plan_required")) and str(next_item.get("plan_state") or "") != "approved":
+                    raise ValueError(f"task {task_id} requires plan approval before completion")
+                next_item["claim_state"] = "completed"
+                next_item["status"] = "completed"
+                next_item["completed_at"] = now_iso()
+                next_item["completed_by"] = actor
+                next_item["review_note"] = note or next_item.get("review_note") or "manager accepted task"
+            elif action_name == "reopen":
+                next_item["status"] = "pending"
+                next_item["claim_state"] = "claimed" if current_claimant else "unclaimed"
+                next_item["completed_at"] = ""
+                next_item["completed_by"] = ""
+                next_item["review_note"] = note
+            return next_item
+
+        updated = self.update_backlog_item(task_id, mutate)
+        topic_map = {
+            "submit_plan": ("A0", "review_request", "manager"),
+            "request_review": ("A0", "handoff", "manager"),
+            "approve_plan": (updated.get("claimed_by") or updated.get("owner") or "A1", "status_note", "direct"),
+            "reject_plan": (updated.get("claimed_by") or updated.get("owner") or "A1", "design_question", "direct"),
+            "complete": (updated.get("claimed_by") or updated.get("owner") or "A1", "status_note", "direct"),
+            "reopen": (updated.get("claimed_by") or updated.get("owner") or "A1", "blocker", "direct"),
+        }
+        if action_name in topic_map and note:
+            recipient, topic, scope = topic_map[action_name]
+            sender = actor if action_name not in {"approve_plan", "reject_plan", "complete", "reopen"} else "A0"
+            self.append_team_mailbox_message(sender, str(recipient), topic, note, [task_id], scope)
+        self.last_event = f"task:{action_name}:{task_id}"
+        return updated
+
+    def stop_worker_locked(self, agent: str, note: str = "") -> dict[str, Any]:
+        worker_config = next((item for item in self.workers if str(item.get("agent") or "").strip() == agent), None)
+        if worker_config is None:
+            raise ValueError(f"unknown worker {agent}")
+        if agent == "A0":
+            raise ValueError("A0 cannot be shut down through the worker shutdown path")
+
+        process_entry = self.processes.get(agent)
+        runtime_entry = next(
+            (
+                item
+                for item in self.dashboard_runtime_state().get("workers", [])
+                if isinstance(item, dict) and str(item.get("agent") or "").strip() == agent
+            ),
+            {},
+        )
+        stopped = False
+        already_stopped = True
+        pool_name = str(runtime_entry.get("resource_pool") or worker_config.get("resource_pool") or "unassigned")
+        provider_name = str(runtime_entry.get("provider") or worker_config.get("provider") or "unassigned")
+        model = str(runtime_entry.get("model") or worker_config.get("model") or "unassigned")
+        if process_entry is not None:
+            already_stopped = process_entry.process.poll() is not None
+            if process_entry.process.poll() is None:
+                terminate_process_tree(process_entry.process.pid, signal.SIGTERM)
+                try:
+                    process_entry.process.wait(timeout=5)
+                except subprocess.TimeoutExpired:
+                    terminate_process_tree(process_entry.process.pid, signal.SIGKILL)
+                    process_entry.process.wait(timeout=5)
+                stopped = True
+            process_entry.log_handle.close()
+            pool_name = process_entry.resource_pool
+            provider_name = process_entry.provider
+            model = process_entry.model
+            del self.processes[agent]
+
+        self.update_heartbeat(agent, "offline", "manager_stop", note or "none")
+        self.update_runtime_entry(worker_config, pool_name, provider_name, model, "stopped")
+        self.append_team_mailbox_message(
+            "A0",
+            agent,
+            "status_note",
+            note or "A0 requested a clean worker shutdown.",
+            [str(worker_config.get("task_id") or "").strip()] if str(worker_config.get("task_id") or "").strip() else [],
+            "direct",
+        )
+        return {"ok": True, "agent": agent, "stopped": stopped, "already_stopped": already_stopped and not stopped}
+
+    def stop_worker(self, agent: str, note: str = "") -> dict[str, Any]:
+        with self.lock:
+            result = self.stop_worker_locked(agent, note)
+            self.last_event = f"stop:{agent}"
+            self.write_session_state()
+            result["cleanup"] = self.cleanup_status()
+            return result
+
+    def confirm_team_cleanup(self, note: str = "") -> dict[str, Any]:
+        with self.lock:
+            cleanup = self.cleanup_status()
+            if not cleanup.get("ready"):
+                raise ValueError(f"cleanup blocked: {summarize_list(cleanup.get('blockers', []))}")
+            self.append_team_mailbox_message(
+                "A0",
+                "all",
+                "status_note",
+                note or "Cleanup gate passed; listener shutdown is now safe.",
+                [],
+                "broadcast",
+            )
+            self.last_event = "cleanup:ready"
+            self.write_session_state()
+            return cleanup
 
     def suggested_task_id(self, worker: dict[str, Any]) -> str:
         if str(worker.get("task_id", "")).strip():
@@ -2692,6 +3199,60 @@ Last updated: {now_iso()}
         request_state = stored.get("requests", {}) if isinstance(stored.get("requests"), dict) else {}
         messages = stored.get("messages", []) if isinstance(stored.get("messages"), list) else []
         requests: list[dict[str, Any]] = []
+        mailbox_state = self.team_mailbox_catalog()
+        inbox = [
+            item
+            for item in mailbox_state.get("messages", [])
+            if str(item.get("ack_state") or "") != "resolved"
+            and (
+                str(item.get("to") or "") in {"A0", "a0", "manager", "all"}
+                or str(item.get("scope") or "") in {"broadcast", "manager"}
+            )
+        ]
+
+        for item in self.backlog_items():
+            task_id = str(item.get("id") or "").strip()
+            claimant = str(item.get("claimed_by") or item.get("owner") or "A?").strip() or "A?"
+            if str(item.get("plan_state") or "") == "pending_review":
+                request_id = slugify(f"{task_id}_plan_review")
+                saved = request_state.get(request_id, {}) if isinstance(request_state.get(request_id), dict) else {}
+                requests.append(
+                    {
+                        "id": request_id,
+                        "agent": claimant,
+                        "task_id": task_id,
+                        "request_type": "plan_review",
+                        "status": str(item.get("status") or "pending"),
+                        "title": f"{task_id} requests plan approval",
+                        "body": str(item.get("plan_summary") or f"{task_id} is waiting for manager review").strip(),
+                        "resume_instruction": "Approve to allow implementation, or reject with constraints.",
+                        "next_checkin": str(item.get("updated_at") or item.get("claimed_at") or "").strip(),
+                        "response_state": str(saved.get("response_state") or "pending").strip() or "pending",
+                        "response_note": str(saved.get("response_note") or item.get("plan_review_note") or "").strip(),
+                        "response_at": str(saved.get("response_at") or item.get("plan_reviewed_at") or "").strip(),
+                        "created_at": str(saved.get("created_at") or item.get("claimed_at") or now_iso()).strip(),
+                    }
+                )
+            elif str(item.get("status") or "") == "review" or str(item.get("claim_state") or "") == "review":
+                request_id = slugify(f"{task_id}_task_review")
+                saved = request_state.get(request_id, {}) if isinstance(request_state.get(request_id), dict) else {}
+                requests.append(
+                    {
+                        "id": request_id,
+                        "agent": claimant,
+                        "task_id": task_id,
+                        "request_type": "task_review",
+                        "status": str(item.get("status") or "review"),
+                        "title": f"{task_id} requests manager acceptance",
+                        "body": str(item.get("review_note") or f"{task_id} is ready for manager review").strip(),
+                        "resume_instruction": "Accept to unblock dependents, or reopen with a concrete correction.",
+                        "next_checkin": str(item.get("review_requested_at") or item.get("updated_at") or "").strip(),
+                        "response_state": str(saved.get("response_state") or "pending").strip() or "pending",
+                        "response_note": str(saved.get("response_note") or item.get("review_note") or "").strip(),
+                        "response_at": str(saved.get("response_at") or item.get("completed_at") or "").strip(),
+                        "created_at": str(saved.get("created_at") or item.get("review_requested_at") or now_iso()).strip(),
+                    }
+                )
 
         for item in merge_queue:
             agent = str(item.get("agent", "")).strip()
@@ -2726,6 +3287,7 @@ Last updated: {now_iso()}
                 {
                     "id": request_id,
                     "agent": agent,
+                    "request_type": "worker_intervention",
                     "status": status,
                     "title": title,
                     "body": "; ".join(body_parts) or title,
@@ -2741,10 +3303,11 @@ Last updated: {now_iso()}
             )
 
         requests.sort(key=lambda item: (item["response_state"] != "pending", item["agent"], item["id"]))
-        pending_count = sum(1 for item in requests if item["response_state"] == "pending")
+        pending_count = sum(1 for item in requests if item["response_state"] == "pending") + len(inbox)
         return {
             "requests": requests,
             "messages": messages[-20:],
+            "inbox": inbox[-20:],
             "pending_count": pending_count,
             "last_updated": now_iso(),
         }
@@ -3176,26 +3739,13 @@ Primary test command:
     def stop_workers(self) -> dict[str, Any]:
         with self.lock:
             stopped: list[str] = []
-            for agent, worker in list(self.processes.items()):
-                if worker.process.poll() is None:
-                    terminate_process_tree(worker.process.pid, signal.SIGTERM)
-                    try:
-                        worker.process.wait(timeout=5)
-                    except subprocess.TimeoutExpired:
-                        terminate_process_tree(worker.process.pid, signal.SIGKILL)
-                        worker.process.wait(timeout=5)
-                worker.log_handle.close()
-                self.update_heartbeat(agent, "offline", "manager_stop", "none")
-                runtime_entry = next((w for w in self.workers if w.get("agent") == agent), None)
-                if runtime_entry:
-                    self.update_runtime_entry(
-                        runtime_entry, worker.resource_pool, worker.provider, worker.model, "stopped"
-                    )
-                stopped.append(agent)
-                del self.processes[agent]
+            for agent in list(self.processes.keys()):
+                result = self.stop_worker_locked(agent)
+                if result.get("stopped") or result.get("already_stopped"):
+                    stopped.append(agent)
             self.last_event = f"stop:{len(stopped)} workers"
             self.write_session_state()
-            return {"ok": True, "stopped": stopped}
+            return {"ok": True, "stopped": stopped, "cleanup": self.cleanup_status()}
 
     def process_snapshot(self) -> dict[str, Any]:
         snapshot: dict[str, Any] = {}
@@ -3245,13 +3795,15 @@ Primary test command:
             "manager_report": manager_report,
             "runtime": runtime_state,
             "heartbeats": heartbeat_state,
-            "backlog": load_yaml(STATE_DIR / "backlog.yaml"),
+            "backlog": self.load_backlog_state(),
             "gates": load_yaml(STATE_DIR / "gates.yaml"),
             "processes": self.process_snapshot(),
             "provider_queue": self.provider_queue(),
             "resolved_workers": [self.resolved_worker_plan(worker) for worker in self.workers],
             "merge_queue": merge_queue,
             "a0_console": a0_console,
+            "team_mailbox": self.team_mailbox_catalog(),
+            "cleanup": self.cleanup_status(),
             "config": self.config,
             "config_text": config_text,
             "validation_errors": self.validation_errors(),
@@ -3469,6 +4021,104 @@ Primary test command:
                 return True
             console = self.record_a0_user_message(message, action="note")
             self.write_json(handler, {"ok": True, "a0_console": console})
+            return True
+
+        if handler.path == "/api/tasks/action":
+            task_id = str(payload.get("task_id", "")).strip()
+            action = str(payload.get("action", "")).strip()
+            agent = str(payload.get("agent", "A0")).strip() or "A0"
+            note = str(payload.get("note", "")).strip()
+            if not task_id:
+                self.write_json(handler, {"ok": False, "error": "task_id is required"}, status=400)
+                return True
+            if not action:
+                self.write_json(handler, {"ok": False, "error": "action is required"}, status=400)
+                return True
+            try:
+                task = self.perform_task_action(task_id, action, agent=agent, note=note)
+            except Exception as exc:
+                self.write_json(handler, {"ok": False, "error": str(exc)}, status=400)
+                return True
+            self.write_json(
+                handler,
+                {
+                    "ok": True,
+                    "task": task,
+                    "backlog": self.load_backlog_state(),
+                    "a0_console": self.a0_request_catalog(self.merge_queue(), self.dashboard_heartbeats_state()),
+                },
+            )
+            return True
+
+        if handler.path == "/api/team-mail/send":
+            sender = str(payload.get("from", "")).strip()
+            recipient = str(payload.get("to", "")).strip()
+            topic = str(payload.get("topic", "status_note")).strip() or "status_note"
+            body = str(payload.get("body", "")).strip()
+            scope = str(payload.get("scope", "direct")).strip() or "direct"
+            related_task_ids = payload.get("related_task_ids") or []
+            if not sender:
+                self.write_json(handler, {"ok": False, "error": "from is required"}, status=400)
+                return True
+            if not recipient:
+                self.write_json(handler, {"ok": False, "error": "to is required"}, status=400)
+                return True
+            if not body:
+                self.write_json(handler, {"ok": False, "error": "body is required"}, status=400)
+                return True
+            message = self.append_team_mailbox_message(
+                sender,
+                recipient,
+                topic,
+                body,
+                dedupe_strings(related_task_ids if isinstance(related_task_ids, list) else []),
+                scope,
+            )
+            self.last_event = f"mail:send:{message['id']}"
+            self.write_json(handler, {"ok": True, "message": message, "team_mailbox": self.team_mailbox_catalog()})
+            return True
+
+        if handler.path == "/api/team-mail/ack":
+            message_id = str(payload.get("message_id", "")).strip()
+            ack_state = str(payload.get("ack_state", "")).strip()
+            resolution_note = str(payload.get("resolution_note", "")).strip()
+            if not message_id:
+                self.write_json(handler, {"ok": False, "error": "message_id is required"}, status=400)
+                return True
+            if not ack_state:
+                self.write_json(handler, {"ok": False, "error": "ack_state is required"}, status=400)
+                return True
+            try:
+                message = self.acknowledge_team_mailbox_message(message_id, ack_state, resolution_note)
+            except Exception as exc:
+                self.write_json(handler, {"ok": False, "error": str(exc)}, status=400)
+                return True
+            self.last_event = f"mail:ack:{message_id}:{ack_state}"
+            self.write_json(handler, {"ok": True, "message": message, "team_mailbox": self.team_mailbox_catalog()})
+            return True
+
+        if handler.path == "/api/workers/stop":
+            agent = str(payload.get("agent", "")).strip()
+            note = str(payload.get("note", "")).strip()
+            if not agent:
+                self.write_json(handler, {"ok": False, "error": "agent is required"}, status=400)
+                return True
+            try:
+                result = self.stop_worker(agent, note)
+            except Exception as exc:
+                self.write_json(handler, {"ok": False, "error": str(exc)}, status=400)
+                return True
+            self.write_json(handler, result)
+            return True
+
+        if handler.path == "/api/team-cleanup":
+            note = str(payload.get("note", "")).strip()
+            try:
+                cleanup = self.confirm_team_cleanup(note)
+            except Exception as exc:
+                self.write_json(handler, {"ok": False, "error": str(exc), "cleanup": self.cleanup_status()}, status=400)
+                return True
+            self.write_json(handler, {"ok": True, "cleanup": cleanup})
             return True
 
         if handler.path == "/api/stop":

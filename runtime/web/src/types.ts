@@ -144,6 +144,8 @@ export type ProcessSnapshot = {
 export type A0ConsoleRequest = {
   id: string;
   agent: string;
+  task_id?: string;
+  request_type?: string;
   status: string;
   title: string;
   body: string;
@@ -169,6 +171,7 @@ export type A0ConsoleMessage = {
 export type A0ConsoleState = {
   requests: A0ConsoleRequest[];
   messages: A0ConsoleMessage[];
+  inbox: TeamMailboxMessage[];
   pending_count: number;
   last_updated: string;
 };
@@ -179,6 +182,66 @@ export type BacklogItem = {
   status: string;
   gate: string;
   title: string;
+  task_type?: string;
+  priority?: string;
+  dependencies?: string[];
+  claim_state?: string;
+  claimed_by?: string;
+  claimed_at?: string;
+  claim_note?: string;
+  plan_required?: boolean;
+  plan_state?: string;
+  plan_summary?: string;
+  plan_review_note?: string;
+  review_requested_at?: string;
+  review_note?: string;
+  completed_at?: string;
+  completed_by?: string;
+  updated_at?: string;
+};
+
+export type TeamMailboxMessage = {
+  id: string;
+  from: string;
+  to: string;
+  scope: string;
+  topic: string;
+  body: string;
+  related_task_ids?: string[];
+  created_at: string;
+  ack_state: string;
+  resolution_note?: string;
+  acked_at?: string;
+};
+
+export type TeamMailboxState = {
+  messages: TeamMailboxMessage[];
+  pending_count: number;
+  a0_pending_count: number;
+  last_updated: string;
+};
+
+export type CleanupWorkerState = {
+  agent: string;
+  ready: boolean;
+  active: boolean;
+  runtime_status: string;
+  heartbeat_state: string;
+  pending_plan_reviews: string[];
+  pending_task_reviews: string[];
+  locked_files: string[];
+  blockers: string[];
+};
+
+export type CleanupState = {
+  ready: boolean;
+  blockers: string[];
+  active_workers: string[];
+  pending_plan_reviews: string[];
+  pending_task_reviews: string[];
+  locked_files: Array<{ path: string; owner: string; state: string }>;
+  workers: CleanupWorkerState[];
+  last_updated: string;
 };
 
 export type GateItem = {
@@ -280,6 +343,8 @@ export type DashboardState = {
   resolved_workers: ResolvedWorkerPlan[];
   merge_queue: MergeQueueItem[];
   a0_console: A0ConsoleState;
+  team_mailbox: TeamMailboxState;
+  cleanup: CleanupState;
   config: ConfigShape;
   config_text: string;
   validation_errors: string[];
@@ -337,4 +402,30 @@ export type SilentModeResponse = {
 export type A0ConsoleResponse = {
   ok: boolean;
   a0_console: A0ConsoleState;
+};
+
+export type TaskActionResponse = {
+  ok: boolean;
+  task: BacklogItem;
+  backlog: { items?: BacklogItem[] };
+  a0_console: A0ConsoleState;
+};
+
+export type TeamMailboxResponse = {
+  ok: boolean;
+  message: TeamMailboxMessage;
+  team_mailbox: TeamMailboxState;
+};
+
+export type StopWorkerResponse = {
+  ok: boolean;
+  agent: string;
+  stopped: boolean;
+  already_stopped: boolean;
+  cleanup: CleanupState;
+};
+
+export type TeamCleanupResponse = {
+  ok: boolean;
+  cleanup: CleanupState;
 };

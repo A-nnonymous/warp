@@ -24590,11 +24590,34 @@ function sendA0Response(request_id, message, action = "resume") {
 function sendA0Message(message) {
   return postJson("/api/a0/message", { message });
 }
+function applyTaskAction(task_id, action, agent, note) {
+  return postJson("/api/tasks/action", { task_id, action, agent, note });
+}
+function sendTeamMailboxMessage(payload) {
+  return postJson("/api/team-mail/send", payload);
+}
+function acknowledgeTeamMailboxMessage(message_id, ack_state, resolution_note = "") {
+  return postJson("/api/team-mail/ack", { message_id, ack_state, resolution_note });
+}
+function stopWorker(agent, note = "") {
+  return postJson("/api/workers/stop", { agent, note });
+}
+function confirmTeamCleanup(note = "") {
+  return postJson("/api/team-cleanup", { note });
+}
 
 // src/App.tsx
 var import_jsx_runtime = __toESM(require_jsx_runtime(), 1);
 var AUTO_REFRESH_MS = 4e3;
 var A0_CONSOLE_VIEW = "a0-console";
+var DEFAULT_MAILBOX_DRAFT = {
+  from: "A0",
+  to: "all",
+  topic: "status_note",
+  scope: "broadcast",
+  relatedTaskIds: "",
+  body: ""
+};
 function normalizedText(value) {
   return String(value ?? "").trim();
 }
@@ -25167,10 +25190,14 @@ function buildProgressModel(data, agentRows) {
   const progress = gates.length ? Math.round(passedGates / gates.length * 100) : 0;
   const completedItems = backlog.filter((item) => ["done", "completed", "closed"].includes(String(item.status))).length;
   const blockedItems = backlog.filter((item) => String(item.status) === "blocked").length;
+  const claimedItems = backlog.filter((item) => ["claimed", "in_progress", "review"].includes(String(item.claim_state))).length;
+  const reviewItems = backlog.filter((item) => String(item.status) === "review" || String(item.claim_state) === "review").length;
+  const planPending = backlog.filter((item) => String(item.plan_state) === "pending_review").length;
+  const mailboxPending = data?.team_mailbox?.pending_count || 0;
   const activeAgents = agentRows.filter((item) => item.display_state === "active" || item.display_state === "healthy").length;
   const attentionAgents = agentRows.filter((item) => item.display_state === "stale" || item.display_state.startsWith("launch_failed")).length;
   const openGate = gates.find((item) => item.status !== "passed");
-  return { progress, passedGates, totalGates: gates.length, completedItems, totalItems: backlog.length, blockedItems, activeAgents, attentionAgents, openGate };
+  return { progress, passedGates, totalGates: gates.length, completedItems, totalItems: backlog.length, blockedItems, claimedItems, reviewItems, planPending, mailboxPending, activeAgents, attentionAgents, openGate };
 }
 function getLocalValidationIssues(config, data) {
   const draft = hydrateConfigForA0(data, normalizeConfig(config));
@@ -25429,11 +25456,13 @@ function OverviewTab({ data, agentRows, progress, onOpenA0Console }) {
           /* @__PURE__ */ (0, import_jsx_runtime.jsx)(Metric, { label: "Agents", value: agentRows.length, hint: `${progress.activeAgents} active or healthy` }),
           /* @__PURE__ */ (0, import_jsx_runtime.jsx)(Metric, { label: "Overall Progress", value: `${progress.progress}%`, hint: `${progress.passedGates}/${progress.totalGates} gates passed` }),
           /* @__PURE__ */ (0, import_jsx_runtime.jsx)(Metric, { label: "Attention Needed", value: progress.attentionAgents, hint: `${progress.blockedItems} backlog items blocked` }),
-          /* @__PURE__ */ (0, import_jsx_runtime.jsx)(Metric, { label: "Launch Blockers", value: data.launch_blockers.length, hint: data.launch_blockers.length ? `${data.validation_errors.length} config notes` : "launch path is ready" })
+          /* @__PURE__ */ (0, import_jsx_runtime.jsx)(Metric, { label: "Pending Reviews", value: progress.reviewItems + progress.planPending, hint: `${progress.mailboxPending} mailbox item(s) open` })
         ] }),
         /* @__PURE__ */ (0, import_jsx_runtime.jsxs)("div", { className: "progress-list", children: [
           /* @__PURE__ */ (0, import_jsx_runtime.jsx)(ProgressRow, { label: "Backlog", value: `${progress.completedItems}/${progress.totalItems} completed` }),
           /* @__PURE__ */ (0, import_jsx_runtime.jsx)(ProgressRow, { label: "Blocked work", value: `${progress.blockedItems} items` }),
+          /* @__PURE__ */ (0, import_jsx_runtime.jsx)(ProgressRow, { label: "Claimed work", value: `${progress.claimedItems} items` }),
+          /* @__PURE__ */ (0, import_jsx_runtime.jsx)(ProgressRow, { label: "Awaiting review", value: `${progress.reviewItems} handoff(s), ${progress.planPending} plan(s)` }),
           /* @__PURE__ */ (0, import_jsx_runtime.jsx)(ProgressRow, { label: "Agents needing action", value: `${progress.attentionAgents}` }),
           /* @__PURE__ */ (0, import_jsx_runtime.jsx)(ProgressRow, { label: "Current gate", value: progress.openGate ? `${progress.openGate.id} \xB7 ${progress.openGate.name}` : "All gates passed" })
         ] })
@@ -25449,6 +25478,8 @@ function OverviewTab({ data, agentRows, progress, onOpenA0Console }) {
           /* @__PURE__ */ (0, import_jsx_runtime.jsx)(HelperCard, { title: "Last event", body: data.last_event || "none" }),
           /* @__PURE__ */ (0, import_jsx_runtime.jsx)(HelperCard, { title: "Launch posture", body: data.launch_blockers.length ? `${data.launch_blockers.length} blocker(s)` : "ready to launch" }),
           /* @__PURE__ */ (0, import_jsx_runtime.jsx)(HelperCard, { title: "A0 approvals", body: data.a0_console.pending_count ? `${data.a0_console.pending_count} pending request(s)` : "no pending requests" }),
+          /* @__PURE__ */ (0, import_jsx_runtime.jsx)(HelperCard, { title: "Team mailbox", body: data.team_mailbox.pending_count ? `${data.team_mailbox.pending_count} open message(s)` : "mailbox is clear" }),
+          /* @__PURE__ */ (0, import_jsx_runtime.jsx)(HelperCard, { title: "Cleanup", body: data.cleanup.ready ? "ready to release the team" : `${data.cleanup.blockers.length} cleanup blocker(s)` }),
           /* @__PURE__ */ (0, import_jsx_runtime.jsx)(HelperCard, { title: "ducc pool", body: duccPool ? `${duccPool.active_workers} active \xB7 ${formatTokenCount(duccPool.usage?.total_tokens)} tokens` : "ducc pool not configured" })
         ] }),
         /* @__PURE__ */ (0, import_jsx_runtime.jsx)("div", { className: "toolbar-group", children: /* @__PURE__ */ (0, import_jsx_runtime.jsx)("button", { className: "ghost", type: "button", onClick: onOpenA0Console, children: "Open A0 Console" }) })
@@ -25486,7 +25517,64 @@ function OverviewTab({ data, agentRows, progress, onOpenA0Console }) {
     ] })
   ] });
 }
-function OperationsTab({ data }) {
+function CleanupWorkerCard({ item, onStopWorker, disabled }) {
+  return /* @__PURE__ */ (0, import_jsx_runtime.jsxs)("article", { className: "merge-card a0-request-card", children: [
+    /* @__PURE__ */ (0, import_jsx_runtime.jsxs)("div", { className: "merge-card-header", children: [
+      /* @__PURE__ */ (0, import_jsx_runtime.jsxs)("div", { children: [
+        /* @__PURE__ */ (0, import_jsx_runtime.jsx)("div", { className: "merge-branch", children: item.agent }),
+        /* @__PURE__ */ (0, import_jsx_runtime.jsxs)("div", { className: "merge-track", children: [
+          /* @__PURE__ */ (0, import_jsx_runtime.jsx)("span", { children: item.runtime_status || "runtime unknown" }),
+          /* @__PURE__ */ (0, import_jsx_runtime.jsx)("span", { className: "merge-arrow", children: "->" }),
+          /* @__PURE__ */ (0, import_jsx_runtime.jsx)("span", { children: item.heartbeat_state || "heartbeat unknown" })
+        ] })
+      ] }),
+      /* @__PURE__ */ (0, import_jsx_runtime.jsx)("span", { className: classNames("chip", item.ready ? "state-active" : "state-stale"), children: item.ready ? "Ready" : "Blocked" })
+    ] }),
+    item.blockers.length ? /* @__PURE__ */ (0, import_jsx_runtime.jsxs)("div", { className: "merge-list-block", children: [
+      /* @__PURE__ */ (0, import_jsx_runtime.jsx)("strong", { children: "Blockers" }),
+      /* @__PURE__ */ (0, import_jsx_runtime.jsx)("ul", { children: item.blockers.map((entry) => /* @__PURE__ */ (0, import_jsx_runtime.jsx)("li", { children: entry }, `${item.agent}-${entry}`)) })
+    ] }) : /* @__PURE__ */ (0, import_jsx_runtime.jsx)("div", { className: "small muted", children: "No cleanup blockers remain for this worker." }),
+    /* @__PURE__ */ (0, import_jsx_runtime.jsx)("div", { className: "toolbar-group a0-actions", children: /* @__PURE__ */ (0, import_jsx_runtime.jsx)("button", { type: "button", onClick: () => onStopWorker(item.agent), disabled: disabled || !item.active, children: "Shut down worker" }) })
+  ] });
+}
+function MailboxComposerCard({
+  draft,
+  onChange,
+  onSend,
+  participants,
+  disabled
+}) {
+  const recipientOptions = ["all", "manager", ...participants.filter((item) => item !== "A0")];
+  return /* @__PURE__ */ (0, import_jsx_runtime.jsxs)("section", { className: "card", children: [
+    /* @__PURE__ */ (0, import_jsx_runtime.jsx)("div", { className: "panel-title", children: /* @__PURE__ */ (0, import_jsx_runtime.jsxs)("div", { children: [
+      /* @__PURE__ */ (0, import_jsx_runtime.jsx)("h2", { children: "Mailbox Composer" }),
+      /* @__PURE__ */ (0, import_jsx_runtime.jsx)("p", { className: "small", children: "Send durable coordination notes through the team mailbox so they survive worker restarts and provider changes." })
+    ] }) }),
+    /* @__PURE__ */ (0, import_jsx_runtime.jsxs)("section", { className: "grid", children: [
+      /* @__PURE__ */ (0, import_jsx_runtime.jsx)(SelectField, { label: "From", value: draft.from, onChange: (value) => onChange("from", value), options: participants }),
+      /* @__PURE__ */ (0, import_jsx_runtime.jsx)(SelectField, { label: "To", value: draft.to, onChange: (value) => onChange("to", value), options: recipientOptions })
+    ] }),
+    /* @__PURE__ */ (0, import_jsx_runtime.jsxs)("section", { className: "grid", children: [
+      /* @__PURE__ */ (0, import_jsx_runtime.jsx)(SelectField, { label: "Topic", value: draft.topic, onChange: (value) => onChange("topic", value), options: ["status_note", "blocker", "handoff", "review_request", "design_question"] }),
+      /* @__PURE__ */ (0, import_jsx_runtime.jsx)(SelectField, { label: "Scope", value: draft.scope, onChange: (value) => onChange("scope", value), options: ["direct", "broadcast", "manager"] })
+    ] }),
+    /* @__PURE__ */ (0, import_jsx_runtime.jsx)(Field, { label: "Related tasks", value: draft.relatedTaskIds, onChange: (value) => onChange("relatedTaskIds", value), helpText: "Optional comma-separated task ids.", placeholder: "A1-001, A6-001" }),
+    /* @__PURE__ */ (0, import_jsx_runtime.jsxs)("label", { className: "field", children: [
+      /* @__PURE__ */ (0, import_jsx_runtime.jsx)("span", { className: "field-label", children: "Message body" }),
+      /* @__PURE__ */ (0, import_jsx_runtime.jsx)("textarea", { className: "field-input field-textarea", value: draft.body, onChange: (event) => onChange("body", event.target.value), placeholder: "Write the durable coordination note that should land in the shared mailbox." })
+    ] }),
+    /* @__PURE__ */ (0, import_jsx_runtime.jsx)("div", { className: "toolbar-group a0-actions", children: /* @__PURE__ */ (0, import_jsx_runtime.jsx)("button", { type: "button", onClick: onSend, disabled: disabled || !draft.from || !draft.to || !draft.body.trim(), children: "Send mailbox message" }) })
+  ] });
+}
+function OperationsTab({
+  data,
+  mailboxDraft,
+  onMailboxDraftChange,
+  onSendMailboxMessage,
+  onStopWorker,
+  onConfirmCleanup,
+  actionInFlight
+}) {
   const projectRows = [
     { key: "repository_name", value: data.project.repository_name || "" },
     { key: "local_repo_root", value: data.project.local_repo_root || "" },
@@ -25498,6 +25586,10 @@ function OperationsTab({ data }) {
   const processRows = Object.entries(data.processes || {}).map(([agent, item]) => ({ agent, provider: item.provider, model: item.model, alive: item.alive, pid: item.pid, resource_pool: item.resource_pool, progress_pct: item.progress_pct, total_tokens: item.usage?.total_tokens || 0, phase: item.phase || item.last_log_line || "", recursion_guard: item.recursion_guard, wrapper_path: item.wrapper_path, returncode: item.returncode }));
   const mergeRows = data.merge_queue.map((item) => ({ agent: item.agent, branch: item.branch, submit_strategy: item.submit_strategy, worker_identity: item.worker_identity, merge_target: item.merge_target, status: item.status, manager_action: item.manager_action }));
   const providerRows = data.provider_queue.map((item) => ({ resource_pool: item.resource_pool, provider: item.provider, priority: item.priority, binary_found: item.binary_found, recursion_guard: item.recursion_guard, launch_wrapper: item.launch_wrapper, auth_mode: item.auth_mode, auth_ready: item.auth_ready, launch_ready: item.launch_ready, active_workers: item.active_workers, progress_pct: item.progress_pct ?? "", total_tokens: item.usage?.total_tokens || 0, auth_detail: item.auth_detail, connection_quality: item.connection_quality, work_quality: item.work_quality, score: item.score }));
+  const backlogRows = (data.backlog.items || []).map((item) => ({ id: item.id, owner: item.owner, claimed_by: item.claimed_by || "", claim_state: item.claim_state || "", plan_state: item.plan_state || "", status: item.status, gate: item.gate, title: item.title }));
+  const mailboxRows = (data.team_mailbox.messages || []).map((item) => ({ id: item.id, from: item.from, to: item.to, topic: item.topic, ack_state: item.ack_state, related_task_ids: (item.related_task_ids || []).join(", "), created_at: item.created_at, body: item.body }));
+  const mailboxParticipants = Array.from(/* @__PURE__ */ new Set(["A0", ...(data.resolved_workers || []).map((item) => item.agent).filter(Boolean)])).sort();
+  const cleanup = data.cleanup;
   return /* @__PURE__ */ (0, import_jsx_runtime.jsxs)("div", { className: "tab-body", children: [
     /* @__PURE__ */ (0, import_jsx_runtime.jsxs)("section", { className: "grid", children: [
       /* @__PURE__ */ (0, import_jsx_runtime.jsxs)("section", { className: "card", children: [
@@ -25546,12 +25638,32 @@ ${data.commands.up}` })
     /* @__PURE__ */ (0, import_jsx_runtime.jsxs)("section", { className: "grid", children: [
       /* @__PURE__ */ (0, import_jsx_runtime.jsxs)("section", { className: "card", children: [
         /* @__PURE__ */ (0, import_jsx_runtime.jsx)("h2", { children: "Backlog" }),
-        /* @__PURE__ */ (0, import_jsx_runtime.jsx)(DataTable, { columns: ["id", "owner", "status", "gate", "title"], rows: data.backlog.items || [] })
+        /* @__PURE__ */ (0, import_jsx_runtime.jsx)(DataTable, { columns: ["id", "owner", "claimed_by", "claim_state", "plan_state", "status", "gate", "title"], rows: backlogRows })
       ] }),
       /* @__PURE__ */ (0, import_jsx_runtime.jsxs)("section", { className: "card", children: [
         /* @__PURE__ */ (0, import_jsx_runtime.jsx)("h2", { children: "Gates" }),
         /* @__PURE__ */ (0, import_jsx_runtime.jsx)(DataTable, { columns: ["id", "name", "status", "owner"], rows: data.gates.gates || [] })
       ] })
+    ] }),
+    /* @__PURE__ */ (0, import_jsx_runtime.jsx)(MailboxComposerCard, { draft: mailboxDraft, onChange: onMailboxDraftChange, onSend: onSendMailboxMessage, participants: mailboxParticipants, disabled: actionInFlight }),
+    /* @__PURE__ */ (0, import_jsx_runtime.jsxs)("section", { className: "card", children: [
+      /* @__PURE__ */ (0, import_jsx_runtime.jsxs)("div", { className: "panel-title", children: [
+        /* @__PURE__ */ (0, import_jsx_runtime.jsxs)("div", { children: [
+          /* @__PURE__ */ (0, import_jsx_runtime.jsx)("h2", { children: "Cleanup Readiness" }),
+          /* @__PURE__ */ (0, import_jsx_runtime.jsx)("p", { className: "small", children: "Cleanup remains blocked while workers are alive, reviews are unresolved, or single-writer locks are still held." })
+        ] }),
+        /* @__PURE__ */ (0, import_jsx_runtime.jsx)("div", { className: classNames("chip", cleanup.ready ? "state-active" : "state-stale"), children: cleanup.ready ? "Ready" : "Blocked" })
+      ] }),
+      cleanup.blockers.length ? /* @__PURE__ */ (0, import_jsx_runtime.jsxs)("div", { className: "merge-list-block", children: [
+        /* @__PURE__ */ (0, import_jsx_runtime.jsx)("strong", { children: "Cleanup blockers" }),
+        /* @__PURE__ */ (0, import_jsx_runtime.jsx)("ul", { children: cleanup.blockers.map((entry) => /* @__PURE__ */ (0, import_jsx_runtime.jsx)("li", { children: entry }, entry)) })
+      ] }) : /* @__PURE__ */ (0, import_jsx_runtime.jsx)("div", { className: "small muted", children: "No cleanup blockers remain. The team cleanup gate can be confirmed safely." }),
+      /* @__PURE__ */ (0, import_jsx_runtime.jsx)("div", { className: "toolbar-group a0-actions", children: /* @__PURE__ */ (0, import_jsx_runtime.jsx)("button", { type: "button", onClick: onConfirmCleanup, disabled: actionInFlight || !cleanup.ready, children: "Confirm cleanup gate" }) }),
+      /* @__PURE__ */ (0, import_jsx_runtime.jsx)("div", { className: "merge-board", children: (cleanup.workers || []).map((item) => /* @__PURE__ */ (0, import_jsx_runtime.jsx)(CleanupWorkerCard, { item, onStopWorker, disabled: actionInFlight }, item.agent)) })
+    ] }),
+    /* @__PURE__ */ (0, import_jsx_runtime.jsxs)("section", { className: "card", children: [
+      /* @__PURE__ */ (0, import_jsx_runtime.jsx)("h2", { children: "Team Mailbox" }),
+      /* @__PURE__ */ (0, import_jsx_runtime.jsx)(DataTable, { columns: ["id", "from", "to", "topic", "ack_state", "related_task_ids", "created_at", "body"], rows: mailboxRows })
     ] }),
     /* @__PURE__ */ (0, import_jsx_runtime.jsxs)("section", { className: "card", children: [
       /* @__PURE__ */ (0, import_jsx_runtime.jsx)("h2", { children: "Manager Report" }),
@@ -25893,6 +26005,8 @@ function A0RequestCard({
   onReplyChange,
   onReply
 }) {
+  const primaryAction = item.request_type === "plan_review" ? { action: "approve", label: "Approve plan" } : item.request_type === "task_review" ? { action: "approve", label: "Accept task" } : { action: "resume", label: "Resume" };
+  const secondaryAction = item.request_type === "plan_review" ? { action: "reject", label: "Reject plan", className: "danger-outline" } : item.request_type === "task_review" ? { action: "reject", label: "Reopen task", className: "danger-outline" } : { action: "acknowledged", label: "Acknowledge", className: "ghost" };
   return /* @__PURE__ */ (0, import_jsx_runtime.jsxs)("article", { className: "merge-card a0-request-card", children: [
     /* @__PURE__ */ (0, import_jsx_runtime.jsxs)("div", { className: "merge-card-header", children: [
       /* @__PURE__ */ (0, import_jsx_runtime.jsxs)("div", { children: [
@@ -25930,9 +26044,43 @@ function A0RequestCard({
       /* @__PURE__ */ (0, import_jsx_runtime.jsx)("textarea", { className: "field-input field-textarea", value: replyDraft, onChange: (event) => onReplyChange(item.id, event.target.value), placeholder: "Give A0 the decision, constraint, or unblock instruction." })
     ] }),
     /* @__PURE__ */ (0, import_jsx_runtime.jsxs)("div", { className: "toolbar-group a0-actions", children: [
-      /* @__PURE__ */ (0, import_jsx_runtime.jsx)("button", { type: "button", onClick: () => onReply(item.id, "resume"), disabled: !replyDraft.trim(), children: "Resume" }),
-      /* @__PURE__ */ (0, import_jsx_runtime.jsx)("button", { className: "ghost", type: "button", onClick: () => onReply(item.id, "acknowledged"), disabled: !replyDraft.trim(), children: "Acknowledge" }),
-      /* @__PURE__ */ (0, import_jsx_runtime.jsx)("button", { className: "danger-outline", type: "button", onClick: () => onReply(item.id, "blocked"), disabled: !replyDraft.trim(), children: "Still blocked" })
+      /* @__PURE__ */ (0, import_jsx_runtime.jsx)("button", { type: "button", onClick: () => onReply(item, primaryAction.action), children: primaryAction.label }),
+      /* @__PURE__ */ (0, import_jsx_runtime.jsx)("button", { className: secondaryAction.className, type: "button", onClick: () => onReply(item, secondaryAction.action), children: secondaryAction.label }),
+      item.request_type === "worker_intervention" ? /* @__PURE__ */ (0, import_jsx_runtime.jsx)("button", { className: "danger-outline", type: "button", onClick: () => onReply(item, "blocked"), children: "Still blocked" }) : null
+    ] })
+  ] });
+}
+function MailboxCard({ item, onAck }) {
+  return /* @__PURE__ */ (0, import_jsx_runtime.jsxs)("article", { className: "merge-card a0-request-card", children: [
+    /* @__PURE__ */ (0, import_jsx_runtime.jsxs)("div", { className: "merge-card-header", children: [
+      /* @__PURE__ */ (0, import_jsx_runtime.jsxs)("div", { children: [
+        /* @__PURE__ */ (0, import_jsx_runtime.jsx)("div", { className: "merge-branch", children: item.topic }),
+        /* @__PURE__ */ (0, import_jsx_runtime.jsxs)("div", { className: "merge-track", children: [
+          /* @__PURE__ */ (0, import_jsx_runtime.jsx)("span", { children: item.from }),
+          /* @__PURE__ */ (0, import_jsx_runtime.jsx)("span", { className: "merge-arrow", children: "->" }),
+          /* @__PURE__ */ (0, import_jsx_runtime.jsx)("span", { children: item.to })
+        ] })
+      ] }),
+      /* @__PURE__ */ (0, import_jsx_runtime.jsx)("span", { className: classNames("chip", item.ack_state === "pending" ? "state-stale" : "state-active"), children: displayState(item.ack_state) })
+    ] }),
+    /* @__PURE__ */ (0, import_jsx_runtime.jsxs)("div", { className: "merge-attention", children: [
+      /* @__PURE__ */ (0, import_jsx_runtime.jsx)("strong", { children: "Message" }),
+      " ",
+      item.body
+    ] }),
+    item.related_task_ids?.length ? /* @__PURE__ */ (0, import_jsx_runtime.jsxs)("div", { className: "merge-note", children: [
+      /* @__PURE__ */ (0, import_jsx_runtime.jsx)("strong", { children: "Tasks" }),
+      " ",
+      item.related_task_ids.join(", ")
+    ] }) : null,
+    /* @__PURE__ */ (0, import_jsx_runtime.jsxs)("div", { className: "merge-note", children: [
+      /* @__PURE__ */ (0, import_jsx_runtime.jsx)("strong", { children: "Created" }),
+      " ",
+      item.created_at
+    ] }),
+    /* @__PURE__ */ (0, import_jsx_runtime.jsxs)("div", { className: "toolbar-group a0-actions", children: [
+      /* @__PURE__ */ (0, import_jsx_runtime.jsx)("button", { className: "ghost", type: "button", onClick: () => onAck(item.id, "seen"), children: "Mark seen" }),
+      /* @__PURE__ */ (0, import_jsx_runtime.jsx)("button", { type: "button", onClick: () => onAck(item.id, "resolved"), children: "Resolve" })
     ] })
   ] });
 }
@@ -25944,10 +26092,12 @@ function A0ConsoleView({
   onReplyChange,
   onComposerChange,
   onReply,
-  onSendMessage
+  onSendMessage,
+  onMailboxAck
 }) {
   const requests = data.a0_console?.requests || [];
   const messages = data.a0_console?.messages || [];
+  const inbox = data.a0_console?.inbox || [];
   return /* @__PURE__ */ (0, import_jsx_runtime.jsxs)("div", { className: classNames("tab-body", standalone && "a0-console-body"), children: [
     /* @__PURE__ */ (0, import_jsx_runtime.jsxs)("section", { className: "card", children: [
       /* @__PURE__ */ (0, import_jsx_runtime.jsxs)("div", { className: "page-header", children: [
@@ -25965,6 +26115,13 @@ function A0ConsoleView({
         /* @__PURE__ */ (0, import_jsx_runtime.jsx)("textarea", { className: "field-input field-textarea", value: composer, onChange: (event) => onComposerChange(event.target.value), placeholder: "Send a direct note to A0 outside a specific request." })
       ] }),
       /* @__PURE__ */ (0, import_jsx_runtime.jsx)("div", { className: "toolbar-group a0-actions", children: /* @__PURE__ */ (0, import_jsx_runtime.jsx)("button", { type: "button", onClick: onSendMessage, disabled: !composer.trim(), children: "Send to A0" }) })
+    ] }),
+    /* @__PURE__ */ (0, import_jsx_runtime.jsxs)("section", { className: "card", children: [
+      /* @__PURE__ */ (0, import_jsx_runtime.jsx)("div", { className: "panel-title", children: /* @__PURE__ */ (0, import_jsx_runtime.jsxs)("div", { children: [
+        /* @__PURE__ */ (0, import_jsx_runtime.jsx)("h2", { children: "Inbox" }),
+        /* @__PURE__ */ (0, import_jsx_runtime.jsx)("p", { className: "small", children: "Worker messages that still need acknowledgement or closure from A0." })
+      ] }) }),
+      /* @__PURE__ */ (0, import_jsx_runtime.jsx)("div", { className: "merge-board", children: inbox.length ? inbox.map((item) => /* @__PURE__ */ (0, import_jsx_runtime.jsx)(MailboxCard, { item, onAck: onMailboxAck }, item.id)) : /* @__PURE__ */ (0, import_jsx_runtime.jsx)("div", { className: "small muted", children: "No unresolved mailbox items for A0." }) })
     ] }),
     /* @__PURE__ */ (0, import_jsx_runtime.jsxs)("section", { className: "card", children: [
       /* @__PURE__ */ (0, import_jsx_runtime.jsx)("div", { className: "panel-title", children: /* @__PURE__ */ (0, import_jsx_runtime.jsxs)("div", { children: [
@@ -26027,6 +26184,7 @@ function App() {
   const [sectionStatuses, setSectionStatuses] = (0, import_react.useState)({});
   const [a0ReplyDrafts, setA0ReplyDrafts] = (0, import_react.useState)({});
   const [a0Composer, setA0Composer] = (0, import_react.useState)("");
+  const [mailboxDraft, setMailboxDraft] = (0, import_react.useState)(DEFAULT_MAILBOX_DRAFT);
   const abortRef = (0, import_react.useRef)(null);
   const previousPendingA0Ref = (0, import_react.useRef)(0);
   const agentRows = (0, import_react.useMemo)(() => buildAgentRows(data), [data]);
@@ -26482,13 +26640,48 @@ function App() {
   const onA0ReplyChange = (requestId, value) => {
     setA0ReplyDrafts((current) => ({ ...current, [requestId]: value }));
   };
-  const onA0Reply = (requestId, action) => void runAction(`sending A0 ${action}`, async () => {
-    const message = String(a0ReplyDrafts[requestId] || "").trim();
-    if (!message) {
-      throw new Error("reply message is required");
+  const onA0Reply = (item, action) => void runAction(`sending A0 ${action}`, async () => {
+    const requestId = item.id;
+    const message = String(a0ReplyDrafts[requestId] || "").trim() || `${action} by A0`;
+    if (item.request_type === "plan_review" && item.task_id) {
+      await applyTaskAction(item.task_id, action === "approve" ? "approve_plan" : "reject_plan", "A0", message);
+    } else if (item.request_type === "task_review" && item.task_id) {
+      await applyTaskAction(item.task_id, action === "approve" ? "complete" : "reopen", "A0", message);
+    } else {
+      await sendA0Response(requestId, message, action);
     }
-    await sendA0Response(requestId, message, action);
     setA0ReplyDrafts((current) => ({ ...current, [requestId]: "" }));
+    await refresh(true);
+  });
+  const onA0MailboxAck = (messageId, ackState) => void runAction(`marking mailbox item ${ackState}`, async () => {
+    await acknowledgeTeamMailboxMessage(messageId, ackState);
+    await refresh(true);
+  });
+  const onMailboxDraftChange = (field, value) => {
+    setMailboxDraft((current) => ({ ...current, [field]: value }));
+  };
+  const onSendMailboxMessage = () => void runAction("sending mailbox message", async () => {
+    const payload = {
+      from: mailboxDraft.from.trim(),
+      to: mailboxDraft.to.trim(),
+      topic: mailboxDraft.topic.trim() || "status_note",
+      scope: mailboxDraft.scope.trim() || "direct",
+      body: mailboxDraft.body.trim(),
+      related_task_ids: parseQueue(mailboxDraft.relatedTaskIds)
+    };
+    if (!payload.from || !payload.to || !payload.body) {
+      throw new Error("mailbox sender, recipient, and body are required");
+    }
+    await sendTeamMailboxMessage(payload);
+    setMailboxDraft((current) => ({ ...current, relatedTaskIds: "", body: "" }));
+    await refresh(true);
+  });
+  const onStopWorker = (agent) => void runAction(`shutting down ${agent}`, async () => {
+    await stopWorker(agent, "A0 requested clean worker shutdown for cleanup.");
+    await refresh(true);
+  });
+  const onConfirmCleanup = () => void runAction("confirming cleanup readiness", async () => {
+    await confirmTeamCleanup("Cleanup gate passed; session can now be released safely.");
     await refresh(true);
   });
   const onSendA0Message = () => void runAction("sending message to A0", async () => {
@@ -26527,7 +26720,8 @@ function App() {
             onReplyChange: onA0ReplyChange,
             onComposerChange: setA0Composer,
             onReply: onA0Reply,
-            onSendMessage: onSendA0Message
+            onSendMessage: onSendA0Message,
+            onMailboxAck: onA0MailboxAck
           }
         )
       ] })
@@ -26620,7 +26814,7 @@ function App() {
           /* @__PURE__ */ (0, import_jsx_runtime.jsx)("strong", { children: item.value })
         ] }, item.label)) })
       ] }) }),
-      data ? tab === "overview" ? /* @__PURE__ */ (0, import_jsx_runtime.jsx)(OverviewTab, { data, agentRows, progress, onOpenA0Console }) : tab === "operations" ? /* @__PURE__ */ (0, import_jsx_runtime.jsx)(OperationsTab, { data }) : /* @__PURE__ */ (0, import_jsx_runtime.jsx)(
+      data ? tab === "overview" ? /* @__PURE__ */ (0, import_jsx_runtime.jsx)(OverviewTab, { data, agentRows, progress, onOpenA0Console }) : tab === "operations" ? /* @__PURE__ */ (0, import_jsx_runtime.jsx)(OperationsTab, { data, mailboxDraft, onMailboxDraftChange, onSendMailboxMessage, onStopWorker, onConfirmCleanup, actionInFlight }) : /* @__PURE__ */ (0, import_jsx_runtime.jsx)(
         SettingsTab,
         {
           data,

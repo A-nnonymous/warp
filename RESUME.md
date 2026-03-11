@@ -14,12 +14,13 @@ For a first-time startup on a clean machine, use `new_machine_prompt.md`.
 4. `state/gates.yaml`
 5. `state/heartbeats.yaml`
 6. `state/edit_locks.yaml`
-7. `state/agent_runtime.yaml`
-8. `status/agents/`
-9. `checkpoints/agents/`
-10. `governance/experiments/registry.yaml`
-11. `strategy/integration_plan.md`
-12. `strategy/baseline_trace.md`
+7. `state/team_mailbox.yaml`
+8. `state/agent_runtime.yaml`
+9. `status/agents/`
+10. `checkpoints/agents/`
+11. `governance/experiments/registry.yaml`
+12. `strategy/integration_plan.md`
+13. `strategy/baseline_trace.md`
 
 ## Resume prompt
 
@@ -33,12 +34,13 @@ Paste this into the next chat session after migration:
 4. 阅读 state/gates.yaml
 5. 阅读 state/heartbeats.yaml
 6. 阅读 state/edit_locks.yaml
-7. 阅读 state/agent_runtime.yaml
-8. 阅读 status/agents/ 下全部 agent 状态
-9. 阅读 checkpoints/agents/ 下全部 agent checkpoint
-10. 阅读 governance/experiments/registry.yaml
-11. 阅读 strategy/integration_plan.md
-12. 阅读 strategy/baseline_trace.md
+7. 阅读 state/team_mailbox.yaml
+8. 阅读 state/agent_runtime.yaml
+9. 阅读 status/agents/ 下全部 agent 状态
+10. 阅读 checkpoints/agents/ 下全部 agent checkpoint
+11. 阅读 governance/experiments/registry.yaml
+12. 阅读 strategy/integration_plan.md
+13. 阅读 strategy/baseline_trace.md
 
 恢复后请输出：
 - 当前项目阶段
@@ -48,6 +50,7 @@ Paste this into the next chat session after migration:
 - 当前 agent 心跳与存活状态
 - 当前 provider / worktree / branch / env 拓扑
 - 当前高冲突文件的写锁状态
+- 当前 mailbox 中待处理的协作消息与审批请求
 - 推荐的下一步动作
 
 除非我明确要求，否则先不要进入真实实验或大规模代码修改。

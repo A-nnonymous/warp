@@ -1,7 +1,8 @@
 import { useEffect, useMemo, useRef, useState, type ReactNode } from 'react';
-import { enableSilentMode, fetchState, launchWorkers, saveConfig, saveConfigSection, sendA0Message, sendA0Response, stopAll, stopWorkers, validateConfig, validateConfigSection } from './api';
+import { acknowledgeTeamMailboxMessage, applyTaskAction, confirmTeamCleanup, enableSilentMode, fetchState, launchWorkers, saveConfig, saveConfigSection, sendA0Message, sendA0Response, sendTeamMailboxMessage, stopAll, stopWorker, stopWorkers, validateConfig, validateConfigSection } from './api';
 import type {
   A0ConsoleRequest,
+  CleanupWorkerState,
   ConfigSection,
   ConfigResourcePool,
   ConfigShape,
@@ -16,6 +17,7 @@ import type {
   ResolvedWorkerPlan,
   RuntimeWorker,
   TabKey,
+  TeamMailboxMessage,
   ValidationIssue,
 } from './types';
 
@@ -51,6 +53,10 @@ type ProgressModel = {
   completedItems: number;
   totalItems: number;
   blockedItems: number;
+  claimedItems: number;
+  reviewItems: number;
+  planPending: number;
+  mailboxPending: number;
   activeAgents: number;
   attentionAgents: number;
   openGate?: GateItem;
@@ -84,7 +90,24 @@ type WorkerPlanView = {
 
 type WorkerResetScope = 'all' | 'routing' | 'runtime';
 
+type MailboxDraft = {
+  from: string;
+  to: string;
+  topic: string;
+  scope: string;
+  relatedTaskIds: string;
+  body: string;
+};
+
 const A0_CONSOLE_VIEW = 'a0-console';
+const DEFAULT_MAILBOX_DRAFT: MailboxDraft = {
+  from: 'A0',
+  to: 'all',
+  topic: 'status_note',
+  scope: 'broadcast',
+  relatedTaskIds: '',
+  body: '',
+};
 
 function normalizedText(value: unknown): string {
   return String(value ?? '').trim();
@@ -743,10 +766,14 @@ function buildProgressModel(data: DashboardState | null, agentRows: AgentRow[]):
   const progress = gates.length ? Math.round((passedGates / gates.length) * 100) : 0;
   const completedItems = backlog.filter((item) => ['done', 'completed', 'closed'].includes(String(item.status))).length;
   const blockedItems = backlog.filter((item) => String(item.status) === 'blocked').length;
+  const claimedItems = backlog.filter((item) => ['claimed', 'in_progress', 'review'].includes(String(item.claim_state))).length;
+  const reviewItems = backlog.filter((item) => String(item.status) === 'review' || String(item.claim_state) === 'review').length;
+  const planPending = backlog.filter((item) => String(item.plan_state) === 'pending_review').length;
+  const mailboxPending = data?.team_mailbox?.pending_count || 0;
   const activeAgents = agentRows.filter((item) => item.display_state === 'active' || item.display_state === 'healthy').length;
   const attentionAgents = agentRows.filter((item) => item.display_state === 'stale' || item.display_state.startsWith('launch_failed')).length;
   const openGate = gates.find((item) => item.status !== 'passed');
-  return { progress, passedGates, totalGates: gates.length, completedItems, totalItems: backlog.length, blockedItems, activeAgents, attentionAgents, openGate };
+  return { progress, passedGates, totalGates: gates.length, completedItems, totalItems: backlog.length, blockedItems, claimedItems, reviewItems, planPending, mailboxPending, activeAgents, attentionAgents, openGate };
 }
 
 function getLocalValidationIssues(config: ConfigShape, data: DashboardState | null): ValidationIssue[] {
@@ -1050,11 +1077,13 @@ function OverviewTab({ data, agentRows, progress, onOpenA0Console }: { data: Das
             <Metric label="Agents" value={agentRows.length} hint={`${progress.activeAgents} active or healthy`} />
             <Metric label="Overall Progress" value={`${progress.progress}%`} hint={`${progress.passedGates}/${progress.totalGates} gates passed`} />
             <Metric label="Attention Needed" value={progress.attentionAgents} hint={`${progress.blockedItems} backlog items blocked`} />
-            <Metric label="Launch Blockers" value={data.launch_blockers.length} hint={data.launch_blockers.length ? `${data.validation_errors.length} config notes` : 'launch path is ready'} />
+            <Metric label="Pending Reviews" value={progress.reviewItems + progress.planPending} hint={`${progress.mailboxPending} mailbox item(s) open`} />
           </div>
           <div className="progress-list">
             <ProgressRow label="Backlog" value={`${progress.completedItems}/${progress.totalItems} completed`} />
             <ProgressRow label="Blocked work" value={`${progress.blockedItems} items`} />
+            <ProgressRow label="Claimed work" value={`${progress.claimedItems} items`} />
+            <ProgressRow label="Awaiting review" value={`${progress.reviewItems} handoff(s), ${progress.planPending} plan(s)`} />
             <ProgressRow label="Agents needing action" value={`${progress.attentionAgents}`} />
             <ProgressRow label="Current gate" value={progress.openGate ? `${progress.openGate.id} · ${progress.openGate.name}` : 'All gates passed'} />
           </div>
@@ -1072,6 +1101,8 @@ function OverviewTab({ data, agentRows, progress, onOpenA0Console }: { data: Das
             <HelperCard title="Last event" body={data.last_event || 'none'} />
             <HelperCard title="Launch posture" body={data.launch_blockers.length ? `${data.launch_blockers.length} blocker(s)` : 'ready to launch'} />
             <HelperCard title="A0 approvals" body={data.a0_console.pending_count ? `${data.a0_console.pending_count} pending request(s)` : 'no pending requests'} />
+            <HelperCard title="Team mailbox" body={data.team_mailbox.pending_count ? `${data.team_mailbox.pending_count} open message(s)` : 'mailbox is clear'} />
+            <HelperCard title="Cleanup" body={data.cleanup.ready ? 'ready to release the team' : `${data.cleanup.blockers.length} cleanup blocker(s)`} />
             <HelperCard title="ducc pool" body={duccPool ? `${duccPool.active_workers} active · ${formatTokenCount(duccPool.usage?.total_tokens)} tokens` : 'ducc pool not configured'} />
           </div>
           <div className="toolbar-group">
@@ -1109,7 +1140,87 @@ function OverviewTab({ data, agentRows, progress, onOpenA0Console }: { data: Das
   );
 }
 
-function OperationsTab({ data }: { data: DashboardState }) {
+function CleanupWorkerCard({ item, onStopWorker, disabled }: { item: CleanupWorkerState; onStopWorker: (agent: string) => void; disabled?: boolean }) {
+  return (
+    <article className="merge-card a0-request-card">
+      <div className="merge-card-header">
+        <div>
+          <div className="merge-branch">{item.agent}</div>
+          <div className="merge-track">
+            <span>{item.runtime_status || 'runtime unknown'}</span>
+            <span className="merge-arrow">-&gt;</span>
+            <span>{item.heartbeat_state || 'heartbeat unknown'}</span>
+          </div>
+        </div>
+        <span className={classNames('chip', item.ready ? 'state-active' : 'state-stale')}>{item.ready ? 'Ready' : 'Blocked'}</span>
+      </div>
+      {item.blockers.length ? <div className="merge-list-block"><strong>Blockers</strong><ul>{item.blockers.map((entry) => <li key={`${item.agent}-${entry}`}>{entry}</li>)}</ul></div> : <div className="small muted">No cleanup blockers remain for this worker.</div>}
+      <div className="toolbar-group a0-actions">
+        <button type="button" onClick={() => onStopWorker(item.agent)} disabled={disabled || !item.active}>Shut down worker</button>
+      </div>
+    </article>
+  );
+}
+
+function MailboxComposerCard({
+  draft,
+  onChange,
+  onSend,
+  participants,
+  disabled,
+}: {
+  draft: MailboxDraft;
+  onChange: (field: keyof MailboxDraft, value: string) => void;
+  onSend: () => void;
+  participants: string[];
+  disabled?: boolean;
+}) {
+  const recipientOptions = ['all', 'manager', ...participants.filter((item) => item !== 'A0')];
+  return (
+    <section className="card">
+      <div className="panel-title">
+        <div>
+          <h2>Mailbox Composer</h2>
+          <p className="small">Send durable coordination notes through the team mailbox so they survive worker restarts and provider changes.</p>
+        </div>
+      </div>
+      <section className="grid">
+        <SelectField label="From" value={draft.from} onChange={(value) => onChange('from', value)} options={participants} />
+        <SelectField label="To" value={draft.to} onChange={(value) => onChange('to', value)} options={recipientOptions} />
+      </section>
+      <section className="grid">
+        <SelectField label="Topic" value={draft.topic} onChange={(value) => onChange('topic', value)} options={['status_note', 'blocker', 'handoff', 'review_request', 'design_question']} />
+        <SelectField label="Scope" value={draft.scope} onChange={(value) => onChange('scope', value)} options={['direct', 'broadcast', 'manager']} />
+      </section>
+      <Field label="Related tasks" value={draft.relatedTaskIds} onChange={(value) => onChange('relatedTaskIds', value)} helpText="Optional comma-separated task ids." placeholder="A1-001, A6-001" />
+      <label className="field">
+        <span className="field-label">Message body</span>
+        <textarea className="field-input field-textarea" value={draft.body} onChange={(event) => onChange('body', event.target.value)} placeholder="Write the durable coordination note that should land in the shared mailbox." />
+      </label>
+      <div className="toolbar-group a0-actions">
+        <button type="button" onClick={onSend} disabled={disabled || !draft.from || !draft.to || !draft.body.trim()}>Send mailbox message</button>
+      </div>
+    </section>
+  );
+}
+
+function OperationsTab({
+  data,
+  mailboxDraft,
+  onMailboxDraftChange,
+  onSendMailboxMessage,
+  onStopWorker,
+  onConfirmCleanup,
+  actionInFlight,
+}: {
+  data: DashboardState;
+  mailboxDraft: MailboxDraft;
+  onMailboxDraftChange: (field: keyof MailboxDraft, value: string) => void;
+  onSendMailboxMessage: () => void;
+  onStopWorker: (agent: string) => void;
+  onConfirmCleanup: () => void;
+  actionInFlight: boolean;
+}) {
   const projectRows = [
     { key: 'repository_name', value: data.project.repository_name || '' },
     { key: 'local_repo_root', value: data.project.local_repo_root || '' },
@@ -1121,6 +1232,10 @@ function OperationsTab({ data }: { data: DashboardState }) {
   const processRows = Object.entries(data.processes || {}).map(([agent, item]) => ({ agent, provider: item.provider, model: item.model, alive: item.alive, pid: item.pid, resource_pool: item.resource_pool, progress_pct: item.progress_pct, total_tokens: item.usage?.total_tokens || 0, phase: item.phase || item.last_log_line || '', recursion_guard: item.recursion_guard, wrapper_path: item.wrapper_path, returncode: item.returncode }));
   const mergeRows = data.merge_queue.map((item) => ({ agent: item.agent, branch: item.branch, submit_strategy: item.submit_strategy, worker_identity: item.worker_identity, merge_target: item.merge_target, status: item.status, manager_action: item.manager_action }));
   const providerRows = data.provider_queue.map((item) => ({ resource_pool: item.resource_pool, provider: item.provider, priority: item.priority, binary_found: item.binary_found, recursion_guard: item.recursion_guard, launch_wrapper: item.launch_wrapper, auth_mode: item.auth_mode, auth_ready: item.auth_ready, launch_ready: item.launch_ready, active_workers: item.active_workers, progress_pct: item.progress_pct ?? '', total_tokens: item.usage?.total_tokens || 0, auth_detail: item.auth_detail, connection_quality: item.connection_quality, work_quality: item.work_quality, score: item.score }));
+  const backlogRows = (data.backlog.items || []).map((item) => ({ id: item.id, owner: item.owner, claimed_by: item.claimed_by || '', claim_state: item.claim_state || '', plan_state: item.plan_state || '', status: item.status, gate: item.gate, title: item.title }));
+  const mailboxRows = (data.team_mailbox.messages || []).map((item) => ({ id: item.id, from: item.from, to: item.to, topic: item.topic, ack_state: item.ack_state, related_task_ids: (item.related_task_ids || []).join(', '), created_at: item.created_at, body: item.body }));
+  const mailboxParticipants = Array.from(new Set(['A0', ...(data.resolved_workers || []).map((item) => item.agent).filter(Boolean)])).sort();
+  const cleanup = data.cleanup;
   return (
     <div className="tab-body">
       <section className="grid">
@@ -1140,9 +1255,27 @@ function OperationsTab({ data }: { data: DashboardState }) {
         <section className="card"><h2>Heartbeats</h2><DataTable columns={['agent', 'state', 'last_seen', 'expected_next_checkin']} rows={data.heartbeats.agents || []} /></section>
       </section>
       <section className="grid">
-        <section className="card"><h2>Backlog</h2><DataTable columns={['id', 'owner', 'status', 'gate', 'title']} rows={data.backlog.items || []} /></section>
+        <section className="card"><h2>Backlog</h2><DataTable columns={['id', 'owner', 'claimed_by', 'claim_state', 'plan_state', 'status', 'gate', 'title']} rows={backlogRows} /></section>
         <section className="card"><h2>Gates</h2><DataTable columns={['id', 'name', 'status', 'owner']} rows={data.gates.gates || []} /></section>
       </section>
+      <MailboxComposerCard draft={mailboxDraft} onChange={onMailboxDraftChange} onSend={onSendMailboxMessage} participants={mailboxParticipants} disabled={actionInFlight} />
+      <section className="card">
+        <div className="panel-title">
+          <div>
+            <h2>Cleanup Readiness</h2>
+            <p className="small">Cleanup remains blocked while workers are alive, reviews are unresolved, or single-writer locks are still held.</p>
+          </div>
+          <div className={classNames('chip', cleanup.ready ? 'state-active' : 'state-stale')}>{cleanup.ready ? 'Ready' : 'Blocked'}</div>
+        </div>
+        {cleanup.blockers.length ? <div className="merge-list-block"><strong>Cleanup blockers</strong><ul>{cleanup.blockers.map((entry) => <li key={entry}>{entry}</li>)}</ul></div> : <div className="small muted">No cleanup blockers remain. The team cleanup gate can be confirmed safely.</div>}
+        <div className="toolbar-group a0-actions">
+          <button type="button" onClick={onConfirmCleanup} disabled={actionInFlight || !cleanup.ready}>Confirm cleanup gate</button>
+        </div>
+        <div className="merge-board">
+          {(cleanup.workers || []).map((item) => <CleanupWorkerCard key={item.agent} item={item} onStopWorker={onStopWorker} disabled={actionInFlight} />)}
+        </div>
+      </section>
+      <section className="card"><h2>Team Mailbox</h2><DataTable columns={['id', 'from', 'to', 'topic', 'ack_state', 'related_task_ids', 'created_at', 'body']} rows={mailboxRows} /></section>
       <section className="card"><h2>Manager Report</h2><pre>{data.manager_report}</pre></section>
     </div>
   );
@@ -1450,8 +1583,18 @@ function A0RequestCard({
   item: A0ConsoleRequest;
   replyDraft: string;
   onReplyChange: (requestId: string, value: string) => void;
-  onReply: (requestId: string, action: string) => void;
+  onReply: (item: A0ConsoleRequest, action: string) => void;
 }) {
+  const primaryAction = item.request_type === 'plan_review'
+    ? { action: 'approve', label: 'Approve plan' }
+    : item.request_type === 'task_review'
+      ? { action: 'approve', label: 'Accept task' }
+      : { action: 'resume', label: 'Resume' };
+  const secondaryAction = item.request_type === 'plan_review'
+    ? { action: 'reject', label: 'Reject plan', className: 'danger-outline' }
+    : item.request_type === 'task_review'
+      ? { action: 'reject', label: 'Reopen task', className: 'danger-outline' }
+      : { action: 'acknowledged', label: 'Acknowledge', className: 'ghost' };
   return (
     <article className="merge-card a0-request-card">
       <div className="merge-card-header">
@@ -1476,9 +1619,34 @@ function A0RequestCard({
         <textarea className="field-input field-textarea" value={replyDraft} onChange={(event) => onReplyChange(item.id, event.target.value)} placeholder="Give A0 the decision, constraint, or unblock instruction." />
       </label>
       <div className="toolbar-group a0-actions">
-        <button type="button" onClick={() => onReply(item.id, 'resume')} disabled={!replyDraft.trim()}>Resume</button>
-        <button className="ghost" type="button" onClick={() => onReply(item.id, 'acknowledged')} disabled={!replyDraft.trim()}>Acknowledge</button>
-        <button className="danger-outline" type="button" onClick={() => onReply(item.id, 'blocked')} disabled={!replyDraft.trim()}>Still blocked</button>
+        <button type="button" onClick={() => onReply(item, primaryAction.action)}>{primaryAction.label}</button>
+        <button className={secondaryAction.className} type="button" onClick={() => onReply(item, secondaryAction.action)}>{secondaryAction.label}</button>
+        {item.request_type === 'worker_intervention' ? <button className="danger-outline" type="button" onClick={() => onReply(item, 'blocked')}>Still blocked</button> : null}
+      </div>
+    </article>
+  );
+}
+
+function MailboxCard({ item, onAck }: { item: TeamMailboxMessage; onAck: (messageId: string, ackState: string) => void }) {
+  return (
+    <article className="merge-card a0-request-card">
+      <div className="merge-card-header">
+        <div>
+          <div className="merge-branch">{item.topic}</div>
+          <div className="merge-track">
+            <span>{item.from}</span>
+            <span className="merge-arrow">-&gt;</span>
+            <span>{item.to}</span>
+          </div>
+        </div>
+        <span className={classNames('chip', item.ack_state === 'pending' ? 'state-stale' : 'state-active')}>{displayState(item.ack_state)}</span>
+      </div>
+      <div className="merge-attention"><strong>Message</strong> {item.body}</div>
+      {item.related_task_ids?.length ? <div className="merge-note"><strong>Tasks</strong> {item.related_task_ids.join(', ')}</div> : null}
+      <div className="merge-note"><strong>Created</strong> {item.created_at}</div>
+      <div className="toolbar-group a0-actions">
+        <button className="ghost" type="button" onClick={() => onAck(item.id, 'seen')}>Mark seen</button>
+        <button type="button" onClick={() => onAck(item.id, 'resolved')}>Resolve</button>
       </div>
     </article>
   );
@@ -1493,6 +1661,7 @@ function A0ConsoleView({
   onComposerChange,
   onReply,
   onSendMessage,
+  onMailboxAck,
 }: {
   data: DashboardState;
   standalone?: boolean;
@@ -1500,11 +1669,13 @@ function A0ConsoleView({
   composer: string;
   onReplyChange: (requestId: string, value: string) => void;
   onComposerChange: (value: string) => void;
-  onReply: (requestId: string, action: string) => void;
+  onReply: (item: A0ConsoleRequest, action: string) => void;
   onSendMessage: () => void;
+  onMailboxAck: (messageId: string, ackState: string) => void;
 }) {
   const requests = data.a0_console?.requests || [];
   const messages = data.a0_console?.messages || [];
+  const inbox = data.a0_console?.inbox || [];
   return (
     <div className={classNames('tab-body', standalone && 'a0-console-body')}>
       <section className="card">
@@ -1521,6 +1692,17 @@ function A0ConsoleView({
         </label>
         <div className="toolbar-group a0-actions">
           <button type="button" onClick={onSendMessage} disabled={!composer.trim()}>Send to A0</button>
+        </div>
+      </section>
+      <section className="card">
+        <div className="panel-title">
+          <div>
+            <h2>Inbox</h2>
+            <p className="small">Worker messages that still need acknowledgement or closure from A0.</p>
+          </div>
+        </div>
+        <div className="merge-board">
+          {inbox.length ? inbox.map((item) => <MailboxCard key={item.id} item={item} onAck={onMailboxAck} />) : <div className="small muted">No unresolved mailbox items for A0.</div>}
         </div>
       </section>
       <section className="card">
@@ -1588,6 +1770,7 @@ export function App() {
   const [sectionStatuses, setSectionStatuses] = useState<SectionStatusMap>({});
   const [a0ReplyDrafts, setA0ReplyDrafts] = useState<Record<string, string>>({});
   const [a0Composer, setA0Composer] = useState('');
+  const [mailboxDraft, setMailboxDraft] = useState<MailboxDraft>(DEFAULT_MAILBOX_DRAFT);
   const abortRef = useRef<AbortController | null>(null);
   const previousPendingA0Ref = useRef(0);
 
@@ -2105,13 +2288,53 @@ export function App() {
     setA0ReplyDrafts((current) => ({ ...current, [requestId]: value }));
   };
 
-  const onA0Reply = (requestId: string, action: string) => void runAction(`sending A0 ${action}`, async () => {
-    const message = String(a0ReplyDrafts[requestId] || '').trim();
-    if (!message) {
-      throw new Error('reply message is required');
+  const onA0Reply = (item: A0ConsoleRequest, action: string) => void runAction(`sending A0 ${action}`, async () => {
+    const requestId = item.id;
+    const message = String(a0ReplyDrafts[requestId] || '').trim() || `${action} by A0`;
+    if (item.request_type === 'plan_review' && item.task_id) {
+      await applyTaskAction(item.task_id, action === 'approve' ? 'approve_plan' : 'reject_plan', 'A0', message);
+    } else if (item.request_type === 'task_review' && item.task_id) {
+      await applyTaskAction(item.task_id, action === 'approve' ? 'complete' : 'reopen', 'A0', message);
+    } else {
+      await sendA0Response(requestId, message, action);
     }
-    await sendA0Response(requestId, message, action);
     setA0ReplyDrafts((current) => ({ ...current, [requestId]: '' }));
+    await refresh(true);
+  });
+
+  const onA0MailboxAck = (messageId: string, ackState: string) => void runAction(`marking mailbox item ${ackState}`, async () => {
+    await acknowledgeTeamMailboxMessage(messageId, ackState);
+    await refresh(true);
+  });
+
+  const onMailboxDraftChange = (field: keyof MailboxDraft, value: string) => {
+    setMailboxDraft((current) => ({ ...current, [field]: value }));
+  };
+
+  const onSendMailboxMessage = () => void runAction('sending mailbox message', async () => {
+    const payload = {
+      from: mailboxDraft.from.trim(),
+      to: mailboxDraft.to.trim(),
+      topic: mailboxDraft.topic.trim() || 'status_note',
+      scope: mailboxDraft.scope.trim() || 'direct',
+      body: mailboxDraft.body.trim(),
+      related_task_ids: parseQueue(mailboxDraft.relatedTaskIds),
+    };
+    if (!payload.from || !payload.to || !payload.body) {
+      throw new Error('mailbox sender, recipient, and body are required');
+    }
+    await sendTeamMailboxMessage(payload);
+    setMailboxDraft((current) => ({ ...current, relatedTaskIds: '', body: '' }));
+    await refresh(true);
+  });
+
+  const onStopWorker = (agent: string) => void runAction(`shutting down ${agent}`, async () => {
+    await stopWorker(agent, 'A0 requested clean worker shutdown for cleanup.');
+    await refresh(true);
+  });
+
+  const onConfirmCleanup = () => void runAction('confirming cleanup readiness', async () => {
+    await confirmTeamCleanup('Cleanup gate passed; session can now be released safely.');
     await refresh(true);
   });
 
@@ -2159,6 +2382,7 @@ export function App() {
             onComposerChange={setA0Composer}
             onReply={onA0Reply}
             onSendMessage={onSendA0Message}
+            onMailboxAck={onA0MailboxAck}
           />
         </main>
       </div>
@@ -2268,7 +2492,7 @@ export function App() {
           tab === 'overview'
             ? <OverviewTab data={data} agentRows={agentRows} progress={progress} onOpenA0Console={onOpenA0Console} />
             : tab === 'operations'
-              ? <OperationsTab data={data} />
+              ? <OperationsTab data={data} mailboxDraft={mailboxDraft} onMailboxDraftChange={onMailboxDraftChange} onSendMailboxMessage={onSendMailboxMessage} onStopWorker={onStopWorker} onConfirmCleanup={onConfirmCleanup} actionInFlight={actionInFlight} />
               : <SettingsTab
                   data={data}
                   draftConfig={draftConfig}

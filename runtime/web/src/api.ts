@@ -8,8 +8,12 @@ import type {
   LaunchStrategy,
   LaunchResponse,
   SilentModeResponse,
+  StopWorkerResponse,
   StopAllResponse,
   StopWorkersResponse,
+  TaskActionResponse,
+  TeamCleanupResponse,
+  TeamMailboxResponse,
   ValidationIssue,
 } from './types';
 
@@ -135,4 +139,31 @@ export function sendA0Response(request_id: string, message: string, action = 're
 
 export function sendA0Message(message: string): Promise<A0ConsoleResponse> {
   return postJson<A0ConsoleResponse>('/api/a0/message', { message });
+}
+
+export function applyTaskAction(task_id: string, action: string, agent: string, note: string): Promise<TaskActionResponse> {
+  return postJson<TaskActionResponse>('/api/tasks/action', { task_id, action, agent, note });
+}
+
+export function sendTeamMailboxMessage(payload: {
+  from: string;
+  to: string;
+  topic: string;
+  body: string;
+  scope?: string;
+  related_task_ids?: string[];
+}): Promise<TeamMailboxResponse> {
+  return postJson<TeamMailboxResponse>('/api/team-mail/send', payload);
+}
+
+export function acknowledgeTeamMailboxMessage(message_id: string, ack_state: string, resolution_note = ''): Promise<TeamMailboxResponse> {
+  return postJson<TeamMailboxResponse>('/api/team-mail/ack', { message_id, ack_state, resolution_note });
+}
+
+export function stopWorker(agent: string, note = ''): Promise<StopWorkerResponse> {
+  return postJson<StopWorkerResponse>('/api/workers/stop', { agent, note });
+}
+
+export function confirmTeamCleanup(note = ''): Promise<TeamCleanupResponse> {
+  return postJson<TeamCleanupResponse>('/api/team-cleanup', { note });
 }

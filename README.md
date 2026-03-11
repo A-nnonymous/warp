@@ -16,7 +16,7 @@ Default target repository name: `target-repo`
 
 - `strategy/`: program intent, scope, and baseline mapping
 - `governance/`: operating rules, decisions, and machine policy
-- `state/`: live backlog, gates, heartbeats, and lock state
+- `state/`: live backlog, gates, heartbeats, mailbox, and lock state
 - `status/agents/`: live worker status feeds
 - `checkpoints/`: resumable manager and worker snapshots
 - `experiments/`: experiment registry
@@ -30,16 +30,29 @@ Default target repository name: `target-repo`
 4. `state/gates.yaml`
 5. `state/heartbeats.yaml`
 6. `state/edit_locks.yaml`
-7. `state/agent_runtime.yaml`
-8. `status/agents/`
-9. `checkpoints/agents/`
-10. `governance/experiments/registry.yaml`
-11. `strategy/integration_plan.md`
-12. `strategy/baseline_trace.md`
+7. `state/team_mailbox.yaml`
+8. `state/agent_runtime.yaml`
+9. `status/agents/`
+10. `checkpoints/agents/`
+11. `governance/experiments/registry.yaml`
+12. `strategy/integration_plan.md`
+13. `strategy/baseline_trace.md`
 
 ## Rule
 
 No work is considered active unless it is reflected here.
+
+## Collaboration protocol
+
+Warp treats collaboration as durable repository state, not transient provider chat.
+
+- tasks can be claimed, reviewed, reopened, and completed through explicit control-plane state transitions
+- plan approval is explicit for risky work before implementation proceeds
+- `state/team_mailbox.yaml` is the provider-agnostic inbox for worker-to-worker and worker-to-A0 messages
+- A0 Console is the operational view over pending approvals, unresolved inbox items, and manager replies
+- the Operations tab includes a mailbox composer so coordination messages can be written into durable shared state directly from the dashboard
+- cleanup readiness is explicit: the control plane tracks active workers, pending reviews, and outstanding single-writer locks before the team can be considered safe to release
+- workers can be shut down individually from the dashboard without collapsing the full listener session
 
 ## Startup entrypoints
 
@@ -111,7 +124,7 @@ On first run, `warp` will fall back to `runtime/config_template.yaml` when `runt
 - provider credentials or session-backed provider settings
 - worker worktree paths and branches, if you do not want A0 to derive them
 
-By default, A0 now derives every worker worktree under `warp/worktrees/`, not next to the target repository. For a target named `sonic-moe`, the derived paths look like `warp/worktrees/sonic_moe_a1`, `warp/worktrees/sonic_moe_a2`, and so on.
+By default, A0 now derives every worker worktree under `warp/worktrees/`, not next to the target repository. For a target named `target-repo`, the derived paths look like `warp/worktrees/target_repo_a1`, `warp/worktrees/target_repo_a2`, and so on.
 
 The checked-in template also pins the default worker pool to `ducc_pool` and prefers `ducc` first. That means the dashboard and config are immediately usable, but worker launch still requires a `ducc` binary to be installed on the machine.
 

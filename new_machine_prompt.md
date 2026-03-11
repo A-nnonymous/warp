@@ -26,14 +26,15 @@ Paste the following into the next chat session:
 5. 阅读 state/gates.yaml
 6. 阅读 state/heartbeats.yaml
 7. 阅读 state/edit_locks.yaml
-8. 阅读 state/agent_runtime.yaml
-9. 阅读 status/agents/ 下全部 agent 状态文件
-10. 阅读 checkpoints/agents/ 下全部 agent checkpoint
-11. 阅读 governance/experiments/registry.yaml
-12. 阅读 strategy/integration_plan.md
-13. 阅读 strategy/baseline_trace.md
-14. 阅读 governance/operating_model.md
-15. 阅读 governance/decisions.md
+8. 阅读 state/team_mailbox.yaml
+9. 阅读 state/agent_runtime.yaml
+10. 阅读 status/agents/ 下全部 agent 状态文件
+11. 阅读 checkpoints/agents/ 下全部 agent checkpoint
+12. 阅读 governance/experiments/registry.yaml
+13. 阅读 strategy/integration_plan.md
+14. 阅读 strategy/baseline_trace.md
+15. 阅读 governance/operating_model.md
+16. 阅读 governance/decisions.md
 
 恢复后请输出一份简洁但完整的控制面状态报告，必须包含：
 - 当前项目阶段
@@ -43,6 +44,7 @@ Paste the following into the next chat session:
 - 当前 agent 心跳状态
 - 当前 provider / worktree / branch / env 拓扑
 - 当前高冲突文件锁状态
+- 当前 mailbox 与待审批协作请求状态
 - 当前是否允许进入真实实验或代码实现
 - 推荐的下一步动作
 

@@ -190,7 +190,7 @@ class ControlPlaneIntegrationTest(unittest.TestCase):
     def render_config(self) -> str:
         config = {
             "project": {
-                "repository_name": "sonicmoe-fp8-it",
+                "repository_name": "target-repo-it",
                 "local_repo_root": str(self.project_root),
                 "reference_workspace_root": str(self.paddle_root),
                 "base_branch": "main",
@@ -426,7 +426,7 @@ class ControlPlaneIntegrationTest(unittest.TestCase):
         updated_local_repo_root.mkdir(parents=True, exist_ok=True)
         updated_reference_workspace_root.mkdir(parents=True, exist_ok=True)
         updated_project = {
-            "repository_name": "sonicmoe-fp8-it-updated",
+            "repository_name": "target-repo-it-updated",
             "local_repo_root": str(updated_local_repo_root),
             "reference_workspace_root": str(updated_reference_workspace_root),
             "dashboard": {
@@ -458,6 +458,166 @@ class ControlPlaneIntegrationTest(unittest.TestCase):
         saved_config_text = self.config_path.read_text(encoding="utf-8")
         self.assertIn(updated_project["local_repo_root"], saved_config_text)
         self.assertIn(updated_project["reference_workspace_root"], saved_config_text)
+
+    def test_task_actions_drive_plan_and_review_flow(self) -> None:
+        initial_state = self.fetch_state()
+        backlog_items = {item["id"]: item for item in initial_state["backlog"]["items"]}
+        self.assertEqual(backlog_items["A1-001"]["claim_state"], "unclaimed")
+
+        claimed = read_json(
+            f"{self.base_url}/api/tasks/action",
+            {"task_id": "A1-001", "action": "claim", "agent": "A1", "note": "own protocol freeze"},
+        )
+        self.assertTrue(claimed["ok"])
+        self.assertEqual(claimed["task"]["claimed_by"], "A1")
+        self.assertEqual(claimed["task"]["claim_state"], "claimed")
+
+        plan_request = read_json(
+            f"{self.base_url}/api/tasks/action",
+            {"task_id": "A1-001", "action": "submit_plan", "agent": "A1", "note": "freeze dtype names and public scale contract"},
+        )
+        self.assertTrue(plan_request["ok"])
+        self.assertEqual(plan_request["task"]["plan_state"], "pending_review")
+
+        state_with_plan = self.fetch_state()
+        requests = {item["task_id"]: item for item in state_with_plan["a0_console"]["requests"] if item.get("task_id")}
+        self.assertEqual(requests["A1-001"]["request_type"], "plan_review")
+
+        approved = read_json(
+            f"{self.base_url}/api/tasks/action",
+            {"task_id": "A1-001", "action": "approve_plan", "agent": "A0", "note": "approved; continue with the narrowest public contract"},
+        )
+        self.assertTrue(approved["ok"])
+        self.assertEqual(approved["task"]["plan_state"], "approved")
+
+        review_request = read_json(
+            f"{self.base_url}/api/tasks/action",
+            {"task_id": "A1-001", "action": "request_review", "agent": "A1", "note": "protocol draft is ready for acceptance"},
+        )
+        self.assertTrue(review_request["ok"])
+        self.assertEqual(review_request["task"]["status"], "review")
+
+        state_with_review = self.fetch_state()
+        requests = {item["task_id"]: item for item in state_with_review["a0_console"]["requests"] if item.get("task_id")}
+        self.assertEqual(requests["A1-001"]["request_type"], "task_review")
+
+        completed = read_json(
+            f"{self.base_url}/api/tasks/action",
+            {"task_id": "A1-001", "action": "complete", "agent": "A0", "note": "accepted for downstream work"},
+        )
+        self.assertTrue(completed["ok"])
+        self.assertEqual(completed["task"]["status"], "completed")
+        self.assertEqual(completed["task"]["claim_state"], "completed")
+
+    def test_team_mailbox_send_and_acknowledge_flow(self) -> None:
+        sent = read_json(
+            f"{self.base_url}/api/team-mail/send",
+            {
+                "from": "A2",
+                "to": "A0",
+                "topic": "blocker",
+                "body": "Need a gate decision before continuing Hopper audit.",
+                "scope": "manager",
+                "related_task_ids": ["A2-001"],
+            },
+        )
+        self.assertTrue(sent["ok"])
+        message_id = sent["message"]["id"]
+        self.assertEqual(sent["message"]["ack_state"], "pending")
+
+        state = self.fetch_state()
+        self.assertGreaterEqual(state["team_mailbox"]["pending_count"], 1)
+        self.assertTrue(any(item["id"] == message_id for item in state["a0_console"]["inbox"]))
+
+        seen = read_json(f"{self.base_url}/api/team-mail/ack", {"message_id": message_id, "ack_state": "seen"})
+        self.assertTrue(seen["ok"])
+        self.assertEqual(seen["message"]["ack_state"], "seen")
+
+        resolved = read_json(
+            f"{self.base_url}/api/team-mail/ack",
+            {"message_id": message_id, "ack_state": "resolved", "resolution_note": "A0 reviewed this blocker."},
+        )
+        self.assertTrue(resolved["ok"])
+        self.assertEqual(resolved["message"]["ack_state"], "resolved")
+
+        refreshed = self.fetch_state()
+        self.assertFalse(any(item["id"] == message_id for item in refreshed["a0_console"]["inbox"]))
+
+    def test_single_worker_shutdown_updates_cleanup_state(self) -> None:
+        launch_result = read_json(f"{self.base_url}/api/launch", {"restart": False})
+        self.assertTrue(launch_result["ok"])
+        self.wait_for_agent_state(expected_provider="copilot", expected_model="gpt-5.4")
+
+        shutdown = read_json(
+            f"{self.base_url}/api/workers/stop",
+            {"agent": "A1", "note": "manager cleanup stop for protocol lane"},
+        )
+        self.assertTrue(shutdown["ok"])
+        self.assertEqual(shutdown["agent"], "A1")
+        self.assertTrue(shutdown["stopped"])
+        self.assertFalse(shutdown["cleanup"]["ready"])
+        self.assertIn("A2", shutdown["cleanup"]["active_workers"])
+
+        state = self.fetch_state()
+        heartbeats = {item["agent"]: item for item in state["heartbeats"]["agents"]}
+        runtime_workers = {item["agent"]: item for item in state["runtime"]["workers"]}
+        self.assertEqual(heartbeats["A1"]["state"], "offline")
+        self.assertEqual(runtime_workers["A1"]["status"], "stopped")
+        self.assertTrue(any(item.get("to") == "A1" for item in state["team_mailbox"]["messages"]))
+
+    def test_team_cleanup_requires_ready_state(self) -> None:
+        launch_result = read_json(f"{self.base_url}/api/launch", {"restart": False})
+        self.assertTrue(launch_result["ok"])
+        self.wait_for_agent_state(expected_provider="copilot", expected_model="gpt-5.4")
+
+        status_code, blocked_cleanup = request_json_allow_error(
+            f"{self.base_url}/api/team-cleanup",
+            {"note": "release listener after active work finishes"},
+        )
+        self.assertEqual(status_code, 400)
+        self.assertFalse(blocked_cleanup["ok"])
+        self.assertIn("active workers must be stopped", blocked_cleanup["error"])
+
+        self.stop_workers()
+
+        plan_request = read_json(
+            f"{self.base_url}/api/tasks/action",
+            {"task_id": "A1-001", "action": "submit_plan", "agent": "A1", "note": "plan before cleanup"},
+        )
+        self.assertTrue(plan_request["ok"])
+        status_code, blocked_plan_cleanup = request_json_allow_error(f"{self.base_url}/api/team-cleanup", {})
+        self.assertEqual(status_code, 400)
+        self.assertIn("pending plan approvals", blocked_plan_cleanup["error"])
+
+        approved = read_json(
+            f"{self.base_url}/api/tasks/action",
+            {"task_id": "A1-001", "action": "approve_plan", "agent": "A0", "note": "plan accepted"},
+        )
+        self.assertTrue(approved["ok"])
+        review_request = read_json(
+            f"{self.base_url}/api/tasks/action",
+            {"task_id": "A1-001", "action": "request_review", "agent": "A1", "note": "ready for acceptance"},
+        )
+        self.assertTrue(review_request["ok"])
+        status_code, blocked_review_cleanup = request_json_allow_error(f"{self.base_url}/api/team-cleanup", {})
+        self.assertEqual(status_code, 400)
+        self.assertIn("pending task reviews", blocked_review_cleanup["error"])
+
+        completed = read_json(
+            f"{self.base_url}/api/tasks/action",
+            {"task_id": "A1-001", "action": "complete", "agent": "A0", "note": "accepted for cleanup"},
+        )
+        self.assertTrue(completed["ok"])
+
+        cleanup = read_json(
+            f"{self.base_url}/api/team-cleanup",
+            {"note": "cleanup gate passed; safe to release the team"},
+        )
+        self.assertTrue(cleanup["ok"])
+        self.assertTrue(cleanup["cleanup"]["ready"])
+
+        refreshed = self.fetch_state()
+        self.assertTrue(any(item.get("scope") == "broadcast" and item.get("to") == "all" for item in refreshed["team_mailbox"]["messages"]))
 
     def test_unknown_api_routes_return_json_errors(self) -> None:
         request = urllib.request.Request(f"{self.base_url}/api/does-not-exist", data=b"{}")
@@ -511,7 +671,7 @@ class ControlPlaneIntegrationTest(unittest.TestCase):
         wait_for(lambda: port_is_listening(self.port), timeout=15, interval=0.5)
 
         state = self.wait_for_state_available()
-        self.assertEqual(state["project"]["repository_name"], "sonicmoe-fp8-it")
+        self.assertEqual(state["project"]["repository_name"], "target-repo-it")
         session_state = self.session_state()
         self.assertTrue(session_state["server"]["listener_active"])
         detached_pid = int(session_state["server"]["pid"])
