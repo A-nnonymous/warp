@@ -15,6 +15,8 @@ import type {
   TeamCleanupResponse,
   TeamMailboxResponse,
   ValidationIssue,
+  WorkflowPatch,
+  WorkflowUpdateResponse,
 } from './types';
 
 type ErrorPayload = {
@@ -164,6 +166,10 @@ export function stopWorker(agent: string, note = ''): Promise<StopWorkerResponse
   return postJson<StopWorkerResponse>('/api/workers/stop', { agent, note });
 }
 
-export function confirmTeamCleanup(note = ''): Promise<TeamCleanupResponse> {
-  return postJson<TeamCleanupResponse>('/api/team-cleanup', { note });
+export function updateWorkflowTask(task_id: string, updates: WorkflowPatch, note = '', agent = 'A0'): Promise<WorkflowUpdateResponse> {
+  return postJson<WorkflowUpdateResponse>('/api/workflow/update', { task_id, updates, note, agent });
+}
+
+export function confirmTeamCleanup(note = '', release_listener = false): Promise<TeamCleanupResponse> {
+  return postJson<TeamCleanupResponse>('/api/team-cleanup', { note, release_listener });
 }

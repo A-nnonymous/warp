@@ -1,7 +1,8 @@
 import { useEffect, useMemo, useRef, useState, type ReactNode } from 'react';
-import { acknowledgeTeamMailboxMessage, applyTaskAction, confirmTeamCleanup, enableSilentMode, fetchState, launchWorkers, saveConfig, saveConfigSection, sendA0Message, sendA0Response, sendTeamMailboxMessage, stopAll, stopWorker, stopWorkers, validateConfig, validateConfigSection } from './api';
+import { acknowledgeTeamMailboxMessage, applyTaskAction, confirmTeamCleanup, enableSilentMode, fetchState, launchWorkers, saveConfig, saveConfigSection, sendA0Message, sendA0Response, sendTeamMailboxMessage, stopAll, stopWorker, stopWorkers, updateWorkflowTask, validateConfig, validateConfigSection } from './api';
 import type {
   A0ConsoleRequest,
+  BacklogItem,
   CleanupWorkerState,
   ConfigSection,
   ConfigResourcePool,
@@ -99,6 +100,26 @@ type MailboxDraft = {
   body: string;
 };
 
+type WorkflowDraft = {
+  taskId: string;
+  title: string;
+  owner: string;
+  claimedBy: string;
+  status: string;
+  claimState: string;
+  gate: string;
+  priority: string;
+  dependencies: string;
+  planRequired: string;
+  planState: string;
+  planSummary: string;
+  claimNote: string;
+  reviewNote: string;
+  managerNote: string;
+};
+
+type WorkflowPresetAction = 'replan' | 'reassign' | 'reopen';
+
 const A0_CONSOLE_VIEW = 'a0-console';
 const DEFAULT_MAILBOX_DRAFT: MailboxDraft = {
   from: 'A0',
@@ -108,6 +129,147 @@ const DEFAULT_MAILBOX_DRAFT: MailboxDraft = {
   relatedTaskIds: '',
   body: '',
 };
+const DEFAULT_WORKFLOW_DRAFT: WorkflowDraft = {
+  taskId: '',
+  title: '',
+  owner: '',
+  claimedBy: '',
+  status: 'pending',
+  claimState: 'unclaimed',
+  gate: '',
+  priority: '',
+  dependencies: '',
+  planRequired: 'no',
+  planState: 'none',
+  planSummary: '',
+  claimNote: '',
+  reviewNote: '',
+  managerNote: '',
+};
+
+function workflowDraftFromTask(task?: BacklogItem): WorkflowDraft {
+  if (!task) {
+    return { ...DEFAULT_WORKFLOW_DRAFT };
+  }
+  return {
+    taskId: task.id || '',
+    title: task.title || '',
+    owner: task.owner || '',
+    claimedBy: task.claimed_by || '',
+    status: task.status || 'pending',
+    claimState: task.claim_state || (task.claimed_by ? 'claimed' : 'unclaimed'),
+    gate: task.gate || '',
+    priority: task.priority || '',
+    dependencies: stringifyQueue(task.dependencies),
+    planRequired: task.plan_required ? 'yes' : 'no',
+    planState: task.plan_state || 'none',
+    planSummary: task.plan_summary || '',
+    claimNote: task.claim_note || '',
+    reviewNote: task.review_note || '',
+    managerNote: '',
+  };
+}
+
+function workflowDraftFromRequest(data: DashboardState, request: A0ConsoleRequest, action: WorkflowPresetAction): WorkflowDraft {
+  const task = pickWorkflowTask(data, request.task_id || '');
+  const base = workflowDraftFromTask(task);
+  const taskId = request.task_id || base.taskId;
+  const agent = request.agent || base.claimedBy || base.owner;
+  const title = task?.title || base.title || request.title || taskId;
+  const contextNote = request.body || request.response_note || request.resume_instruction || '';
+  if (action === 'replan') {
+    return {
+      ...base,
+      taskId,
+      title,
+      owner: base.owner || agent,
+      claimedBy: agent,
+      status: 'pending',
+      claimState: agent ? 'claimed' : 'unclaimed',
+      planRequired: 'yes',
+      planState: 'pending_review',
+      planSummary: base.planSummary || contextNote,
+      reviewNote: '',
+      managerNote: `Replan requested from ${request.id}: ${contextNote}`.trim(),
+    };
+  }
+  if (action === 'reassign') {
+    return {
+      ...base,
+      taskId,
+      title,
+      owner: '',
+      claimedBy: '',
+      status: 'pending',
+      claimState: 'unclaimed',
+      claimNote: '',
+      reviewNote: '',
+      managerNote: `Reassign requested from ${request.id}: ${contextNote}`.trim(),
+    };
+  }
+  return {
+    ...base,
+    taskId,
+    title,
+    owner: base.owner || agent,
+    claimedBy: base.claimedBy || agent,
+    status: 'pending',
+    claimState: (base.claimedBy || agent) ? 'claimed' : 'unclaimed',
+    reviewNote: `Reopened from ${request.id}: ${contextNote}`.trim(),
+    managerNote: `Reopen requested from ${request.id}: ${contextNote}`.trim(),
+  };
+}
+
+function pickWorkflowTask(data: DashboardState | null, taskId = ''): BacklogItem | undefined {
+  const items = data?.backlog?.items || [];
+  if (!items.length) {
+    return undefined;
+  }
+  if (taskId) {
+    const matching = items.find((item) => item.id === taskId);
+    if (matching) {
+      return matching;
+    }
+  }
+  const requestTaskId = (data?.a0_console?.requests || []).find((item) => item.task_id)?.task_id;
+  if (requestTaskId) {
+    const matching = items.find((item) => item.id === requestTaskId);
+    if (matching) {
+      return matching;
+    }
+  }
+  return items.find((item) => item.status !== 'completed') || items[0];
+}
+
+function workflowBriefLines(data: DashboardState): string[] {
+  const items = data.backlog.items || [];
+  const active = items.filter((item) => item.status === 'active' || item.claim_state === 'in_progress');
+  const review = items.filter((item) => item.status === 'review' || item.claim_state === 'review');
+  const blocked = items.filter((item) => item.status === 'blocked');
+  const planPending = items.filter((item) => item.plan_state === 'pending_review');
+  const cleanupBlockers = data.cleanup.blockers || [];
+  return [
+    `${active.length} active task(s), ${review.length} awaiting review, ${blocked.length} blocked`,
+    `${planPending.length} plan approval request(s), ${data.a0_console.pending_count} A0 queue item(s)`,
+    cleanupBlockers.length ? `${cleanupBlockers.length} cleanup blocker(s) still open` : 'cleanup lane is clear',
+  ];
+}
+
+function workflowPeekTasks(data: DashboardState): BacklogItem[] {
+  const items = data.backlog.items || [];
+  const spotlight = items.filter((item) => item.status === 'review' || item.claim_state === 'review' || item.plan_state === 'pending_review' || item.status === 'blocked');
+  if (spotlight.length) {
+    return spotlight.slice(0, 6);
+  }
+  return items.filter((item) => item.status !== 'completed').slice(0, 6);
+}
+
+function mailboxPeekMessages(data: DashboardState): TeamMailboxMessage[] {
+  return (data.team_mailbox.messages || [])
+    .filter((item) => item.ack_state !== 'resolved')
+    .slice(-6)
+    .reverse();
+}
 
 function normalizedText(value: unknown): string {
   return String(value ?? '').trim();
@@ -1204,20 +1366,145 @@ function MailboxComposerCard({
   );
 }
 
+function WorkflowBriefCard({ data }: { data: DashboardState }) {
+  const lines = workflowBriefLines(data);
+  const tasks = workflowPeekTasks(data);
+  return (
+    <section className="card">
+      <div className="panel-title">
+        <div>
+          <h2>Workflow Brief</h2>
+          <p className="small">A0 can scan the current delivery lane before changing ownership, review gates, or task sequencing.</p>
+        </div>
+      </div>
+      <div className="stack-list">
+        {lines.map((line) => <div key={line} className="subcard"><p>{line}</p></div>)}
+      </div>
+      <div className="stack-list">
+        {tasks.length ? tasks.map((task) => (
+          <div key={task.id} className="subcard">
+            <div className="subcard-title">{task.id} · {task.title}</div>
+            <div className="small muted">{task.owner || 'unassigned'} · {task.status} · {task.claim_state || 'unclaimed'} · {task.plan_state || 'none'}</div>
+            {task.dependencies?.length ? <p className="small">Depends on {task.dependencies.join(', ')}</p> : null}
+          </div>
+        )) : <div className="small muted">No workflow items available.</div>}
+      </div>
+    </section>
+  );
+}
+
+function MailboxPeekCard({ data }: { data: DashboardState }) {
+  const messages = mailboxPeekMessages(data);
+  return (
+    <section className="card">
+      <div className="panel-title">
+        <div>
+          <h2>Mailbox Peek</h2>
+          <p className="small">Recent unresolved coordination notes, without leaving the current operating view.</p>
+        </div>
+        <div className="small muted">{data.team_mailbox.pending_count} open</div>
+      </div>
+      <div className="stack-list">
+        {messages.length ? messages.map((item) => (
+          <div key={item.id} className="subcard">
+            <div className="subcard-title">{item.topic}</div>
+            <div className="small muted">{item.from} -&gt; {item.to} · {item.ack_state} · {item.created_at}</div>
+            <p>{item.body}</p>
+            {item.related_task_ids?.length ? <div className="small muted">Tasks: {item.related_task_ids.join(', ')}</div> : null}
+          </div>
+        )) : <div className="small muted">No unresolved mailbox items.</div>}
+      </div>
+    </section>
+  );
+}
+
+function WorkflowPatchCard({
+  data,
+  draft,
+  onChange,
+  onSubmit,
+  disabled,
+}: {
+  data: DashboardState;
+  draft: WorkflowDraft;
+  onChange: (field: keyof WorkflowDraft, value: string) => void;
+  onSubmit: () => void;
+  disabled?: boolean;
+}) {
+  const participants = Array.from(new Set(['', 'A0', ...(data.resolved_workers || []).map((item) => item.agent).filter(Boolean)])).sort();
+  const taskOptions = (data.backlog.items || []).map((item) => item.id);
+  return (
+    <section id="workflow-replan-card" className="card">
+      <div className="panel-title">
+        <div>
+          <h2>Workflow Replan</h2>
+          <p className="small">A0 can rewrite ownership, claim state, review posture, and plan intent directly from the control plane.</p>
+        </div>
+      </div>
+      <section className="grid">
+        <SelectField label="Task" value={draft.taskId} onChange={(value) => onChange('taskId', value)} options={taskOptions} />
+        <Field label="Gate" value={draft.gate} onChange={(value) => onChange('gate', value)} placeholder="gate name" />
+      </section>
+      <section className="grid">
+        <Field label="Title" value={draft.title} onChange={(value) => onChange('title', value)} />
+        <Field label="Priority" value={draft.priority} onChange={(value) => onChange('priority', value)} placeholder="P0 / P1" />
+      </section>
+      <section className="grid">
+        <SelectField label="Owner" value={draft.owner} onChange={(value) => onChange('owner', value)} options={participants} />
+        <SelectField label="Claimed By" value={draft.claimedBy} onChange={(value) => onChange('claimedBy', value)} options={participants} />
+      </section>
+      <section className="grid">
+        <SelectField label="Status" value={draft.status} onChange={(value) => onChange('status', value)} options={['pending', 'active', 'blocked', 'review', 'completed']} />
+        <SelectField label="Claim State" value={draft.claimState} onChange={(value) => onChange('claimState', value)} options={['unclaimed', 'claimed', 'in_progress', 'review', 'completed']} />
+      </section>
+      <section className="grid">
+        <SelectField label="Plan Required" value={draft.planRequired} onChange={(value) => onChange('planRequired', value)} options={['yes', 'no']} />
+        <SelectField label="Plan State" value={draft.planState} onChange={(value) => onChange('planState', value)} options={['none', 'pending_review', 'approved', 'rejected']} />
+      </section>
+      <Field label="Dependencies" value={draft.dependencies} onChange={(value) => onChange('dependencies', value)} helpText="Comma-separated task ids." placeholder="A1-001, A2-001" />
+      <label className="field">
+        <span className="field-label">Plan Summary</span>
+        <textarea className="field-input field-textarea" value={draft.planSummary} onChange={(event) => onChange('planSummary', event.target.value)} placeholder="Rewrite the implementation plan or approval expectations." />
+      </label>
+      <section className="grid">
+        <Field label="Claim Note" value={draft.claimNote} onChange={(value) => onChange('claimNote', value)} placeholder="Current ownership note" />
+        <Field label="Review Note" value={draft.reviewNote} onChange={(value) => onChange('reviewNote', value)} placeholder="Acceptance or reopen note" />
+      </section>
+      <label className="field">
+        <span className="field-label">Manager Note</span>
+        <textarea className="field-input field-textarea" value={draft.managerNote} onChange={(event) => onChange('managerNote', event.target.value)} placeholder="Optional durable note to send with the workflow change." />
+      </label>
+      <div className="toolbar-group a0-actions">
+        <button type="button" onClick={onSubmit} disabled={disabled || !draft.taskId}>Apply workflow update</button>
+      </div>
+    </section>
+  );
+}
+
 function OperationsTab({
   data,
   mailboxDraft,
+  workflowDraft,
+  cleanupReleaseListener,
   onMailboxDraftChange,
+  onWorkflowDraftChange,
   onSendMailboxMessage,
+  onApplyWorkflowUpdate,
   onStopWorker,
+  onCleanupReleaseChange,
   onConfirmCleanup,
   actionInFlight,
 }: {
   data: DashboardState;
   mailboxDraft: MailboxDraft;
+  workflowDraft: WorkflowDraft;
+  cleanupReleaseListener: boolean;
   onMailboxDraftChange: (field: keyof MailboxDraft, value: string) => void;
+  onWorkflowDraftChange: (field: keyof WorkflowDraft, value: string) => void;
   onSendMailboxMessage: () => void;
+  onApplyWorkflowUpdate: () => void;
   onStopWorker: (agent: string) => void;
+  onCleanupReleaseChange: (value: boolean) => void;
   onConfirmCleanup: () => void;
   actionInFlight: boolean;
 }) {
@@ -1239,6 +1526,10 @@ function OperationsTab({
   return (
     <div className="tab-body">
       <section className="grid">
+        <WorkflowBriefCard data={data} />
+        <MailboxPeekCard data={data} />
+      </section>
+      <section className="grid">
         <section className="card"><h2>Commands</h2><pre>{`serve:\n${data.commands.serve}\n\nup:\n${data.commands.up}`}</pre></section>
         <section className="card"><h2>Validation</h2><pre>{renderValidation(data)}</pre></section>
       </section>
@@ -1259,6 +1550,7 @@ function OperationsTab({
         <section className="card"><h2>Gates</h2><DataTable columns={['id', 'name', 'status', 'owner']} rows={data.gates.gates || []} /></section>
       </section>
       <MailboxComposerCard draft={mailboxDraft} onChange={onMailboxDraftChange} onSend={onSendMailboxMessage} participants={mailboxParticipants} disabled={actionInFlight} />
+      <WorkflowPatchCard data={data} draft={workflowDraft} onChange={onWorkflowDraftChange} onSubmit={onApplyWorkflowUpdate} disabled={actionInFlight} />
       <section className="card">
         <div className="panel-title">
           <div>
@@ -1269,6 +1561,7 @@ function OperationsTab({
         </div>
         {cleanup.blockers.length ? <div className="merge-list-block"><strong>Cleanup blockers</strong><ul>{cleanup.blockers.map((entry) => <li key={entry}>{entry}</li>)}</ul></div> : <div className="small muted">No cleanup blockers remain. The team cleanup gate can be confirmed safely.</div>}
         <div className="toolbar-group a0-actions">
+          <label className="toggle"><input type="checkbox" checked={cleanupReleaseListener} onChange={(event) => onCleanupReleaseChange(event.target.checked)} /> Auto-release listener after confirm</label>
           <button type="button" onClick={onConfirmCleanup} disabled={actionInFlight || !cleanup.ready}>Confirm cleanup gate</button>
         </div>
         <div className="merge-board">
@@ -1579,11 +1872,13 @@ function A0RequestCard({
   replyDraft,
   onReplyChange,
   onReply,
+  onPrepareWorkflow,
 }: {
   item: A0ConsoleRequest;
   replyDraft: string;
   onReplyChange: (requestId: string, value: string) => void;
   onReply: (item: A0ConsoleRequest, action: string) => void;
+  onPrepareWorkflow: (item: A0ConsoleRequest, action: WorkflowPresetAction) => void;
 }) {
   const primaryAction = item.request_type === 'plan_review'
     ? { action: 'approve', label: 'Approve plan' }
@@ -1618,6 +1913,13 @@ function A0RequestCard({
         <span className="field-label">Reply to A0</span>
         <textarea className="field-input field-textarea" value={replyDraft} onChange={(event) => onReplyChange(item.id, event.target.value)} placeholder="Give A0 the decision, constraint, or unblock instruction." />
       </label>
+      {item.task_id ? (
+        <div className="toolbar-group a0-actions">
+          <button className="ghost" type="button" onClick={() => onPrepareWorkflow(item, 'replan')}>Prep replan</button>
+          <button className="ghost" type="button" onClick={() => onPrepareWorkflow(item, 'reassign')}>Prep reassign</button>
+          <button className="ghost" type="button" onClick={() => onPrepareWorkflow(item, 'reopen')}>Prep reopen</button>
+        </div>
+      ) : null}
       <div className="toolbar-group a0-actions">
         <button type="button" onClick={() => onReply(item, primaryAction.action)}>{primaryAction.label}</button>
         <button className={secondaryAction.className} type="button" onClick={() => onReply(item, secondaryAction.action)}>{secondaryAction.label}</button>
@@ -1657,27 +1959,39 @@ function A0ConsoleView({
   standalone,
   replyDrafts,
   composer,
+  workflowDraft,
   onReplyChange,
   onComposerChange,
+  onWorkflowDraftChange,
   onReply,
   onSendMessage,
   onMailboxAck,
+  onApplyWorkflowUpdate,
+  onPrepareWorkflow,
 }: {
   data: DashboardState;
   standalone?: boolean;
   replyDrafts: Record<string, string>;
   composer: string;
+  workflowDraft: WorkflowDraft;
   onReplyChange: (requestId: string, value: string) => void;
   onComposerChange: (value: string) => void;
+  onWorkflowDraftChange: (field: keyof WorkflowDraft, value: string) => void;
   onReply: (item: A0ConsoleRequest, action: string) => void;
   onSendMessage: () => void;
   onMailboxAck: (messageId: string, ackState: string) => void;
+  onApplyWorkflowUpdate: () => void;
+  onPrepareWorkflow: (item: A0ConsoleRequest, action: WorkflowPresetAction) => void;
 }) {
   const requests = data.a0_console?.requests || [];
   const messages = data.a0_console?.messages || [];
   const inbox = data.a0_console?.inbox || [];
   return (
     <div className={classNames('tab-body', standalone && 'a0-console-body')}>
+      <section className="grid">
+        <WorkflowBriefCard data={data} />
+        <MailboxPeekCard data={data} />
+      </section>
       <section className="card">
         <div className="page-header">
           <div>
@@ -1694,6 +2008,7 @@ function A0ConsoleView({
           <button type="button" onClick={onSendMessage} disabled={!composer.trim()}>Send to A0</button>
         </div>
       </section>
+      <WorkflowPatchCard data={data} draft={workflowDraft} onChange={onWorkflowDraftChange} onSubmit={onApplyWorkflowUpdate} />
       <section className="card">
         <div className="panel-title">
           <div>
@@ -1720,6 +2035,7 @@ function A0ConsoleView({
               replyDraft={replyDrafts[item.id] || ''}
               onReplyChange={onReplyChange}
               onReply={onReply}
+              onPrepareWorkflow={onPrepareWorkflow}
             />
           )) : <div className="small muted">No open A0 requests.</div>}
         </div>
@@ -1771,6 +2087,8 @@ export function App() {
   const [a0ReplyDrafts, setA0ReplyDrafts] = useState<Record<string, string>>({});
   const [a0Composer, setA0Composer] = useState('');
   const [mailboxDraft, setMailboxDraft] = useState<MailboxDraft>(DEFAULT_MAILBOX_DRAFT);
+  const [workflowDraft, setWorkflowDraft] = useState<WorkflowDraft>(DEFAULT_WORKFLOW_DRAFT);
+  const [cleanupReleaseListener, setCleanupReleaseListener] = useState(false);
   const abortRef = useRef<AbortController | null>(null);
   const previousPendingA0Ref = useRef(0);
 
@@ -1837,6 +2155,23 @@ export function App() {
       }
     }
     previousPendingA0Ref.current = pendingCount;
+  }, [data]);
+
+  useEffect(() => {
+    if (!data) {
+      return;
+    }
+    setWorkflowDraft((current) => {
+      const selectedTask = pickWorkflowTask(data, current.taskId);
+      if (!selectedTask) {
+        return current.taskId ? { ...DEFAULT_WORKFLOW_DRAFT } : current;
+      }
+      if (!current.taskId) {
+        return workflowDraftFromTask(selectedTask);
+      }
+      const taskStillExists = (data.backlog.items || []).some((item) => item.id === current.taskId);
+      return taskStillExists ? current : workflowDraftFromTask(selectedTask);
+    });
   }, [data]);
 
   const runAction = async (label: string, action: () => Promise<void>) => {
@@ -2311,6 +2646,28 @@ export function App() {
     setMailboxDraft((current) => ({ ...current, [field]: value }));
   };
 
+  const onWorkflowDraftChange = (field: keyof WorkflowDraft, value: string) => {
+    if (field === 'taskId') {
+      const selectedTask = pickWorkflowTask(data, value);
+      setWorkflowDraft(selectedTask ? workflowDraftFromTask(selectedTask) : { ...DEFAULT_WORKFLOW_DRAFT, taskId: value });
+      return;
+    }
+    setWorkflowDraft((current) => ({ ...current, [field]: value }));
+  };
+
+  const onPrepareWorkflow = (item: A0ConsoleRequest, action: WorkflowPresetAction) => {
+    if (!data) {
+      return;
+    }
+    const nextDraft = workflowDraftFromRequest(data, item, action);
+    setWorkflowDraft(nextDraft);
+    const taskLabel = nextDraft.taskId || item.task_id || item.id;
+    setStampedStatus(`${action} preset loaded for ${taskLabel}`);
+    window.requestAnimationFrame(() => {
+      document.getElementById('workflow-replan-card')?.scrollIntoView({ behavior: 'smooth', block: 'start' });
+    });
+  };
+
   const onSendMailboxMessage = () => void runAction('sending mailbox message', async () => {
     const payload = {
       from: mailboxDraft.from.trim(),
@@ -2328,13 +2685,48 @@ export function App() {
     await refresh(true);
   });
 
+  const onApplyWorkflowUpdate = () => void runAction('updating workflow plan', async () => {
+    if (!workflowDraft.taskId) {
+      throw new Error('task selection is required');
+    }
+    const updates = {
+      title: workflowDraft.title.trim(),
+      owner: workflowDraft.owner.trim(),
+      claimed_by: workflowDraft.claimedBy.trim(),
+      status: workflowDraft.status.trim(),
+      claim_state: workflowDraft.claimState.trim(),
+      gate: workflowDraft.gate.trim(),
+      priority: workflowDraft.priority.trim(),
+      dependencies: parseQueue(workflowDraft.dependencies),
+      plan_required: workflowDraft.planRequired === 'yes',
+      plan_state: workflowDraft.planState.trim(),
+      plan_summary: workflowDraft.planSummary.trim(),
+      claim_note: workflowDraft.claimNote.trim(),
+      review_note: workflowDraft.reviewNote.trim(),
+    };
+    const response = await updateWorkflowTask(workflowDraft.taskId, updates, workflowDraft.managerNote.trim());
+    setWorkflowDraft(workflowDraftFromTask(response.task));
+    setStampedStatus(`workflow updated for ${response.task.id}`);
+    await refreshStateOnly();
+  });
+
   const onStopWorker = (agent: string) => void runAction(`shutting down ${agent}`, async () => {
     await stopWorker(agent, 'A0 requested clean worker shutdown for cleanup.');
     await refresh(true);
   });
 
   const onConfirmCleanup = () => void runAction('confirming cleanup readiness', async () => {
-    await confirmTeamCleanup('Cleanup gate passed; session can now be released safely.');
+    const response = await confirmTeamCleanup('Cleanup gate passed; session can now be released safely.', cleanupReleaseListener);
+    if (response.listener_release_requested || response.listener_released) {
+      setAutoRefresh(false);
+      setData((current) => current ? {
+        ...current,
+        mode: { ...current.mode, listener_active: false },
+        cleanup: { ...response.cleanup, listener_active: false },
+      } : current);
+      setStampedStatus(`cleanup confirmed; listener release ${response.listener_released ? 'already completed' : 'scheduled'} on port ${response.listener_port || 'unknown'}`);
+      return;
+    }
     await refresh(true);
   });
 
@@ -2378,11 +2770,15 @@ export function App() {
             standalone
             replyDrafts={a0ReplyDrafts}
             composer={a0Composer}
+            workflowDraft={workflowDraft}
             onReplyChange={onA0ReplyChange}
             onComposerChange={setA0Composer}
+            onWorkflowDraftChange={onWorkflowDraftChange}
             onReply={onA0Reply}
             onSendMessage={onSendA0Message}
             onMailboxAck={onA0MailboxAck}
+            onApplyWorkflowUpdate={onApplyWorkflowUpdate}
+            onPrepareWorkflow={onPrepareWorkflow}
           />
         </main>
       </div>
@@ -2492,7 +2888,7 @@ export function App() {
           tab === 'overview'
             ? <OverviewTab data={data} agentRows={agentRows} progress={progress} onOpenA0Console={onOpenA0Console} />
             : tab === 'operations'
-              ? <OperationsTab data={data} mailboxDraft={mailboxDraft} onMailboxDraftChange={onMailboxDraftChange} onSendMailboxMessage={onSendMailboxMessage} onStopWorker={onStopWorker} onConfirmCleanup={onConfirmCleanup} actionInFlight={actionInFlight} />
+              ? <OperationsTab data={data} mailboxDraft={mailboxDraft} workflowDraft={workflowDraft} cleanupReleaseListener={cleanupReleaseListener} onMailboxDraftChange={onMailboxDraftChange} onWorkflowDraftChange={onWorkflowDraftChange} onSendMailboxMessage={onSendMailboxMessage} onApplyWorkflowUpdate={onApplyWorkflowUpdate} onStopWorker={onStopWorker} onCleanupReleaseChange={setCleanupReleaseListener} onConfirmCleanup={onConfirmCleanup} actionInFlight={actionInFlight} />
               : <SettingsTab
                   data={data}
                   draftConfig={draftConfig}

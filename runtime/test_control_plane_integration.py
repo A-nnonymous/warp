@@ -509,6 +509,49 @@ class ControlPlaneIntegrationTest(unittest.TestCase):
         self.assertEqual(completed["task"]["status"], "completed")
         self.assertEqual(completed["task"]["claim_state"], "completed")
 
+    def test_workflow_update_allows_a0_replan(self) -> None:
+        updated = read_json(
+            f"{self.base_url}/api/workflow/update",
+            {
+                "task_id": "A1-001",
+                "agent": "A0",
+                "note": "Shift this lane to A2 and hold for a revised plan.",
+                "updates": {
+                    "title": "Replanned protocol freeze",
+                    "owner": "A2",
+                    "claimed_by": "A2",
+                    "status": "pending",
+                    "claim_state": "claimed",
+                    "gate": "gate-2",
+                    "priority": "P0",
+                    "dependencies": ["A2-001"],
+                    "plan_required": True,
+                    "plan_state": "pending_review",
+                    "plan_summary": "Replan around reviewer feedback before code changes.",
+                    "claim_note": "A0 reassigned this after feedback.",
+                    "review_note": "waiting for refreshed plan",
+                },
+            },
+        )
+        self.assertTrue(updated["ok"])
+        task = updated["task"]
+        self.assertEqual(task["title"], "Replanned protocol freeze")
+        self.assertEqual(task["owner"], "A2")
+        self.assertEqual(task["claimed_by"], "A2")
+        self.assertEqual(task["plan_state"], "pending_review")
+        self.assertEqual(task["dependencies"], ["A2-001"])
+
+        state = self.fetch_state()
+        backlog_items = {item["id"]: item for item in state["backlog"]["items"]}
+        self.assertEqual(backlog_items["A1-001"]["owner"], "A2")
+        self.assertTrue(any(item.get("task_id") == "A1-001" for item in state["a0_console"]["requests"]))
+        self.assertTrue(
+            any(
+                item.get("related_task_ids") == ["A1-001"] and item.get("to") in {"A2", "all"}
+                for item in state["team_mailbox"]["messages"]
+            )
+        )
+
     def test_team_mailbox_send_and_acknowledge_flow(self) -> None:
         sent = read_json(
             f"{self.base_url}/api/team-mail/send",
@@ -618,6 +661,20 @@ class ControlPlaneIntegrationTest(unittest.TestCase):
 
         refreshed = self.fetch_state()
         self.assertTrue(any(item.get("scope") == "broadcast" and item.get("to") == "all" for item in refreshed["team_mailbox"]["messages"]))
+
+    def test_team_cleanup_can_auto_release_listener(self) -> None:
+        self.stop_workers()
+
+        cleanup = read_json(
+            f"{self.base_url}/api/team-cleanup",
+            {"note": "cleanup gate passed; release listener automatically", "release_listener": True},
+        )
+        self.assertTrue(cleanup["ok"])
+        self.assertTrue(cleanup["cleanup"]["ready"])
+        self.assertTrue(cleanup["listener_release_requested"])
+
+        wait_for(lambda: not port_is_listening(self.port), timeout=15, interval=0.5)
+        wait_for(lambda: not self.session_state()["server"]["listener_active"], timeout=15, interval=0.5)
 
     def test_unknown_api_routes_return_json_errors(self) -> None:
         request = urllib.request.Request(f"{self.base_url}/api/does-not-exist", data=b"{}")

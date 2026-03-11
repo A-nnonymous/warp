@@ -1167,6 +1167,7 @@ class ControlPlaneService:
         return {
             "ready": len(blockers) == 0,
             "blockers": blockers,
+            "listener_active": bool(self.listener_active),
             "active_workers": active_workers,
             "pending_plan_reviews": pending_plan_reviews,
             "pending_task_reviews": pending_task_reviews,
@@ -1469,7 +1470,146 @@ class ControlPlaneService:
             result["cleanup"] = self.cleanup_status()
             return result
 
-    def confirm_team_cleanup(self, note: str = "") -> dict[str, Any]:
+    def summarize_workflow_patch(self, before: dict[str, Any], after: dict[str, Any]) -> str:
+        fields = [
+            ("owner", "owner"),
+            ("claimed_by", "claimed by"),
+            ("status", "status"),
+            ("claim_state", "claim state"),
+            ("plan_state", "plan state"),
+            ("gate", "gate"),
+            ("title", "title"),
+        ]
+        changes: list[str] = []
+        for field, label in fields:
+            previous = str(before.get(field) or "").strip()
+            current = str(after.get(field) or "").strip()
+            if previous != current:
+                changes.append(f"{label}: {previous or 'empty'} -> {current or 'empty'}")
+        previous_dependencies = dedupe_strings(before.get("dependencies") or [])
+        current_dependencies = dedupe_strings(after.get("dependencies") or [])
+        if previous_dependencies != current_dependencies:
+            changes.append(
+                f"dependencies: {summarize_list(previous_dependencies) or 'none'} -> {summarize_list(current_dependencies) or 'none'}"
+            )
+        previous_plan = str(before.get("plan_summary") or "").strip()
+        current_plan = str(after.get("plan_summary") or "").strip()
+        if previous_plan != current_plan:
+            changes.append("plan summary updated")
+        return "; ".join(changes) if changes else "workflow updated"
+
+    def patch_workflow_item(self, task_id: str, updates: dict[str, Any], actor: str = "A0", note: str = "") -> dict[str, Any]:
+        manager = str(actor or "A0").strip() or "A0"
+        if manager != "A0":
+            raise ValueError("workflow updates are manager-owned and must be performed by A0")
+        if not isinstance(updates, dict) or not updates:
+            raise ValueError("updates are required")
+
+        allowed_scalar_fields = {
+            "title",
+            "task_type",
+            "owner",
+            "status",
+            "gate",
+            "priority",
+            "claim_state",
+            "claimed_by",
+            "claim_note",
+            "plan_state",
+            "plan_summary",
+            "plan_review_note",
+            "review_note",
+        }
+        allowed_list_fields = {"dependencies", "outputs", "done_when"}
+        allowed_boolean_fields = {"plan_required"}
+        unknown_fields = sorted(
+            key for key in updates.keys() if key not in allowed_scalar_fields | allowed_list_fields | allowed_boolean_fields
+        )
+        if unknown_fields:
+            raise ValueError(f"unsupported workflow update fields: {', '.join(unknown_fields)}")
+
+        before = self.task_record_for_worker({"task_id": task_id})
+        if not before:
+            raise ValueError(f"unknown task id {task_id}")
+
+        def mutate(item: dict[str, Any]) -> dict[str, Any]:
+            next_item = dict(item)
+            for field in allowed_scalar_fields:
+                if field in updates:
+                    next_item[field] = str(updates.get(field) or "").strip()
+            for field in allowed_list_fields:
+                if field in updates:
+                    value = updates.get(field) or []
+                    if isinstance(value, str):
+                        next_item[field] = dedupe_strings([part.strip() for part in value.split(",")])
+                    elif isinstance(value, list):
+                        next_item[field] = dedupe_strings(value)
+                    else:
+                        raise ValueError(f"workflow field {field} must be a list or comma-separated string")
+            if "plan_required" in updates:
+                next_item["plan_required"] = bool(updates.get("plan_required"))
+
+            claimed_by = str(next_item.get("claimed_by") or "").strip()
+            status = str(next_item.get("status") or "pending").strip() or "pending"
+            plan_state = str(next_item.get("plan_state") or "none").strip() or "none"
+
+            if claimed_by and not str(next_item.get("claimed_at") or "").strip():
+                next_item["claimed_at"] = now_iso()
+            if not claimed_by:
+                next_item["claimed_at"] = ""
+
+            if status not in BACKLOG_COMPLETED_STATUSES:
+                next_item["completed_at"] = ""
+                next_item["completed_by"] = ""
+            if status not in {"review"} and str(next_item.get("claim_state") or "") != "review":
+                next_item["review_requested_at"] = ""
+            elif not str(next_item.get("review_requested_at") or "").strip():
+                next_item["review_requested_at"] = now_iso()
+
+            if plan_state in {"approved", "rejected"}:
+                next_item["plan_reviewed_at"] = now_iso()
+            elif plan_state in {"none", "pending_review"}:
+                next_item["plan_reviewed_at"] = ""
+                if plan_state == "none":
+                    next_item["plan_review_note"] = ""
+
+            return next_item
+
+        updated = self.update_backlog_item(task_id, mutate)
+        summary = self.summarize_workflow_patch(before, updated)
+        recipients = dedupe_strings(
+            [
+                str(before.get("owner") or "").strip(),
+                str(before.get("claimed_by") or "").strip(),
+                str(updated.get("owner") or "").strip(),
+                str(updated.get("claimed_by") or "").strip(),
+            ]
+        )
+        recipients = [recipient for recipient in recipients if recipient and recipient != "A0"]
+        if recipients:
+            topic = "design_question" if str(updated.get("plan_state") or "") == "rejected" else "status_note"
+            if len(recipients) == 1:
+                self.append_team_mailbox_message(
+                    "A0",
+                    recipients[0],
+                    topic,
+                    note or f"A0 updated {task_id}: {summary}",
+                    [task_id],
+                    "direct",
+                )
+            else:
+                self.append_team_mailbox_message(
+                    "A0",
+                    "all",
+                    topic,
+                    note or f"A0 updated {task_id}: {summary}",
+                    [task_id],
+                    "broadcast",
+                )
+        self.last_event = f"workflow:update:{task_id}"
+        return updated
+
+    def confirm_team_cleanup(self, note: str = "", release_listener: bool = False) -> dict[str, Any]:
         with self.lock:
             cleanup = self.cleanup_status()
             if not cleanup.get("ready"):
@@ -1482,9 +1622,22 @@ class ControlPlaneService:
                 [],
                 "broadcast",
             )
-            self.last_event = "cleanup:ready"
+            listener_port = self.listen_port
+            listener_active = bool(self.listener_active)
+            listener_release_requested = bool(release_listener and listener_active)
+            self.last_event = "cleanup:ready:auto-release" if listener_release_requested else "cleanup:ready"
             self.write_session_state()
-            return cleanup
+            return {
+                "cleanup": cleanup,
+                "listener_active": listener_active,
+                "listener_port": listener_port,
+                "listener_release_requested": listener_release_requested,
+                "listener_released": bool(release_listener and not listener_active),
+            }
+
+    def release_listener_after_cleanup(self, delay_seconds: float = 0.15) -> None:
+        time.sleep(delay_seconds)
+        self.enter_silent_mode()
 
     def suggested_task_id(self, worker: dict[str, Any]) -> str:
         if str(worker.get("task_id", "")).strip():
@@ -4050,6 +4203,34 @@ Primary test command:
             )
             return True
 
+        if handler.path == "/api/workflow/update":
+            task_id = str(payload.get("task_id", "")).strip()
+            agent = str(payload.get("agent", "A0")).strip() or "A0"
+            note = str(payload.get("note", "")).strip()
+            updates = payload.get("updates")
+            if not task_id:
+                self.write_json(handler, {"ok": False, "error": "task_id is required"}, status=400)
+                return True
+            if not isinstance(updates, dict) or not updates:
+                self.write_json(handler, {"ok": False, "error": "updates are required"}, status=400)
+                return True
+            try:
+                task = self.patch_workflow_item(task_id, updates, actor=agent, note=note)
+            except Exception as exc:
+                self.write_json(handler, {"ok": False, "error": str(exc)}, status=400)
+                return True
+            self.write_json(
+                handler,
+                {
+                    "ok": True,
+                    "task": task,
+                    "backlog": self.load_backlog_state(),
+                    "a0_console": self.a0_request_catalog(self.merge_queue(), self.dashboard_heartbeats_state()),
+                    "cleanup": self.cleanup_status(),
+                },
+            )
+            return True
+
         if handler.path == "/api/team-mail/send":
             sender = str(payload.get("from", "")).strip()
             recipient = str(payload.get("to", "")).strip()
@@ -4113,12 +4294,15 @@ Primary test command:
 
         if handler.path == "/api/team-cleanup":
             note = str(payload.get("note", "")).strip()
+            release_listener = bool(payload.get("release_listener", False))
             try:
-                cleanup = self.confirm_team_cleanup(note)
+                result = self.confirm_team_cleanup(note, release_listener=release_listener)
             except Exception as exc:
                 self.write_json(handler, {"ok": False, "error": str(exc), "cleanup": self.cleanup_status()}, status=400)
                 return True
-            self.write_json(handler, {"ok": True, "cleanup": cleanup})
+            self.write_json(handler, {"ok": True, **result})
+            if result.get("listener_release_requested"):
+                threading.Thread(target=self.release_listener_after_cleanup, daemon=True).start()
             return True
 
         if handler.path == "/api/stop":

@@ -50,9 +50,12 @@ Warp treats collaboration as durable repository state, not transient provider ch
 - plan approval is explicit for risky work before implementation proceeds
 - `state/team_mailbox.yaml` is the provider-agnostic inbox for worker-to-worker and worker-to-A0 messages
 - A0 Console is the operational view over pending approvals, unresolved inbox items, and manager replies
-- the Operations tab includes a mailbox composer so coordination messages can be written into durable shared state directly from the dashboard
+- the Operations tab and A0 Console both expose mailbox peek cards plus a mailbox composer so coordination messages can be read and written directly from the dashboard
+- A0 can patch workflow state directly from the control plane to reassign owners, change claim and review posture, and request replans without editing YAML by hand
+- pending A0 requests can preload the workflow form with replan, reassign, and reopen presets so manager feedback can be turned into a structured workflow change in one step
 - cleanup readiness is explicit: the control plane tracks active workers, pending reviews, and outstanding single-writer locks before the team can be considered safe to release
 - workers can be shut down individually from the dashboard without collapsing the full listener session
+- once cleanup is ready, A0 can optionally auto-release the listener as part of confirming the cleanup gate
 
 ## Startup entrypoints
 

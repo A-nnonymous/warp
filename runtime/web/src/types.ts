@@ -236,12 +236,33 @@ export type CleanupWorkerState = {
 export type CleanupState = {
   ready: boolean;
   blockers: string[];
+  listener_active: boolean;
   active_workers: string[];
   pending_plan_reviews: string[];
   pending_task_reviews: string[];
   locked_files: Array<{ path: string; owner: string; state: string }>;
   workers: CleanupWorkerState[];
   last_updated: string;
+};
+
+export type WorkflowPatch = {
+  title?: string;
+  task_type?: string;
+  owner?: string;
+  status?: string;
+  gate?: string;
+  priority?: string;
+  claim_state?: string;
+  claimed_by?: string;
+  claim_note?: string;
+  plan_required?: boolean;
+  plan_state?: string;
+  plan_summary?: string;
+  plan_review_note?: string;
+  review_note?: string;
+  dependencies?: string[];
+  outputs?: string[];
+  done_when?: string[];
 };
 
 export type GateItem = {
@@ -425,7 +446,19 @@ export type StopWorkerResponse = {
   cleanup: CleanupState;
 };
 
+export type WorkflowUpdateResponse = {
+  ok: boolean;
+  task: BacklogItem;
+  backlog: { items?: BacklogItem[] };
+  a0_console: A0ConsoleState;
+  cleanup: CleanupState;
+};
+
 export type TeamCleanupResponse = {
   ok: boolean;
   cleanup: CleanupState;
+  listener_active: boolean;
+  listener_port?: number;
+  listener_release_requested: boolean;
+  listener_released: boolean;
 };

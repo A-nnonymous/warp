@@ -24602,8 +24602,11 @@ function acknowledgeTeamMailboxMessage(message_id, ack_state, resolution_note = 
 function stopWorker(agent, note = "") {
   return postJson("/api/workers/stop", { agent, note });
 }
-function confirmTeamCleanup(note = "") {
-  return postJson("/api/team-cleanup", { note });
+function updateWorkflowTask(task_id, updates, note = "", agent = "A0") {
+  return postJson("/api/workflow/update", { task_id, updates, note, agent });
+}
+function confirmTeamCleanup(note = "", release_listener = false) {
+  return postJson("/api/team-cleanup", { note, release_listener });
 }
 
 // src/App.tsx
@@ -24618,6 +24621,138 @@ var DEFAULT_MAILBOX_DRAFT = {
   relatedTaskIds: "",
   body: ""
 };
+var DEFAULT_WORKFLOW_DRAFT = {
+  taskId: "",
+  title: "",
+  owner: "",
+  claimedBy: "",
+  status: "pending",
+  claimState: "unclaimed",
+  gate: "",
+  priority: "",
+  dependencies: "",
+  planRequired: "no",
+  planState: "none",
+  planSummary: "",
+  claimNote: "",
+  reviewNote: "",
+  managerNote: ""
+};
+function workflowDraftFromTask(task) {
+  if (!task) {
+    return { ...DEFAULT_WORKFLOW_DRAFT };
+  }
+  return {
+    taskId: task.id || "",
+    title: task.title || "",
+    owner: task.owner || "",
+    claimedBy: task.claimed_by || "",
+    status: task.status || "pending",
+    claimState: task.claim_state || (task.claimed_by ? "claimed" : "unclaimed"),
+    gate: task.gate || "",
+    priority: task.priority || "",
+    dependencies: stringifyQueue(task.dependencies),
+    planRequired: task.plan_required ? "yes" : "no",
+    planState: task.plan_state || "none",
+    planSummary: task.plan_summary || "",
+    claimNote: task.claim_note || "",
+    reviewNote: task.review_note || "",
+    managerNote: ""
+  };
+}
+function workflowDraftFromRequest(data, request, action) {
+  const task = pickWorkflowTask(data, request.task_id || "");
+  const base = workflowDraftFromTask(task);
+  const taskId = request.task_id || base.taskId;
+  const agent = request.agent || base.claimedBy || base.owner;
+  const title = task?.title || base.title || request.title || taskId;
+  const contextNote = request.body || request.response_note || request.resume_instruction || "";
+  if (action === "replan") {
+    return {
+      ...base,
+      taskId,
+      title,
+      owner: base.owner || agent,
+      claimedBy: agent,
+      status: "pending",
+      claimState: agent ? "claimed" : "unclaimed",
+      planRequired: "yes",
+      planState: "pending_review",
+      planSummary: base.planSummary || contextNote,
+      reviewNote: "",
+      managerNote: `Replan requested from ${request.id}: ${contextNote}`.trim()
+    };
+  }
+  if (action === "reassign") {
+    return {
+      ...base,
+      taskId,
+      title,
+      owner: "",
+      claimedBy: "",
+      status: "pending",
+      claimState: "unclaimed",
+      claimNote: "",
+      reviewNote: "",
+      managerNote: `Reassign requested from ${request.id}: ${contextNote}`.trim()
+    };
+  }
+  return {
+    ...base,
+    taskId,
+    title,
+    owner: base.owner || agent,
+    claimedBy: base.claimedBy || agent,
+    status: "pending",
+    claimState: base.claimedBy || agent ? "claimed" : "unclaimed",
+    reviewNote: `Reopened from ${request.id}: ${contextNote}`.trim(),
+    managerNote: `Reopen requested from ${request.id}: ${contextNote}`.trim()
+  };
+}
+function pickWorkflowTask(data, taskId = "") {
+  const items = data?.backlog?.items || [];
+  if (!items.length) {
+    return void 0;
+  }
+  if (taskId) {
+    const matching = items.find((item) => item.id === taskId);
+    if (matching) {
+      return matching;
+    }
+  }
+  const requestTaskId = (data?.a0_console?.requests || []).find((item) => item.task_id)?.task_id;
+  if (requestTaskId) {
+    const matching = items.find((item) => item.id === requestTaskId);
+    if (matching) {
+      return matching;
+    }
+  }
+  return items.find((item) => item.status !== "completed") || items[0];
+}
+function workflowBriefLines(data) {
+  const items = data.backlog.items || [];
+  const active = items.filter((item) => item.status === "active" || item.claim_state === "in_progress");
+  const review = items.filter((item) => item.status === "review" || item.claim_state === "review");
+  const blocked = items.filter((item) => item.status === "blocked");
+  const planPending = items.filter((item) => item.plan_state === "pending_review");
+  const cleanupBlockers = data.cleanup.blockers || [];
+  return [
+    `${active.length} active task(s), ${review.length} awaiting review, ${blocked.length} blocked`,
+    `${planPending.length} plan approval request(s), ${data.a0_console.pending_count} A0 queue item(s)`,
+    cleanupBlockers.length ? `${cleanupBlockers.length} cleanup blocker(s) still open` : "cleanup lane is clear"
+  ];
+}
+function workflowPeekTasks(data) {
+  const items = data.backlog.items || [];
+  const spotlight = items.filter((item) => item.status === "review" || item.claim_state === "review" || item.plan_state === "pending_review" || item.status === "blocked");
+  if (spotlight.length) {
+    return spotlight.slice(0, 6);
+  }
+  return items.filter((item) => item.status !== "completed").slice(0, 6);
+}
+function mailboxPeekMessages(data) {
+  return (data.team_mailbox.messages || []).filter((item) => item.ack_state !== "resolved").slice(-6).reverse();
+}
 function normalizedText(value) {
   return String(value ?? "").trim();
 }
@@ -25566,12 +25701,130 @@ function MailboxComposerCard({
     /* @__PURE__ */ (0, import_jsx_runtime.jsx)("div", { className: "toolbar-group a0-actions", children: /* @__PURE__ */ (0, import_jsx_runtime.jsx)("button", { type: "button", onClick: onSend, disabled: disabled || !draft.from || !draft.to || !draft.body.trim(), children: "Send mailbox message" }) })
   ] });
 }
+function WorkflowBriefCard({ data }) {
+  const lines = workflowBriefLines(data);
+  const tasks = workflowPeekTasks(data);
+  return /* @__PURE__ */ (0, import_jsx_runtime.jsxs)("section", { className: "card", children: [
+    /* @__PURE__ */ (0, import_jsx_runtime.jsx)("div", { className: "panel-title", children: /* @__PURE__ */ (0, import_jsx_runtime.jsxs)("div", { children: [
+      /* @__PURE__ */ (0, import_jsx_runtime.jsx)("h2", { children: "Workflow Brief" }),
+      /* @__PURE__ */ (0, import_jsx_runtime.jsx)("p", { className: "small", children: "A0 can scan the current delivery lane before changing ownership, review gates, or task sequencing." })
+    ] }) }),
+    /* @__PURE__ */ (0, import_jsx_runtime.jsx)("div", { className: "stack-list", children: lines.map((line) => /* @__PURE__ */ (0, import_jsx_runtime.jsx)("div", { className: "subcard", children: /* @__PURE__ */ (0, import_jsx_runtime.jsx)("p", { children: line }) }, line)) }),
+    /* @__PURE__ */ (0, import_jsx_runtime.jsx)("div", { className: "stack-list", children: tasks.length ? tasks.map((task) => /* @__PURE__ */ (0, import_jsx_runtime.jsxs)("div", { className: "subcard", children: [
+      /* @__PURE__ */ (0, import_jsx_runtime.jsxs)("div", { className: "subcard-title", children: [
+        task.id,
+        " \xB7 ",
+        task.title
+      ] }),
+      /* @__PURE__ */ (0, import_jsx_runtime.jsxs)("div", { className: "small muted", children: [
+        task.owner || "unassigned",
+        " \xB7 ",
+        task.status,
+        " \xB7 ",
+        task.claim_state || "unclaimed",
+        " \xB7 ",
+        task.plan_state || "none"
+      ] }),
+      task.dependencies?.length ? /* @__PURE__ */ (0, import_jsx_runtime.jsxs)("p", { className: "small", children: [
+        "Depends on ",
+        task.dependencies.join(", ")
+      ] }) : null
+    ] }, task.id)) : /* @__PURE__ */ (0, import_jsx_runtime.jsx)("div", { className: "small muted", children: "No workflow items available." }) })
+  ] });
+}
+function MailboxPeekCard({ data }) {
+  const messages = mailboxPeekMessages(data);
+  return /* @__PURE__ */ (0, import_jsx_runtime.jsxs)("section", { className: "card", children: [
+    /* @__PURE__ */ (0, import_jsx_runtime.jsxs)("div", { className: "panel-title", children: [
+      /* @__PURE__ */ (0, import_jsx_runtime.jsxs)("div", { children: [
+        /* @__PURE__ */ (0, import_jsx_runtime.jsx)("h2", { children: "Mailbox Peek" }),
+        /* @__PURE__ */ (0, import_jsx_runtime.jsx)("p", { className: "small", children: "Recent unresolved coordination notes, without leaving the current operating view." })
+      ] }),
+      /* @__PURE__ */ (0, import_jsx_runtime.jsxs)("div", { className: "small muted", children: [
+        data.team_mailbox.pending_count,
+        " open"
+      ] })
+    ] }),
+    /* @__PURE__ */ (0, import_jsx_runtime.jsx)("div", { className: "stack-list", children: messages.length ? messages.map((item) => /* @__PURE__ */ (0, import_jsx_runtime.jsxs)("div", { className: "subcard", children: [
+      /* @__PURE__ */ (0, import_jsx_runtime.jsx)("div", { className: "subcard-title", children: item.topic }),
+      /* @__PURE__ */ (0, import_jsx_runtime.jsxs)("div", { className: "small muted", children: [
+        item.from,
+        " -> ",
+        item.to,
+        " \xB7 ",
+        item.ack_state,
+        " \xB7 ",
+        item.created_at
+      ] }),
+      /* @__PURE__ */ (0, import_jsx_runtime.jsx)("p", { children: item.body }),
+      item.related_task_ids?.length ? /* @__PURE__ */ (0, import_jsx_runtime.jsxs)("div", { className: "small muted", children: [
+        "Tasks: ",
+        item.related_task_ids.join(", ")
+      ] }) : null
+    ] }, item.id)) : /* @__PURE__ */ (0, import_jsx_runtime.jsx)("div", { className: "small muted", children: "No unresolved mailbox items." }) })
+  ] });
+}
+function WorkflowPatchCard({
+  data,
+  draft,
+  onChange,
+  onSubmit,
+  disabled
+}) {
+  const participants = Array.from(/* @__PURE__ */ new Set(["", "A0", ...(data.resolved_workers || []).map((item) => item.agent).filter(Boolean)])).sort();
+  const taskOptions = (data.backlog.items || []).map((item) => item.id);
+  return /* @__PURE__ */ (0, import_jsx_runtime.jsxs)("section", { id: "workflow-replan-card", className: "card", children: [
+    /* @__PURE__ */ (0, import_jsx_runtime.jsx)("div", { className: "panel-title", children: /* @__PURE__ */ (0, import_jsx_runtime.jsxs)("div", { children: [
+      /* @__PURE__ */ (0, import_jsx_runtime.jsx)("h2", { children: "Workflow Replan" }),
+      /* @__PURE__ */ (0, import_jsx_runtime.jsx)("p", { className: "small", children: "A0 can rewrite ownership, claim state, review posture, and plan intent directly from the control plane." })
+    ] }) }),
+    /* @__PURE__ */ (0, import_jsx_runtime.jsxs)("section", { className: "grid", children: [
+      /* @__PURE__ */ (0, import_jsx_runtime.jsx)(SelectField, { label: "Task", value: draft.taskId, onChange: (value) => onChange("taskId", value), options: taskOptions }),
+      /* @__PURE__ */ (0, import_jsx_runtime.jsx)(Field, { label: "Gate", value: draft.gate, onChange: (value) => onChange("gate", value), placeholder: "gate name" })
+    ] }),
+    /* @__PURE__ */ (0, import_jsx_runtime.jsxs)("section", { className: "grid", children: [
+      /* @__PURE__ */ (0, import_jsx_runtime.jsx)(Field, { label: "Title", value: draft.title, onChange: (value) => onChange("title", value) }),
+      /* @__PURE__ */ (0, import_jsx_runtime.jsx)(Field, { label: "Priority", value: draft.priority, onChange: (value) => onChange("priority", value), placeholder: "P0 / P1" })
+    ] }),
+    /* @__PURE__ */ (0, import_jsx_runtime.jsxs)("section", { className: "grid", children: [
+      /* @__PURE__ */ (0, import_jsx_runtime.jsx)(SelectField, { label: "Owner", value: draft.owner, onChange: (value) => onChange("owner", value), options: participants }),
+      /* @__PURE__ */ (0, import_jsx_runtime.jsx)(SelectField, { label: "Claimed By", value: draft.claimedBy, onChange: (value) => onChange("claimedBy", value), options: participants })
+    ] }),
+    /* @__PURE__ */ (0, import_jsx_runtime.jsxs)("section", { className: "grid", children: [
+      /* @__PURE__ */ (0, import_jsx_runtime.jsx)(SelectField, { label: "Status", value: draft.status, onChange: (value) => onChange("status", value), options: ["pending", "active", "blocked", "review", "completed"] }),
+      /* @__PURE__ */ (0, import_jsx_runtime.jsx)(SelectField, { label: "Claim State", value: draft.claimState, onChange: (value) => onChange("claimState", value), options: ["unclaimed", "claimed", "in_progress", "review", "completed"] })
+    ] }),
+    /* @__PURE__ */ (0, import_jsx_runtime.jsxs)("section", { className: "grid", children: [
+      /* @__PURE__ */ (0, import_jsx_runtime.jsx)(SelectField, { label: "Plan Required", value: draft.planRequired, onChange: (value) => onChange("planRequired", value), options: ["yes", "no"] }),
+      /* @__PURE__ */ (0, import_jsx_runtime.jsx)(SelectField, { label: "Plan State", value: draft.planState, onChange: (value) => onChange("planState", value), options: ["none", "pending_review", "approved", "rejected"] })
+    ] }),
+    /* @__PURE__ */ (0, import_jsx_runtime.jsx)(Field, { label: "Dependencies", value: draft.dependencies, onChange: (value) => onChange("dependencies", value), helpText: "Comma-separated task ids.", placeholder: "A1-001, A2-001" }),
+    /* @__PURE__ */ (0, import_jsx_runtime.jsxs)("label", { className: "field", children: [
+      /* @__PURE__ */ (0, import_jsx_runtime.jsx)("span", { className: "field-label", children: "Plan Summary" }),
+      /* @__PURE__ */ (0, import_jsx_runtime.jsx)("textarea", { className: "field-input field-textarea", value: draft.planSummary, onChange: (event) => onChange("planSummary", event.target.value), placeholder: "Rewrite the implementation plan or approval expectations." })
+    ] }),
+    /* @__PURE__ */ (0, import_jsx_runtime.jsxs)("section", { className: "grid", children: [
+      /* @__PURE__ */ (0, import_jsx_runtime.jsx)(Field, { label: "Claim Note", value: draft.claimNote, onChange: (value) => onChange("claimNote", value), placeholder: "Current ownership note" }),
+      /* @__PURE__ */ (0, import_jsx_runtime.jsx)(Field, { label: "Review Note", value: draft.reviewNote, onChange: (value) => onChange("reviewNote", value), placeholder: "Acceptance or reopen note" })
+    ] }),
+    /* @__PURE__ */ (0, import_jsx_runtime.jsxs)("label", { className: "field", children: [
+      /* @__PURE__ */ (0, import_jsx_runtime.jsx)("span", { className: "field-label", children: "Manager Note" }),
+      /* @__PURE__ */ (0, import_jsx_runtime.jsx)("textarea", { className: "field-input field-textarea", value: draft.managerNote, onChange: (event) => onChange("managerNote", event.target.value), placeholder: "Optional durable note to send with the workflow change." })
+    ] }),
+    /* @__PURE__ */ (0, import_jsx_runtime.jsx)("div", { className: "toolbar-group a0-actions", children: /* @__PURE__ */ (0, import_jsx_runtime.jsx)("button", { type: "button", onClick: onSubmit, disabled: disabled || !draft.taskId, children: "Apply workflow update" }) })
+  ] });
+}
 function OperationsTab({
   data,
   mailboxDraft,
+  workflowDraft,
+  cleanupReleaseListener,
   onMailboxDraftChange,
+  onWorkflowDraftChange,
   onSendMailboxMessage,
+  onApplyWorkflowUpdate,
   onStopWorker,
+  onCleanupReleaseChange,
   onConfirmCleanup,
   actionInFlight
 }) {
@@ -25591,6 +25844,10 @@ function OperationsTab({
   const mailboxParticipants = Array.from(/* @__PURE__ */ new Set(["A0", ...(data.resolved_workers || []).map((item) => item.agent).filter(Boolean)])).sort();
   const cleanup = data.cleanup;
   return /* @__PURE__ */ (0, import_jsx_runtime.jsxs)("div", { className: "tab-body", children: [
+    /* @__PURE__ */ (0, import_jsx_runtime.jsxs)("section", { className: "grid", children: [
+      /* @__PURE__ */ (0, import_jsx_runtime.jsx)(WorkflowBriefCard, { data }),
+      /* @__PURE__ */ (0, import_jsx_runtime.jsx)(MailboxPeekCard, { data })
+    ] }),
     /* @__PURE__ */ (0, import_jsx_runtime.jsxs)("section", { className: "grid", children: [
       /* @__PURE__ */ (0, import_jsx_runtime.jsxs)("section", { className: "card", children: [
         /* @__PURE__ */ (0, import_jsx_runtime.jsx)("h2", { children: "Commands" }),
@@ -25646,6 +25903,7 @@ ${data.commands.up}` })
       ] })
     ] }),
     /* @__PURE__ */ (0, import_jsx_runtime.jsx)(MailboxComposerCard, { draft: mailboxDraft, onChange: onMailboxDraftChange, onSend: onSendMailboxMessage, participants: mailboxParticipants, disabled: actionInFlight }),
+    /* @__PURE__ */ (0, import_jsx_runtime.jsx)(WorkflowPatchCard, { data, draft: workflowDraft, onChange: onWorkflowDraftChange, onSubmit: onApplyWorkflowUpdate, disabled: actionInFlight }),
     /* @__PURE__ */ (0, import_jsx_runtime.jsxs)("section", { className: "card", children: [
       /* @__PURE__ */ (0, import_jsx_runtime.jsxs)("div", { className: "panel-title", children: [
         /* @__PURE__ */ (0, import_jsx_runtime.jsxs)("div", { children: [
@@ -25658,7 +25916,13 @@ ${data.commands.up}` })
         /* @__PURE__ */ (0, import_jsx_runtime.jsx)("strong", { children: "Cleanup blockers" }),
         /* @__PURE__ */ (0, import_jsx_runtime.jsx)("ul", { children: cleanup.blockers.map((entry) => /* @__PURE__ */ (0, import_jsx_runtime.jsx)("li", { children: entry }, entry)) })
       ] }) : /* @__PURE__ */ (0, import_jsx_runtime.jsx)("div", { className: "small muted", children: "No cleanup blockers remain. The team cleanup gate can be confirmed safely." }),
-      /* @__PURE__ */ (0, import_jsx_runtime.jsx)("div", { className: "toolbar-group a0-actions", children: /* @__PURE__ */ (0, import_jsx_runtime.jsx)("button", { type: "button", onClick: onConfirmCleanup, disabled: actionInFlight || !cleanup.ready, children: "Confirm cleanup gate" }) }),
+      /* @__PURE__ */ (0, import_jsx_runtime.jsxs)("div", { className: "toolbar-group a0-actions", children: [
+        /* @__PURE__ */ (0, import_jsx_runtime.jsxs)("label", { className: "toggle", children: [
+          /* @__PURE__ */ (0, import_jsx_runtime.jsx)("input", { type: "checkbox", checked: cleanupReleaseListener, onChange: (event) => onCleanupReleaseChange(event.target.checked) }),
+          " Auto-release listener after confirm"
+        ] }),
+        /* @__PURE__ */ (0, import_jsx_runtime.jsx)("button", { type: "button", onClick: onConfirmCleanup, disabled: actionInFlight || !cleanup.ready, children: "Confirm cleanup gate" })
+      ] }),
       /* @__PURE__ */ (0, import_jsx_runtime.jsx)("div", { className: "merge-board", children: (cleanup.workers || []).map((item) => /* @__PURE__ */ (0, import_jsx_runtime.jsx)(CleanupWorkerCard, { item, onStopWorker, disabled: actionInFlight }, item.agent)) })
     ] }),
     /* @__PURE__ */ (0, import_jsx_runtime.jsxs)("section", { className: "card", children: [
@@ -26003,7 +26267,8 @@ function A0RequestCard({
   item,
   replyDraft,
   onReplyChange,
-  onReply
+  onReply,
+  onPrepareWorkflow
 }) {
   const primaryAction = item.request_type === "plan_review" ? { action: "approve", label: "Approve plan" } : item.request_type === "task_review" ? { action: "approve", label: "Accept task" } : { action: "resume", label: "Resume" };
   const secondaryAction = item.request_type === "plan_review" ? { action: "reject", label: "Reject plan", className: "danger-outline" } : item.request_type === "task_review" ? { action: "reject", label: "Reopen task", className: "danger-outline" } : { action: "acknowledged", label: "Acknowledge", className: "ghost" };
@@ -26043,6 +26308,11 @@ function A0RequestCard({
       /* @__PURE__ */ (0, import_jsx_runtime.jsx)("span", { className: "field-label", children: "Reply to A0" }),
       /* @__PURE__ */ (0, import_jsx_runtime.jsx)("textarea", { className: "field-input field-textarea", value: replyDraft, onChange: (event) => onReplyChange(item.id, event.target.value), placeholder: "Give A0 the decision, constraint, or unblock instruction." })
     ] }),
+    item.task_id ? /* @__PURE__ */ (0, import_jsx_runtime.jsxs)("div", { className: "toolbar-group a0-actions", children: [
+      /* @__PURE__ */ (0, import_jsx_runtime.jsx)("button", { className: "ghost", type: "button", onClick: () => onPrepareWorkflow(item, "replan"), children: "Prep replan" }),
+      /* @__PURE__ */ (0, import_jsx_runtime.jsx)("button", { className: "ghost", type: "button", onClick: () => onPrepareWorkflow(item, "reassign"), children: "Prep reassign" }),
+      /* @__PURE__ */ (0, import_jsx_runtime.jsx)("button", { className: "ghost", type: "button", onClick: () => onPrepareWorkflow(item, "reopen"), children: "Prep reopen" })
+    ] }) : null,
     /* @__PURE__ */ (0, import_jsx_runtime.jsxs)("div", { className: "toolbar-group a0-actions", children: [
       /* @__PURE__ */ (0, import_jsx_runtime.jsx)("button", { type: "button", onClick: () => onReply(item, primaryAction.action), children: primaryAction.label }),
       /* @__PURE__ */ (0, import_jsx_runtime.jsx)("button", { className: secondaryAction.className, type: "button", onClick: () => onReply(item, secondaryAction.action), children: secondaryAction.label }),
@@ -26089,16 +26359,24 @@ function A0ConsoleView({
   standalone,
   replyDrafts,
   composer,
+  workflowDraft,
   onReplyChange,
   onComposerChange,
+  onWorkflowDraftChange,
   onReply,
   onSendMessage,
-  onMailboxAck
+  onMailboxAck,
+  onApplyWorkflowUpdate,
+  onPrepareWorkflow
 }) {
   const requests = data.a0_console?.requests || [];
   const messages = data.a0_console?.messages || [];
   const inbox = data.a0_console?.inbox || [];
   return /* @__PURE__ */ (0, import_jsx_runtime.jsxs)("div", { className: classNames("tab-body", standalone && "a0-console-body"), children: [
+    /* @__PURE__ */ (0, import_jsx_runtime.jsxs)("section", { className: "grid", children: [
+      /* @__PURE__ */ (0, import_jsx_runtime.jsx)(WorkflowBriefCard, { data }),
+      /* @__PURE__ */ (0, import_jsx_runtime.jsx)(MailboxPeekCard, { data })
+    ] }),
     /* @__PURE__ */ (0, import_jsx_runtime.jsxs)("section", { className: "card", children: [
       /* @__PURE__ */ (0, import_jsx_runtime.jsxs)("div", { className: "page-header", children: [
         /* @__PURE__ */ (0, import_jsx_runtime.jsxs)("div", { children: [
@@ -26116,6 +26394,7 @@ function A0ConsoleView({
       ] }),
       /* @__PURE__ */ (0, import_jsx_runtime.jsx)("div", { className: "toolbar-group a0-actions", children: /* @__PURE__ */ (0, import_jsx_runtime.jsx)("button", { type: "button", onClick: onSendMessage, disabled: !composer.trim(), children: "Send to A0" }) })
     ] }),
+    /* @__PURE__ */ (0, import_jsx_runtime.jsx)(WorkflowPatchCard, { data, draft: workflowDraft, onChange: onWorkflowDraftChange, onSubmit: onApplyWorkflowUpdate }),
     /* @__PURE__ */ (0, import_jsx_runtime.jsxs)("section", { className: "card", children: [
       /* @__PURE__ */ (0, import_jsx_runtime.jsx)("div", { className: "panel-title", children: /* @__PURE__ */ (0, import_jsx_runtime.jsxs)("div", { children: [
         /* @__PURE__ */ (0, import_jsx_runtime.jsx)("h2", { children: "Inbox" }),
@@ -26134,7 +26413,8 @@ function A0ConsoleView({
           item,
           replyDraft: replyDrafts[item.id] || "",
           onReplyChange,
-          onReply
+          onReply,
+          onPrepareWorkflow
         },
         item.id
       )) : /* @__PURE__ */ (0, import_jsx_runtime.jsx)("div", { className: "small muted", children: "No open A0 requests." }) })
@@ -26185,6 +26465,8 @@ function App() {
   const [a0ReplyDrafts, setA0ReplyDrafts] = (0, import_react.useState)({});
   const [a0Composer, setA0Composer] = (0, import_react.useState)("");
   const [mailboxDraft, setMailboxDraft] = (0, import_react.useState)(DEFAULT_MAILBOX_DRAFT);
+  const [workflowDraft, setWorkflowDraft] = (0, import_react.useState)(DEFAULT_WORKFLOW_DRAFT);
+  const [cleanupReleaseListener, setCleanupReleaseListener] = (0, import_react.useState)(false);
   const abortRef = (0, import_react.useRef)(null);
   const previousPendingA0Ref = (0, import_react.useRef)(0);
   const agentRows = (0, import_react.useMemo)(() => buildAgentRows(data), [data]);
@@ -26245,6 +26527,22 @@ function App() {
       }
     }
     previousPendingA0Ref.current = pendingCount;
+  }, [data]);
+  (0, import_react.useEffect)(() => {
+    if (!data) {
+      return;
+    }
+    setWorkflowDraft((current) => {
+      const selectedTask = pickWorkflowTask(data, current.taskId);
+      if (!selectedTask) {
+        return current.taskId ? { ...DEFAULT_WORKFLOW_DRAFT } : current;
+      }
+      if (!current.taskId) {
+        return workflowDraftFromTask(selectedTask);
+      }
+      const taskStillExists = (data.backlog.items || []).some((item) => item.id === current.taskId);
+      return taskStillExists ? current : workflowDraftFromTask(selectedTask);
+    });
   }, [data]);
   const runAction = async (label, action) => {
     if (actionInFlight) {
@@ -26660,6 +26958,26 @@ function App() {
   const onMailboxDraftChange = (field, value) => {
     setMailboxDraft((current) => ({ ...current, [field]: value }));
   };
+  const onWorkflowDraftChange = (field, value) => {
+    if (field === "taskId") {
+      const selectedTask = pickWorkflowTask(data, value);
+      setWorkflowDraft(selectedTask ? workflowDraftFromTask(selectedTask) : { ...DEFAULT_WORKFLOW_DRAFT, taskId: value });
+      return;
+    }
+    setWorkflowDraft((current) => ({ ...current, [field]: value }));
+  };
+  const onPrepareWorkflow = (item, action) => {
+    if (!data) {
+      return;
+    }
+    const nextDraft = workflowDraftFromRequest(data, item, action);
+    setWorkflowDraft(nextDraft);
+    const taskLabel = nextDraft.taskId || item.task_id || item.id;
+    setStampedStatus(`${action} preset loaded for ${taskLabel}`);
+    window.requestAnimationFrame(() => {
+      document.getElementById("workflow-replan-card")?.scrollIntoView({ behavior: "smooth", block: "start" });
+    });
+  };
   const onSendMailboxMessage = () => void runAction("sending mailbox message", async () => {
     const payload = {
       from: mailboxDraft.from.trim(),
@@ -26676,12 +26994,46 @@ function App() {
     setMailboxDraft((current) => ({ ...current, relatedTaskIds: "", body: "" }));
     await refresh(true);
   });
+  const onApplyWorkflowUpdate = () => void runAction("updating workflow plan", async () => {
+    if (!workflowDraft.taskId) {
+      throw new Error("task selection is required");
+    }
+    const updates = {
+      title: workflowDraft.title.trim(),
+      owner: workflowDraft.owner.trim(),
+      claimed_by: workflowDraft.claimedBy.trim(),
+      status: workflowDraft.status.trim(),
+      claim_state: workflowDraft.claimState.trim(),
+      gate: workflowDraft.gate.trim(),
+      priority: workflowDraft.priority.trim(),
+      dependencies: parseQueue(workflowDraft.dependencies),
+      plan_required: workflowDraft.planRequired === "yes",
+      plan_state: workflowDraft.planState.trim(),
+      plan_summary: workflowDraft.planSummary.trim(),
+      claim_note: workflowDraft.claimNote.trim(),
+      review_note: workflowDraft.reviewNote.trim()
+    };
+    const response = await updateWorkflowTask(workflowDraft.taskId, updates, workflowDraft.managerNote.trim());
+    setWorkflowDraft(workflowDraftFromTask(response.task));
+    setStampedStatus(`workflow updated for ${response.task.id}`);
+    await refreshStateOnly();
+  });
   const onStopWorker = (agent) => void runAction(`shutting down ${agent}`, async () => {
     await stopWorker(agent, "A0 requested clean worker shutdown for cleanup.");
     await refresh(true);
   });
   const onConfirmCleanup = () => void runAction("confirming cleanup readiness", async () => {
-    await confirmTeamCleanup("Cleanup gate passed; session can now be released safely.");
+    const response = await confirmTeamCleanup("Cleanup gate passed; session can now be released safely.", cleanupReleaseListener);
+    if (response.listener_release_requested || response.listener_released) {
+      setAutoRefresh(false);
+      setData((current) => current ? {
+        ...current,
+        mode: { ...current.mode, listener_active: false },
+        cleanup: { ...response.cleanup, listener_active: false }
+      } : current);
+      setStampedStatus(`cleanup confirmed; listener release ${response.listener_released ? "already completed" : "scheduled"} on port ${response.listener_port || "unknown"}`);
+      return;
+    }
     await refresh(true);
   });
   const onSendA0Message = () => void runAction("sending message to A0", async () => {
@@ -26717,11 +27069,15 @@ function App() {
             standalone: true,
             replyDrafts: a0ReplyDrafts,
             composer: a0Composer,
+            workflowDraft,
             onReplyChange: onA0ReplyChange,
             onComposerChange: setA0Composer,
+            onWorkflowDraftChange,
             onReply: onA0Reply,
             onSendMessage: onSendA0Message,
-            onMailboxAck: onA0MailboxAck
+            onMailboxAck: onA0MailboxAck,
+            onApplyWorkflowUpdate,
+            onPrepareWorkflow
           }
         )
       ] })
@@ -26814,7 +27170,7 @@ function App() {
           /* @__PURE__ */ (0, import_jsx_runtime.jsx)("strong", { children: item.value })
         ] }, item.label)) })
       ] }) }),
-      data ? tab === "overview" ? /* @__PURE__ */ (0, import_jsx_runtime.jsx)(OverviewTab, { data, agentRows, progress, onOpenA0Console }) : tab === "operations" ? /* @__PURE__ */ (0, import_jsx_runtime.jsx)(OperationsTab, { data, mailboxDraft, onMailboxDraftChange, onSendMailboxMessage, onStopWorker, onConfirmCleanup, actionInFlight }) : /* @__PURE__ */ (0, import_jsx_runtime.jsx)(
+      data ? tab === "overview" ? /* @__PURE__ */ (0, import_jsx_runtime.jsx)(OverviewTab, { data, agentRows, progress, onOpenA0Console }) : tab === "operations" ? /* @__PURE__ */ (0, import_jsx_runtime.jsx)(OperationsTab, { data, mailboxDraft, workflowDraft, cleanupReleaseListener, onMailboxDraftChange, onWorkflowDraftChange, onSendMailboxMessage, onApplyWorkflowUpdate, onStopWorker, onCleanupReleaseChange: setCleanupReleaseListener, onConfirmCleanup, actionInFlight }) : /* @__PURE__ */ (0, import_jsx_runtime.jsx)(
         SettingsTab,
         {
           data,
