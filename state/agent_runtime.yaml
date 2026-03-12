@@ -1,5 +1,5 @@
 project: sonicmoe_fp8
-last_updated: '2026-03-12T19:00:00'
+last_updated: '2026-03-13T00:02:51'
 schema:
   required_fields:
   - agent
@@ -37,68 +37,88 @@ workers:
   status: active
 - agent: A1
   repository_name: target-repo
-  resource_pool: unassigned
-  provider: unassigned
-  model: unassigned
-  launch_owner: none
-  local_workspace_root: /Users/panzhaowu/labs/sonic-moe
-  repository_root: /Users/panzhaowu/labs/sonic-moe
-  worktree_path: unassigned
-  branch: unassigned
+  resource_pool: ducc_pool
+  provider: ducc
+  model: claude-sonnet-4-5
+  launch_owner: manager
+  local_workspace_root: /root/paddlejob/share-storage/gpfs/system-public/panzhaowu/lab/supersonic-moe
+  repository_root: /root/paddlejob/share-storage/gpfs/system-public/panzhaowu/lab/warp
+  worktree_path: /root/paddlejob/share-storage/gpfs/system-public/panzhaowu/lab/warp/worktrees/target_repo_a1
+  branch: a1_freeze_fp8_protocol
   environment_type: uv
-  environment_path: unassigned
+  environment_path: /root/paddlejob/share-storage/gpfs/system-public/panzhaowu/lab/supersonic-moe/.venv
   sync_command: uv sync
-  test_command: unassigned
+  test_command: uv run pytest tests/moe_test.py -k protocol
   submit_strategy: patch_handoff
-  status: not_started
+  status: launching
+  recursion_guard: env+exec-wrapper
+  launch_wrapper: /root/paddlejob/share-storage/gpfs/system-public/panzhaowu/lab/warp/runtime/generated_wrappers/ducc_single_layer.sh
+  merge_target: main
+  git_author_name: FP8 Worker
+  git_author_email: fp8-worker@example.com
 - agent: A2
   repository_name: target-repo
-  resource_pool: unassigned
-  provider: unassigned
-  model: unassigned
-  launch_owner: none
-  local_workspace_root: /Users/panzhaowu/labs/sonic-moe
-  repository_root: /Users/panzhaowu/labs/sonic-moe
-  worktree_path: unassigned
-  branch: unassigned
+  resource_pool: ducc_pool
+  provider: ducc
+  model: claude-sonnet-4-5
+  launch_owner: manager
+  local_workspace_root: /root/paddlejob/share-storage/gpfs/system-public/panzhaowu/lab/supersonic-moe
+  repository_root: /root/paddlejob/share-storage/gpfs/system-public/panzhaowu/lab/warp
+  worktree_path: /root/paddlejob/share-storage/gpfs/system-public/panzhaowu/lab/warp/worktrees/target_repo_a2
+  branch: a2_audit_hopper_float8_path
   environment_type: uv
-  environment_path: unassigned
+  environment_path: /root/paddlejob/share-storage/gpfs/system-public/panzhaowu/lab/supersonic-moe/.venv
   sync_command: uv sync
-  test_command: unassigned
+  test_command: uv run pytest tests/moe_test.py -k test_moe
   submit_strategy: patch_handoff
-  status: not_started
+  status: launching
+  recursion_guard: env+exec-wrapper
+  launch_wrapper: /root/paddlejob/share-storage/gpfs/system-public/panzhaowu/lab/warp/runtime/generated_wrappers/ducc_single_layer.sh
+  merge_target: main
+  git_author_name: FP8 Worker
+  git_author_email: fp8-worker@example.com
 - agent: A3
   repository_name: target-repo
-  resource_pool: unassigned
-  provider: unassigned
-  model: unassigned
-  launch_owner: none
-  local_workspace_root: /Users/panzhaowu/labs/sonic-moe
-  repository_root: /Users/panzhaowu/labs/sonic-moe
-  worktree_path: unassigned
-  branch: unassigned
+  resource_pool: ducc_pool
+  provider: ducc
+  model: claude-sonnet-4-5
+  launch_owner: manager
+  local_workspace_root: /root/paddlejob/share-storage/gpfs/system-public/panzhaowu/lab/supersonic-moe
+  repository_root: /root/paddlejob/share-storage/gpfs/system-public/panzhaowu/lab/warp
+  worktree_path: /root/paddlejob/share-storage/gpfs/system-public/panzhaowu/lab/warp/worktrees/target_repo_a3
+  branch: a3_audit_blackwell_quack_path
   environment_type: uv
-  environment_path: unassigned
+  environment_path: /root/paddlejob/share-storage/gpfs/system-public/panzhaowu/lab/supersonic-moe/.venv
   sync_command: uv sync
-  test_command: unassigned
+  test_command: USE_QUACK_GEMM=1 uv run pytest tests/moe_test.py -k test_moe
   submit_strategy: patch_handoff
-  status: not_started
+  status: launching
+  recursion_guard: env+exec-wrapper
+  launch_wrapper: /root/paddlejob/share-storage/gpfs/system-public/panzhaowu/lab/warp/runtime/generated_wrappers/ducc_single_layer.sh
+  merge_target: main
+  git_author_name: FP8 Worker
+  git_author_email: fp8-worker@example.com
 - agent: A4
   repository_name: target-repo
-  resource_pool: unassigned
-  provider: unassigned
-  model: unassigned
-  launch_owner: none
-  local_workspace_root: /Users/panzhaowu/labs/sonic-moe
-  repository_root: /Users/panzhaowu/labs/sonic-moe
-  worktree_path: unassigned
-  branch: unassigned
+  resource_pool: ducc_pool
+  provider: ducc
+  model: claude-sonnet-4-5
+  launch_owner: manager
+  local_workspace_root: /root/paddlejob/share-storage/gpfs/system-public/panzhaowu/lab/supersonic-moe
+  repository_root: /root/paddlejob/share-storage/gpfs/system-public/panzhaowu/lab/warp
+  worktree_path: /root/paddlejob/share-storage/gpfs/system-public/panzhaowu/lab/warp/worktrees/target_repo_a4
+  branch: a4_build_reference_path
   environment_type: uv
-  environment_path: unassigned
+  environment_path: /root/paddlejob/share-storage/gpfs/system-public/panzhaowu/lab/supersonic-moe/.venv
   sync_command: uv sync
-  test_command: unassigned
+  test_command: uv run pytest tests/moe_test.py -k test_moe
   submit_strategy: patch_handoff
-  status: not_started
+  status: launching
+  recursion_guard: env+exec-wrapper
+  launch_wrapper: /root/paddlejob/share-storage/gpfs/system-public/panzhaowu/lab/warp/runtime/generated_wrappers/ducc_single_layer.sh
+  merge_target: main
+  git_author_name: FP8 Worker
+  git_author_email: fp8-worker@example.com
 - agent: A5
   repository_name: target-repo
   resource_pool: unassigned

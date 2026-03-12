@@ -328,13 +328,15 @@ class RoutingMixin:
         if not isinstance(project, dict):
             return ""
         agent = str(worker.get("agent", "")).strip()
+        if not agent:
+            return ""
         local_repo_root = str(project.get("local_repo_root", "")).strip()
         repository_name = str(project.get("repository_name", "")).strip()
-        if not agent or not local_repo_root or is_placeholder_path(local_repo_root):
-            return ""
         DEFAULT_WORKTREE_DIR.mkdir(parents=True, exist_ok=True)
-        root_path = Path(local_repo_root).expanduser()
-        base_name = repository_name or root_path.name or "workspace"
+        if local_repo_root and not is_placeholder_path(local_repo_root):
+            base_name = repository_name or Path(local_repo_root).expanduser().name or "workspace"
+        else:
+            base_name = repository_name or "workspace"
         safe_base_name = "_".join(part for part in base_name.replace("-", "_").split("_") if part) or "workspace"
         return str((DEFAULT_WORKTREE_DIR / f"{safe_base_name}_{agent.lower()}").resolve())
 

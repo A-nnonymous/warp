@@ -1,5 +1,5 @@
 project: sonicmoe-fp8
-last_updated: '2026-03-10T17:42:17'
+last_updated: '2026-03-13T00:02:51'
 policy:
   manager_review_cycle: every handoff or resume
   planning_window: one manager review cycle
@@ -14,32 +14,32 @@ agents:
   escalation: none
 - agent: A1
   role: protocol
-  state: not-started
-  last_seen: none
-  evidence: no runtime heartbeat yet
-  expected_next_checkin: after A1 draft exists
-  escalation: do not schedule as active before protocol draft
+  state: launching
+  last_seen: '2026-03-13T00:01:41'
+  evidence: process_spawned
+  expected_next_checkin: while worker process is alive
+  escalation: waiting for first monitor check
 - agent: A2
   role: hopper-backend
-  state: not-started
-  last_seen: none
-  evidence: no runtime heartbeat yet
-  expected_next_checkin: after A1 draft exists
-  escalation: do not schedule as active before protocol draft
+  state: launching
+  last_seen: '2026-03-13T00:02:06'
+  evidence: process_spawned
+  expected_next_checkin: while worker process is alive
+  escalation: waiting for first monitor check
 - agent: A3
   role: blackwell-backend
-  state: not-started
-  last_seen: none
-  evidence: no runtime heartbeat yet
-  expected_next_checkin: after A1 draft exists
-  escalation: do not schedule as active before protocol draft
+  state: launching
+  last_seen: '2026-03-13T00:02:28'
+  evidence: process_spawned
+  expected_next_checkin: while worker process is alive
+  escalation: waiting for first monitor check
 - agent: A4
   role: torch-functional
-  state: not-started
-  last_seen: none
-  evidence: no runtime heartbeat yet
-  expected_next_checkin: after backend and protocol review
-  escalation: keep parked until G1 path is ready
+  state: launching
+  last_seen: '2026-03-13T00:02:51'
+  evidence: process_spawned
+  expected_next_checkin: while worker process is alive
+  escalation: waiting for first monitor check
 - agent: A5
   role: tests
   state: not-started

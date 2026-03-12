@@ -107,7 +107,10 @@ export function deriveWorktreePath(config: ConfigShape, agent: string): string {
       return `${worktreePath.slice(0, -suffix.length)}_${normalizedAgent}`;
     }
   }
-  return '';
+  // Fallback: derive from repository_name or 'workspace' under worktrees/
+  const repoName = normalizedText(config.project?.repository_name);
+  const baseName = (repoName || 'workspace').replace(/-/g, '_').split('_').filter(Boolean).join('_') || 'workspace';
+  return `worktrees/${baseName}_${normalizedAgent}`;
 }
 
 export function deriveBranchName(agent: string, title: string, taskId: string): string {
