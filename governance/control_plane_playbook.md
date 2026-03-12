@@ -15,13 +15,15 @@ Operate or evolve the FP8 control plane without losing the simplified workflow t
 ## Read Order
 
 1. `README.md`
-2. `governance/agent_team_patterns.md`
-3. `governance/worker_launch_playbook.md`
-4. `runtime/control_plane.py`
-5. `runtime/config_template.yaml`
-6. `runtime/web/src/App.tsx`
-7. `state/backlog.yaml`
-8. `state/agent_runtime.yaml`
+2. `governance/manager_protocol.md`
+3. `governance/documentation_architecture.md`
+4. `governance/agent_team_patterns.md`
+5. `governance/worker_launch_playbook.md`
+6. `runtime/control_plane.py`
+7. `runtime/config_template.yaml`
+8. `runtime/web/src/App.tsx`
+9. `state/backlog.yaml`
+10. `state/agent_runtime.yaml`
 
 ## Working Rules
 
@@ -33,6 +35,7 @@ Operate or evolve the FP8 control plane without losing the simplified workflow t
 6. Keep worker roster logic synchronized with backlog/runtime plan.
 7. Use provider availability plus persisted quality history when A0 recommends or locks a resource pool.
 8. Keep docs and runtime behavior aligned in the same change.
+9. Preserve resumability, interruption priority, and low-context takeover quality as first-class concerns.
 
 ## High-Frequency Operator Path
 

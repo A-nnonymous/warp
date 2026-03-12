@@ -2114,14 +2114,18 @@ class ControlPlaneService:
 
         default_environment_type = str(worker_defaults.get("environment_type", "uv")).strip() or "uv"
         default_environment_path = str(worker_defaults.get("environment_path", "")).strip()
-        if default_environment_type != "none" and default_environment_path:
-            if is_placeholder_path(default_environment_path):
+        if default_environment_type == "venv":
+            if not default_environment_path:
+                add_issue("worker_defaults.environment_path", "environment path is required when environment_type is venv")
+            elif is_placeholder_path(default_environment_path):
                 add_issue("worker_defaults.environment_path", "environment path must be replaced with a real path")
             elif not path_exists_via_ls(default_environment_path):
                 add_issue(
                     "worker_defaults.environment_path",
                     f"environment path does not exist: {default_environment_path}",
                 )
+        elif default_environment_type not in {"none", "uv"} and default_environment_path and is_placeholder_path(default_environment_path):
+            add_issue("worker_defaults.environment_path", "environment path must be replaced with a real path")
 
         default_git_identity = worker_defaults.get("git_identity")
         if default_git_identity is not None:
@@ -2183,16 +2187,18 @@ class ControlPlaneService:
 
             environment_type = str(effective_worker.get("environment_type", "uv")).strip() or "uv"
             environment_path = str(effective_worker.get("environment_path", "")).strip()
-            if environment_type != "none":
+            if environment_type == "venv":
                 if not environment_path:
                     add_issue(
                         f"{field_root}.environment_path",
-                        "environment path is required when environment_type is not none",
+                        "environment path is required when environment_type is venv",
                     )
                 elif is_placeholder_path(environment_path):
                     add_issue(f"{field_root}.environment_path", "environment path must be replaced with a real path")
                 elif not path_exists_via_ls(environment_path):
                     add_issue(f"{field_root}.environment_path", f"environment path does not exist: {environment_path}")
+            elif environment_type not in {"none", "uv"} and environment_path and is_placeholder_path(environment_path):
+                add_issue(f"{field_root}.environment_path", "environment path must be replaced with a real path")
 
             if not str(effective_worker.get("test_command", "")).strip():
                 add_issue(f"{field_root}.test_command", "test_command is required")

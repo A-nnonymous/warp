@@ -9,7 +9,9 @@ Use this prompt when opening the repository on a new machine or when starting a 
 - the local folder name may differ from the fork name
 - no code changes should be made until the control plane is fully restored and reported
 
-## Canonical startup prompt
+## 新机器启动提示（中文版本）/ New Machine Startup Prompt (Chinese)
+
+The prompt below is intentionally written in Chinese for teams using that language.
 
 Paste the following into the next chat session:
 

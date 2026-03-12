@@ -4,6 +4,15 @@
 
 Run multiple agents in parallel without relying on any single agent's conversational memory.
 
+This operating model assumes:
+
+- top-level objective clarity is more important than premature parallelism
+- checkpoint quality is a hard requirement, not documentation garnish
+- interruption handling is a control concern, not an implementation detail
+- self-evolution of the organization matters as much as forward engineering progress
+
+See `governance/manager_protocol.md` for the manager-level rules behind those assumptions.
+
 ## Model
 
 ### Roles
@@ -11,6 +20,13 @@ Run multiple agents in parallel without relying on any single agent's conversati
 - Manager: owns planning, gating, integration, escalation, and user reporting
 - Worker agents: own bounded implementation tracks
 - Gates: explicit pass/fail control points between stages
+
+### Planning authority
+
+- the manager may revise the global plan
+- each worker may revise its own local task plan
+- upward plans are readable but not writable from below
+- unsolved ambiguity escalates upward instead of being silently patched over
 
 ### Current worker ownership
 
@@ -95,6 +111,8 @@ Every real worker must have an entry in `state/agent_runtime.yaml` before it is 
 Agent startup is not assumed. The manager must distinguish between planned agents and agents that are actually alive.
 
 Heartbeat state is recorded in `state/heartbeats.yaml`.
+
+Heartbeat stop is not only a status change. It is one of the manager's highest-priority interruption signals.
 
 ### Heartbeat states
 
@@ -242,6 +260,12 @@ The manager should run this loop at every handoff or resume:
 9. Recompute blockers, alive agents, and next parallel set
 10. Update manager report
 11. Refresh checkpoint if anything material changed
+
+Manager interruption priority remains:
+
+1. human instruction
+2. worker heartbeat failure
+3. worker decision request
 
 ## Escalation cases
 

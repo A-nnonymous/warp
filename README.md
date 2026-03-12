@@ -21,6 +21,20 @@ Default target repository name: `target-repo`
 - `checkpoints/`: resumable manager and worker snapshots
 - `experiments/`: experiment registry
 - `reports/`: production-facing reporting and delivery artifacts
+- `bootstrap/`: low-overhead handoff package for zero-context AI agents continuing warp development
+
+## Documentation Architecture
+
+The markdown system is intentionally split by responsibility:
+
+- `README.md`: shortest reliable operator overview
+- `bootstrap/`: low-context AI-agent takeover for continued `warp` development
+- `governance/`: stable process law and control-plane design rules
+- `strategy/`: current plan and technical baseline mapping
+- `state/`, `status/`, `checkpoints/`: live durable control state
+- `reports/`: synthesized operational and delivery outputs
+
+For the authoritative markdown map, read `governance/documentation_architecture.md`.
 
 ## Minimum files to read
 
@@ -59,12 +73,37 @@ Warp treats collaboration as durable repository state, not transient provider ch
 
 ## Startup entrypoints
 
+- zero-context warp-development handoff: `bootstrap/BOOTSTRAP.md`
 - cold start on a new machine: `new_machine_prompt.md`
 - resume an interrupted session: `RESUME.md`
+- manager behavior and interruption law: `governance/manager_protocol.md`
+- markdown responsibility map: `governance/documentation_architecture.md`
 - control-plane execution checklist: `governance/control_plane_playbook.md`
 - launch workers: `governance/worker_launch_playbook.md`
 - run integrated frontend and backend: `runtime/control_plane.py`
 - current production snapshot: `reports/manager_report.md`
+
+## Agent bootstrap
+
+If a fresh AI agent needs to continue developing `warp` itself with minimal context cost, start from `bootstrap/BOOTSTRAP.md`.
+
+That bootstrap package is distinct from:
+
+- `RESUME.md`, which restores an active control session
+- `new_machine_prompt.md`, which rebuilds state on a new machine
+
+The bootstrap folder packages:
+
+- the canonical takeover prompt
+- the compact repo map
+- the settled workflow invariants that should not be regressed
+- the default validation loop for control-plane changes
+- the recent decisions that are easiest to accidentally rediscover the hard way
+
+The governance layer now also separates two stable concerns that used to diffuse across multiple docs:
+
+- `governance/manager_protocol.md` for manager objectives, interruption priority, checkpoint-first rules, self-evolution, and planning authority
+- `governance/documentation_architecture.md` for markdown responsibility boundaries and anti-noise rules
 
 ## Deployment assumption
 

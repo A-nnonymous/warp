@@ -25447,8 +25447,8 @@ function getLocalValidationIssues(config, data) {
     if (!String(effectiveWorker.submit_strategy || "").trim()) {
       add(`${root}.submit_strategy`, "submit strategy is required");
     }
-    if (String(effectiveWorker.environment_type || "uv") !== "none" && !String(effectiveWorker.environment_path || "").trim()) {
-      add(`${root}.environment_path`, "environment path is required unless environment type is none");
+    if (String(effectiveWorker.environment_type || "uv") === "venv" && !String(effectiveWorker.environment_path || "").trim()) {
+      add(`${root}.environment_path`, "environment path is required when environment type is venv");
     }
   });
   return issues;
