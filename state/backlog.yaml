@@ -1,5 +1,5 @@
 project: sonicmoe-fp8
-last_updated: 2026-03-10
+last_updated: 2026-03-12
 manager: A0
 phase: protocol-freeze
 items:
@@ -140,3 +140,22 @@ items:
     done_when:
       - benchmark arguments are fixed
       - perf collection fields are fixed
+
+  - id: A4-002
+    title: Verify training step closure
+    task_type: reference
+    owner: A4
+    status: blocked
+    claim_state: unclaimed
+    claimed_by: ''
+    plan_required: false
+    plan_state: none
+    gate: G5
+    priority: P0
+    dependencies: [A4-001, A5-001]
+    outputs:
+      - training-step test result
+      - NaN/Inf stability report
+    done_when:
+      - optimizer step runs end to end
+      - no unexplained numerical failure

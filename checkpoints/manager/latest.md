@@ -1,20 +1,37 @@
 # Latest Checkpoint
 
-Timestamp: 2026-03-10
+Timestamp: 2026-03-12
 Project: sonicmoe-fp8
-Phase: preflight bootstrap
+Phase: post-audit bootstrap
 Manager: A0
 
 ## Snapshot
 
-- Governance scaffold exists in ``
+- Governance scaffold complete, axioms.md added as human-write-only foundation
+- Bootstrap docs optimized: README 421→199 lines, validation commands single-sourced, audit feedback loop added
+- Full architecture audit completed: backend (4855 lines), frontend (2959 lines), config, state files
+- Integration tests: 24/24 passing after uv-fallback fix
+- Frontend build: skipped (current machine has no npm; static assets from prior build intact)
 - FP8 project plan exists in `strategy/integration_plan.md`
-- baseline trace exists in `strategy/baseline_trace.md`
-- heartbeat registry exists in `state/heartbeats.yaml`
-- edit-lock registry exists in `state/edit_locks.yaml`
-- per-agent checkpoints exist in `checkpoints/agents/`
-- real implementation has not started
-- no governed experiments have been launched
+- Baseline trace exists in `strategy/baseline_trace.md`
+- Real implementation has not started
+- No governed experiments have been launched
+
+## What Changed This Session
+
+- `governance/axioms.md`: 7 foundational axioms (human-write-only)
+- `README.md`: deduplicated commands (5→1), added key terms, disambiguated read lists
+- `bootstrap/`: audit feedback mechanism, validation single-sourced to OPERATING_LOOP.md
+- `runtime/control_plane.py`: detach_process prefers system python when yaml is available
+- `runtime/test_control_plane_integration.py`: _server_launch_cmd falls back to system python
+
+## Known Issues From Audit
+
+- `manager_local` resource pool referenced in agent_runtime.yaml but undeclared in config/provider_stats
+- Gate G5 (Training Closure) has no backlog item
+- A5-001 task dependencies narrower than its gate G4 dependencies (potential drift)
+- 3 of 4 provider pools unreachable (only ducc_pool is live)
+- Frontend: 2959-line single-file App.tsx, no test infra, no useCallback/memo, no debounce on hydration
 
 ## Current Goal
 
@@ -28,6 +45,11 @@ Pass G0 Protocol Freeze.
 - Paddle is semantic reference plus compatibility input
 - grouped_gemm already has float8-related hooks
 - QuACK already exists for Blackwell-oriented flow
+
+## Next Safe Step
+
+1. Fix state file inconsistencies (undeclared manager_local pool, missing G5 backlog item)
+2. Advance G0: launch A1 (protocol freeze) and A6 (baseline trace freeze)
 
 ## Resume Rule
 

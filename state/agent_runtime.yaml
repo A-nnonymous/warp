@@ -1,5 +1,5 @@
 project: sonicmoe_fp8
-last_updated: '2026-03-10T17:42:17'
+last_updated: '2026-03-12T19:00:00'
 schema:
   required_fields:
   - agent
@@ -21,9 +21,9 @@ schema:
 workers:
 - agent: A0
   repository_name: target-repo
-  resource_pool: manager_local
-  provider: copilot
-  model: gpt-5.4
+  resource_pool: none
+  provider: none
+  model: none
   launch_owner: manager
   local_workspace_root: /Users/panzhaowu/labs/sonic-moe
   repository_root: /Users/panzhaowu/labs/sonic-moe

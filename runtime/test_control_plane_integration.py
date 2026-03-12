@@ -18,6 +18,26 @@ from pathlib import Path
 WARP_ROOT = Path(__file__).resolve().parents[1]
 
 
+def _yaml_available_in_system_python() -> bool:
+    """Return True if the current Python interpreter can import yaml."""
+    try:
+        import yaml  # noqa: F401
+        return True
+    except ImportError:
+        return False
+
+
+def _server_launch_cmd(script: str | Path, extra_args: list[str]) -> list[str]:
+    """Build the command list to launch the control-plane server.
+
+    Prefers the current ``python3`` interpreter when PyYAML is already
+    installed, falling back to ``uv run --with PyYAML`` otherwise.
+    """
+    if _yaml_available_in_system_python():
+        return [sys.executable, str(script)] + extra_args
+    return ["uv", "run", "--with", "PyYAML>=6.0.2", "python", str(script)] + extra_args
+
+
 def read_json(url: str, payload: dict[str, object] | None = None, timeout: float = 5.0) -> dict[str, object]:
     data = None if payload is None else json.dumps(payload).encode("utf-8")
     request = urllib.request.Request(url, data=data)
@@ -116,13 +136,7 @@ class ControlPlaneIntegrationTest(unittest.TestCase):
         self.env = env
 
         self.server = subprocess.Popen(
-            [
-                "uv",
-                "run",
-                "--with",
-                "PyYAML>=6.0.2",
-                "python",
-                str(self.runtime_script),
+            _server_launch_cmd(self.runtime_script, [
                 "serve",
                 "--config",
                 str(self.config_path),
@@ -131,7 +145,7 @@ class ControlPlaneIntegrationTest(unittest.TestCase):
                 "127.0.0.1",
                 "--port",
                 str(self.port),
-            ],
+            ]),
             cwd=self.root,
             env=env,
             stdout=subprocess.PIPE,
@@ -363,17 +377,11 @@ class ControlPlaneIntegrationTest(unittest.TestCase):
 
     def run_cli_command(self, *args: str) -> subprocess.CompletedProcess[str]:
         return subprocess.run(
-            [
-                "uv",
-                "run",
-                "--with",
-                "PyYAML>=6.0.2",
-                "python",
-                str(self.runtime_script),
+            _server_launch_cmd(self.runtime_script, [
                 *args,
                 "--port",
                 str(self.port),
-            ],
+            ]),
             cwd=self.root,
             env=self.env,
             stdout=subprocess.PIPE,
@@ -744,13 +752,7 @@ class ControlPlaneIntegrationTest(unittest.TestCase):
 
     def test_detached_serve_fails_clearly_when_port_is_busy(self) -> None:
         result = subprocess.run(
-            [
-                "uv",
-                "run",
-                "--with",
-                "PyYAML>=6.0.2",
-                "python",
-                str(self.runtime_script),
+            _server_launch_cmd(self.runtime_script, [
                 "serve",
                 "--config",
                 str(self.config_path),
@@ -758,7 +760,7 @@ class ControlPlaneIntegrationTest(unittest.TestCase):
                 "127.0.0.1",
                 "--port",
                 str(self.port),
-            ],
+            ]),
             cwd=self.root,
             env=self.env,
             stdout=subprocess.PIPE,
@@ -1060,13 +1062,7 @@ class ControlPlaneIntegrationTest(unittest.TestCase):
         nested_env["CONTROL_PLANE_RECURSION_POLICY"] = "forbid-nested-control-plane"
 
         result = subprocess.run(
-            [
-                "uv",
-                "run",
-                "--with",
-                "PyYAML>=6.0.2",
-                "python",
-                str(self.runtime_script),
+            _server_launch_cmd(self.runtime_script, [
                 "up",
                 "--config",
                 str(self.config_path),
@@ -1074,7 +1070,7 @@ class ControlPlaneIntegrationTest(unittest.TestCase):
                 "127.0.0.1",
                 "--port",
                 str(nested_port),
-            ],
+            ]),
             cwd=self.root,
             env=nested_env,
             stdout=subprocess.PIPE,

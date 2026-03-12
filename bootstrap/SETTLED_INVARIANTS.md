@@ -35,3 +35,15 @@ These are the highest-value decisions that a takeover agent should not accidenta
 
 - Resource-pool choice should stay driven by task policies, provider availability, and persisted quality history.
 - Backlog `task_type` plus `task_policies` should remain the source of task-aware routing and test command selection.
+
+## Code Index Maintenance
+
+- Every code addition or structural change must update `CODE_INDEX.md` in the affected directory.
+- New exports must appear in the index; split or merged modules must be reflected.
+- Index files: `runtime/cp/CODE_INDEX.md` (backend), `runtime/web/src/CODE_INDEX.md` (frontend).
+
+## Runtime Launcher Fallback
+
+- When system Python already has PyYAML, both the test harness and `detach_process` must prefer `sys.executable` over `uv run`.
+- `uv run --with PyYAML` is the fallback, not the default, because it requires network access to resolve packages.
+- The `_server_launch_cmd` helper in the test file and the launcher logic in `detach_process` must stay aligned on this priority.

@@ -17,6 +17,7 @@ Each markdown file should have one primary responsibility.
 
 ### 2. Governance Documents
 
+- `governance/axioms.md`: foundational axioms, human-write-only, all other governance derives from these
 - `governance/manager_protocol.md`: manager responsibilities, interruption priority, self-evolution model, planning authority
 - `governance/operating_model.md`: durable multi-agent operating semantics
 - `governance/control_plane_playbook.md`: how to change `warp` without regressing the operator path
@@ -74,6 +75,7 @@ To reduce duplication, use these boundaries:
 
 ### Put It In governance
 
+- foundational axioms (human-write-only)
 - stable collaboration law
 - planning authority
 - escalation rules

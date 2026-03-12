@@ -1,18 +1,18 @@
 # Manager Report
 
-Last updated: 2026-03-11T21:16:35
+Last updated: 2026-03-12T23:31:07
 
 ## Production View
 
 - Stage: live manager polling
-- Delivery mode: listener offline
+- Delivery mode: listener active
 - Current gate: G0 Protocol Freeze
 - Current manager: A0
 - Poll loop: every 5 seconds
 
 ## Real Liveness
 
-- A0: offline
+- A0: healthy
 - A1: not-started
 - A2: not-started
 - A3: not-started

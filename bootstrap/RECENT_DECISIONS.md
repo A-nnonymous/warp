@@ -53,14 +53,25 @@ Treat those items as design territory unless the runtime and state schema explic
 
 ## Validation Baseline
 
-The reliable validation path for meaningful warp workflow changes is:
+See `bootstrap/OPERATING_LOOP.md` for the canonical validation commands and area-specific triggers.
 
-1. `python3 -m py_compile runtime/control_plane.py runtime/test_control_plane_integration.py`
-2. `cd runtime/web && npm run build`
-3. `python3 -m unittest runtime.test_control_plane_integration -v`
+## Bootstrap Doc Optimization (2026-03-12)
 
-## If You Touch These Areas Again
+- README deduplicated from 421→199 lines; commands consolidated to one table
+- Validation commands single-sourced to OPERATING_LOOP.md
+- Bootstrap audit feedback loop added to BOOTSTRAP.md and canonical prompt
+- `governance/axioms.md` created as human-write-only foundation, placed first in bootstrap read order
 
-- `runtime/control_plane.py`: re-check config validation, launch blockers, and worktree/bootstrap behavior together
-- `runtime/web/src/App.tsx`: re-check settings hydration, section save behavior, and launch behavior together
-- `README.md`: keep operator instructions aligned with runtime behavior in the same patch
+## Runtime Launcher Fallback (2026-03-12)
+
+- `detach_process` in control_plane.py and test harness both prefer system python when yaml is importable
+- This fixed 24/24 test failures in offline environments where `uv` cannot reach PyPI
+- Settled as invariant in SETTLED_INVARIANTS.md
+
+## Architecture Audit Findings (2026-03-12)
+
+State file inconsistencies to address before launch:
+
+- `manager_local` pool referenced in agent_runtime.yaml but undeclared in config and provider_stats
+- Gate G5 has no corresponding backlog item
+- Frontend is a 2959-line single file with no test infrastructure

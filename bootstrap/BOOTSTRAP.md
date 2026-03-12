@@ -14,14 +14,15 @@ This package is optimized for low token cost:
 
 ## Minimal Read Order
 
-1. `bootstrap/REPO_MAP.md`
-2. `bootstrap/SETTLED_INVARIANTS.md`
-3. `bootstrap/OPERATING_LOOP.md`
-4. `bootstrap/RECENT_DECISIONS.md`
-5. `README.md`
-6. `governance/manager_protocol.md`
-7. `governance/documentation_architecture.md`
-8. `governance/control_plane_playbook.md`
+1. `governance/axioms.md`
+2. `bootstrap/REPO_MAP.md`
+3. `bootstrap/SETTLED_INVARIANTS.md`
+4. `bootstrap/OPERATING_LOOP.md`
+5. `bootstrap/RECENT_DECISIONS.md`
+6. `README.md`
+7. `governance/manager_protocol.md`
+8. `governance/documentation_architecture.md`
+9. `governance/control_plane_playbook.md`
 
 After that, read only the files directly relevant to the task.
 
@@ -49,15 +50,16 @@ You are taking over development of the warp repository itself.
 Your goal is to continue improving the control plane with minimal context-gathering cost and without regressing settled workflow decisions.
 
 Before writing code:
-1. Read bootstrap/BOOTSTRAP.md.
-2. Read bootstrap/REPO_MAP.md.
-3. Read bootstrap/SETTLED_INVARIANTS.md.
-4. Read bootstrap/OPERATING_LOOP.md.
-5. Read bootstrap/RECENT_DECISIONS.md.
-6. Read README.md.
-7. Read governance/manager_protocol.md.
-8. Read governance/documentation_architecture.md.
-9. Read governance/control_plane_playbook.md.
+1. Read governance/axioms.md.
+2. Read bootstrap/BOOTSTRAP.md.
+3. Read bootstrap/REPO_MAP.md.
+4. Read bootstrap/SETTLED_INVARIANTS.md.
+5. Read bootstrap/OPERATING_LOOP.md.
+6. Read bootstrap/RECENT_DECISIONS.md.
+7. Read README.md.
+8. Read governance/manager_protocol.md.
+9. Read governance/documentation_architecture.md.
+10. Read governance/control_plane_playbook.md.
 
 Then produce a short takeover report that includes:
 - what warp is responsible for
@@ -65,8 +67,9 @@ Then produce a short takeover report that includes:
 - the settled invariants you must not regress
 - the exact repo files you now need to inspect for the requested task
 - the validation commands you will run before finishing
+- redundancies, contradictions, or confusing passages found during bootstrap reading, with concrete fix proposals
 
-Only after that report, inspect the task-specific files and implement the requested change.
+Only after that report, fix any bootstrap doc issues you found, then inspect the task-specific files and implement the requested change.
 
 Rules:
 - Prefer the simplest operator workflow.
@@ -88,6 +91,16 @@ Rules:
 - For markdown responsibility boundaries, read `governance/documentation_architecture.md`.
 - For collaboration semantics, read `governance/agent_team_patterns.md` and `governance/operating_model.md`.
 
+## Bootstrap Audit Requirement
+
+Every bootstrap must include a feedback pass before starting real work:
+
+1. After reading the bootstrap files, identify redundancies, contradictions, or confusing passages you encountered.
+2. Fix them in the same session if the fix is small and clear.
+3. If the fix is large, record it as a backlog item with a concrete proposal.
+
+This is not optional. The bootstrap package degrades silently unless every new agent actively maintains it.
+
 ## Expected Finish Quality
 
 Every meaningful change should leave behind:
@@ -96,3 +109,4 @@ Every meaningful change should leave behind:
 - updated compiled frontend assets when UI source changed
 - passing validation commands
 - no regression of the default ducc-first path
+- bootstrap docs updated if a new invariant was settled or an old one was corrected

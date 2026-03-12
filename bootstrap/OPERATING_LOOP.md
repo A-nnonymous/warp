@@ -41,6 +41,14 @@ Preferred live check pattern:
 - Avoid stale duplication between runtime behavior and README/docs.
 - Never change frontend source without rebuilding static assets.
 
+## Area-Specific Validation Triggers
+
+When touching these areas, cross-check the related concerns together:
+
+- `runtime/control_plane.py`: config validation, launch blockers, and worktree/bootstrap behavior
+- `runtime/web/src/App.tsx`: settings hydration, section save behavior, and launch behavior
+- `README.md`: operator instructions must match runtime behavior in the same patch
+
 ## Handoff Rules
 
 If you settle a new workflow invariant, update this bootstrap folder so the next agent does not have to rediscover it.

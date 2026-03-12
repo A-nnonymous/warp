@@ -19,9 +19,11 @@ Operate or evolve the FP8 control plane without losing the simplified workflow t
 3. `governance/documentation_architecture.md`
 4. `governance/agent_team_patterns.md`
 5. `governance/worker_launch_playbook.md`
-6. `runtime/control_plane.py`
-7. `runtime/config_template.yaml`
-8. `runtime/web/src/App.tsx`
+6. `runtime/cp/CODE_INDEX.md`
+7. `runtime/control_plane.py` → `runtime/cp/` (see index)
+8. `runtime/config_template.yaml`
+9. `runtime/web/src/CODE_INDEX.md`
+10. `runtime/web/src/App.tsx` → `runtime/web/src/` (see index)
 9. `state/backlog.yaml`
 10. `state/agent_runtime.yaml`
 
@@ -118,10 +120,7 @@ Operate or evolve the FP8 control plane without losing the simplified workflow t
 
 ## Validation Checklist
 
-1. Run Python compile checks on touched runtime/test files when feasible.
-2. Run `npm run build` in `runtime/web` after frontend edits.
-3. Run the live control-plane integration test for meaningful workflow changes.
-4. If pre-commit reformats files, restage and continue.
+Canonical validation commands live in `bootstrap/OPERATING_LOOP.md`. Run those commands after meaningful changes. If pre-commit reformats files, restage and continue.
 
 ## Regression Questions
 
@@ -132,6 +131,14 @@ Operate or evolve the FP8 control plane without losing the simplified workflow t
 - Did docs drift away from current runtime behavior?
 - Did worker roster behavior fall back to stale examples instead of live plan state?
 - Did we make worktree handling stricter than runtime actually requires?
+
+## Index Maintenance Rule
+
+Every code addition or structural change must recursively update the `CODE_INDEX.md` in the affected directory. If a new export is added, it must appear in the index. If a module is split or merged, the index must reflect the new structure. An agent that adds code without updating the index has left the codebase in a worse state.
+
+Index files live at:
+- `runtime/cp/CODE_INDEX.md` — backend control-plane package
+- `runtime/web/src/CODE_INDEX.md` — frontend dashboard
 
 ## Expected Output Quality
 

@@ -34,6 +34,7 @@ It owns:
 ## Operator and Governance Docs
 
 - `README.md`: operator-facing overview and common commands
+- `governance/axioms.md`: foundational axioms, human-write-only
 - `governance/manager_protocol.md`: manager contract, interruption priority, self-evolution, planning authority
 - `governance/documentation_architecture.md`: markdown responsibility map
 - `governance/control_plane_playbook.md`: change checklist for warp itself
