@@ -96,12 +96,26 @@ def request_json_allow_error(
         return int(exc.code), body
 
 
+_COPYTREE_SKIP = {"worktrees", "node_modules", "__pycache__", ".git", "logs"}
+
+
+def _copytree_ignore(directory: str, entries: list[str]) -> set[str]:
+    return {e for e in entries if e in _COPYTREE_SKIP or e.endswith(".pyc")}
+
+
 class ControlPlaneIntegrationTest(unittest.TestCase):
     def setUp(self) -> None:
         self.temp_dir = tempfile.TemporaryDirectory(prefix="fp8-control-plane-it-")
         self.root = Path(self.temp_dir.name)
         self.warp_root = self.root / "warp"
-        shutil.copytree(WARP_ROOT, self.warp_root)
+        shutil.copytree(WARP_ROOT, self.warp_root, ignore=_copytree_ignore)
+        # Reset state files so tests start with a clean first-launch environment.
+        state_dir = self.warp_root / "state"
+        for state_file in ("agent_runtime.yaml", "heartbeats.yaml", "provider_stats.yaml",
+                           "edit_locks.yaml", "team_mailbox.yaml"):
+            path = state_dir / state_file
+            if path.exists():
+                path.write_text("", encoding="utf-8")
         self.runtime_script = self.warp_root / "runtime" / "control_plane.py"
         self.bin_dir = self.root / "bin"
         self.bin_dir.mkdir(parents=True, exist_ok=True)
@@ -888,8 +902,8 @@ class ControlPlaneIntegrationTest(unittest.TestCase):
     def test_dashboard_exposes_manager_identity_and_handoff_details(self) -> None:
         state = self.fetch_state()
         runtime_workers = {item["agent"]: item for item in state["runtime"]["workers"]}
-        self.assertEqual(runtime_workers["A0"]["provider"], "manager-local")
-        self.assertEqual(runtime_workers["A0"]["model"], "environment default")
+        self.assertEqual(runtime_workers["A0"]["provider"], "none")
+        self.assertEqual(runtime_workers["A0"]["model"], "none")
 
         heartbeats = {item["agent"]: item for item in state["heartbeats"]["agents"]}
         self.assertEqual(heartbeats["A0"]["state"], "healthy")

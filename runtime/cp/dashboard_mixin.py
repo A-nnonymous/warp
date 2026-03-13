@@ -29,9 +29,9 @@ class DashboardMixin:
     def build_dashboard_state(self) -> dict[str, Any]:
         config_text = self.config_path.read_text(encoding="utf-8") if self.config_path.exists() else ""
         runtime_state = self.dashboard_runtime_state()
-        heartbeat_state = self.dashboard_heartbeats_state()
+        heartbeat_state = self.dashboard_heartbeats_state(runtime_state=runtime_state)
         manager_report = self.persist_manager_report(runtime_state, heartbeat_state)
-        merge_queue = self.merge_queue()
+        merge_queue = self.merge_queue(runtime_state=runtime_state, heartbeat_state=heartbeat_state)
         a0_console = self.a0_request_catalog(merge_queue, heartbeat_state)
         return {
             "updated_at": now_iso(),
@@ -58,11 +58,12 @@ class DashboardMixin:
             "merge_queue": merge_queue,
             "a0_console": a0_console,
             "team_mailbox": self.team_mailbox_catalog(),
-            "cleanup": self.cleanup_status(),
+            "cleanup": self.cleanup_status(runtime_state=runtime_state, heartbeat_state=heartbeat_state),
             "config": self.config,
             "config_text": config_text,
             "validation_errors": self.validation_errors(),
             "launch_blockers": self.launch_blockers(),
+            "peek": self.peek_read_all(),
         }
 
     def build_cli_commands(self) -> dict[str, str]:
@@ -144,9 +145,9 @@ class DashboardMixin:
         return {
             "agent": "A0",
             "repository_name": self.project.get("repository_name", "target-repo"),
-            "resource_pool": "manager_local",
-            "provider": "manager-local",
-            "model": "environment default",
+            "resource_pool": "none",
+            "provider": "none",
+            "model": "none",
             "recursion_guard": str(existing.get("recursion_guard", "")).strip(),
             "launch_wrapper": str(existing.get("launch_wrapper", "")).strip(),
             "launch_owner": "manager",
@@ -156,7 +157,7 @@ class DashboardMixin:
             "branch": self.current_repo_branch(),
             "merge_target": self.integration_branch(),
             "environment_type": "none",
-            "environment_path": "environment default",
+            "environment_path": "none",
             "sync_command": "none",
             "test_command": "none",
             "submit_strategy": "direct_manager_edit",
@@ -326,7 +327,11 @@ Last updated: {now_iso()}
         MANAGER_REPORT.write_text(report, encoding="utf-8")
         return report
 
-    def manager_heartbeat_entry(self, heartbeats: dict[str, Any] | None = None) -> dict[str, Any]:
+    def manager_heartbeat_entry(
+        self,
+        heartbeats: dict[str, Any] | None = None,
+        runtime_state: dict[str, Any] | None = None,
+    ) -> dict[str, Any]:
         agents = heartbeats.get("agents", []) if isinstance(heartbeats, dict) else []
         existing = next(
             (item for item in agents if isinstance(item, dict) and str(item.get("agent", "")).strip() == "A0"),
@@ -334,7 +339,7 @@ Last updated: {now_iso()}
         )
         listener_active = bool(self.listener_active)
         control = self.compute_manager_control_state(
-            self.dashboard_runtime_state(),
+            runtime_state or self.dashboard_runtime_state(),
             {
                 "agents": [
                     item for item in agents if isinstance(item, dict) and str(item.get("agent", "")).strip() != "A0"
@@ -369,7 +374,7 @@ Last updated: {now_iso()}
             "escalation": escalation,
         }
 
-    def dashboard_heartbeats_state(self) -> dict[str, Any]:
+    def dashboard_heartbeats_state(self, runtime_state: dict[str, Any] | None = None) -> dict[str, Any]:
         heartbeats = load_yaml(STATE_DIR / "heartbeats.yaml")
         agents = heartbeats.get("agents", [])
         if not isinstance(agents, list):
@@ -377,7 +382,7 @@ Last updated: {now_iso()}
         filtered_agents = [
             item for item in agents if isinstance(item, dict) and str(item.get("agent", "")).strip() != "A0"
         ]
-        filtered_agents.insert(0, self.manager_heartbeat_entry(heartbeats))
+        filtered_agents.insert(0, self.manager_heartbeat_entry(heartbeats, runtime_state=runtime_state))
         heartbeats["agents"] = filtered_agents
         heartbeats["last_updated"] = now_iso()
         return heartbeats
@@ -435,10 +440,14 @@ Last updated: {now_iso()}
             "next_checkin": next_checkin or str(heartbeat.get("expected_next_checkin", "")).strip(),
         }
 
-    def merge_queue(self) -> list[dict[str, Any]]:
-        runtime_state = self.dashboard_runtime_state()
+    def merge_queue(
+        self,
+        runtime_state: dict[str, Any] | None = None,
+        heartbeat_state: dict[str, Any] | None = None,
+    ) -> list[dict[str, Any]]:
+        runtime_state = runtime_state or self.dashboard_runtime_state()
         runtime_workers = {str(item.get("agent")): item for item in runtime_state.get("workers", [])}
-        heartbeat_state = self.dashboard_heartbeats_state()
+        heartbeat_state = heartbeat_state or self.dashboard_heartbeats_state(runtime_state=runtime_state)
         heartbeats = {str(item.get("agent")): item for item in heartbeat_state.get("agents", [])}
         queue: list[dict[str, Any]] = []
         manager_identity = self.manager_git_identity()

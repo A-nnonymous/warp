@@ -24,8 +24,8 @@ Operate or evolve the FP8 control plane without losing the simplified workflow t
 8. `runtime/config_template.yaml`
 9. `runtime/web/src/CODE_INDEX.md`
 10. `runtime/web/src/App.tsx` → `runtime/web/src/` (see index)
-9. `state/backlog.yaml`
-10. `state/agent_runtime.yaml`
+11. `state/backlog.yaml`
+12. `state/agent_runtime.yaml`
 
 ## Working Rules
 

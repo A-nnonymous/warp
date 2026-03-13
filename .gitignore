@@ -1,13 +1,31 @@
+# Local config (contains machine-specific paths and may reference API keys)
 runtime/local_config.yaml
+
+# Runtime artifacts
 runtime/control_plane.log
 runtime/session_state*.json
 runtime/generated_prompts/
 runtime/generated_wrappers/
 runtime/logs/
-runtime/web/node_modules/
+
+# Python
 runtime/__pycache__/
+runtime/cp/__pycache__/
+**/__pycache__/
+*.py[cod]
+
+# Node / Frontend build deps
+runtime/web/node_modules/
+
+# Mutable state (runtime-generated, not source of truth)
+state/agent_runtime.yaml
+state/heartbeats.yaml
 state/provider_stats.yaml
+state/peek/
+
+# Worktrees (large, machine-local)
 worktrees/*
 !worktrees/.gitkeep
-*.py[cod]
+
+# OS
 .DS_Store

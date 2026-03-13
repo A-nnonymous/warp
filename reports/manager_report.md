@@ -1,6 +1,6 @@
 # Manager Report
 
-Last updated: 2026-03-13T00:02:47
+Last updated: 2026-03-13T15:23:53
 
 ## Production View
 
@@ -13,24 +13,24 @@ Last updated: 2026-03-13T00:02:47
 ## Real Liveness
 
 - A0: healthy
-- A1: launching
-- A2: launching
-- A3: launching
-- A4: not-started
-- A5: not-started
-- A6: not-started
-- A7: not-started
+- A1: offline
+- A2: offline
+- A3: offline
+- A4: offline
+- A5: offline
+- A6: offline
+- A7: offline
 
 ## Control Snapshot
 
-- Active agents: A1, A2, A3
+- Active agents: none
 - Attention agents: none
-- Runnable agents: A6
-- Blocked agents: A4, A5, A7
+- Runnable agents: A1, A6
+- Blocked agents: A2, A3, A4, A5, A7
 
 ## Active Blockers
 
-- blocked by dependency or gate: A4, A5, A7
+- blocked by dependency or gate: A2, A3, A4, A5, A7
 
 ## Immediate Action
 

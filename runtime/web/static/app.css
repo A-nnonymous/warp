@@ -706,3 +706,39 @@ th {
     width: 100%;
   }
 }
+.peek-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(340px, 1fr));
+  gap: 10px;
+}
+.peek-window {
+  border-radius: 12px;
+  background:
+    linear-gradient(
+      180deg,
+      rgba(10, 18, 30, 0.96),
+      rgba(10, 22, 39, 0.84));
+  border: 1px solid var(--line-strong);
+  overflow: hidden;
+}
+.peek-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding: 8px 12px;
+  background: rgba(15, 25, 42, 0.88);
+  border-bottom: 1px solid var(--line);
+}
+.peek-content {
+  font-size: 11px;
+  line-height: 1.5;
+  padding: 8px 10px;
+  margin: 0;
+  max-height: 240px;
+  min-height: 60px;
+  overflow-y: auto;
+  background: rgba(6, 12, 22, 0.92);
+  color: #b8d4e8;
+  white-space: pre-wrap;
+  word-break: break-all;
+}

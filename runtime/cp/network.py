@@ -16,7 +16,7 @@ from typing import Any, TextIO
 from urllib.parse import unquote, urlparse
 
 from .constants import DEFAULT_DASHBOARD_HOST, DEFAULT_DASHBOARD_PORT, RUNTIME_DIR, SESSION_STATE
-from .utils import run_command
+from .utils import terminate_process_tree
 
 
 def strip_command_args(command: list[str], flags: set[str]) -> list[str]:
@@ -31,41 +31,6 @@ def strip_command_args(command: list[str], flags: set[str]) -> list[str]:
             continue
         cleaned.append(part)
     return cleaned
-
-
-def is_placeholder_path(value: Any) -> bool:
-    if not isinstance(value, str):
-        return False
-    normalized = value.strip()
-    if not normalized:
-        return False
-    return normalized.startswith("/absolute/path/") or normalized in {"unassigned", "none"}
-
-
-def is_local_host(host: str) -> bool:
-    return host in {"127.0.0.1", "localhost", "0.0.0.0", "::1", "::"}
-
-
-def path_exists_via_ls(path_value: str) -> bool:
-    try:
-        result = run_command(["ls", "-d", path_value])
-    except (FileNotFoundError, subprocess.TimeoutExpired):
-        return Path(path_value).exists()
-    return result.returncode == 0
-
-
-def host_reachable_via_ping(host: str) -> bool:
-    if is_local_host(host):
-        return True
-    try:
-        result = run_command(["ping", "-c", "1", host], timeout=2.5)
-    except (FileNotFoundError, subprocess.TimeoutExpired):
-        try:
-            socket.getaddrinfo(host, None)
-        except socket.gaierror:
-            return False
-        return True
-    return result.returncode == 0
 
 
 @dataclass
@@ -200,17 +165,6 @@ def pid_is_running(pid: int) -> bool:
 
 def terminate_pid(pid: int, sig: int = signal.SIGTERM) -> None:
     os.kill(pid, sig)
-
-
-def terminate_process_tree(pid: int, sig: int = signal.SIGTERM) -> None:
-    try:
-        process_group = os.getpgid(pid)
-    except OSError:
-        return
-    try:
-        os.killpg(process_group, sig)
-    except OSError:
-        return
 
 
 def wait_for_process_exit(pid: int, timeout: float) -> bool:

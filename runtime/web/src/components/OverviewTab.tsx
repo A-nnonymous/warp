@@ -3,6 +3,7 @@ import type { DashboardState } from '../types';
 import { formatTokenCount } from '../lib/utils';
 import { Metric, ProgressRow, HelperCard } from './shared';
 import { MergeCard, AgentCard } from './cards';
+import { AgentPeekPanel } from './AgentPeekPanel';
 
 export function OverviewTab({ data, agentRows, progress, onOpenA0Console }: { data: DashboardState; agentRows: AgentRow[]; progress: ProgressModel; onOpenA0Console: () => void }) {
   const mergeQueue = data.merge_queue || [];
@@ -71,6 +72,8 @@ export function OverviewTab({ data, agentRows, progress, onOpenA0Console }: { da
           {mergeQueue.length ? mergeQueue.map((item) => <MergeCard key={`${item.agent}-${item.branch}`} item={item} />) : <div className="small muted">No worker branches registered for manager merge review.</div>}
         </div>
       </section>
+
+      <AgentPeekPanel data={data} />
 
       <section className="card">
         <div className="panel-title">

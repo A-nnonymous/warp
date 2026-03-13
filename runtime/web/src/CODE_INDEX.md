@@ -19,10 +19,11 @@ TypeScript, and bundled via esbuild.
 |---|---|---|---|
 | `shared.tsx` | 142 | Reusable stateless presentational components | `DataTable`, `Field`, `SelectField`, `SectionIssueList`, `SectionHeader`, `Metric`, `ProgressRow`, `HelperCard` |
 | `cards.tsx` | 402 | Feature-specific card components used across tabs | `MergeCard`, `AgentCard`, `A0RequestCard`, `MailboxCard`, `CleanupWorkerCard`, `MailboxComposerCard`, `WorkflowBriefCard`, `MailboxPeekCard`, `WorkflowPatchCard`, `AutomationSummary` |
-| `OverviewTab.tsx` | 89 | Overview dashboard tab (progress, agents, merge board) | `OverviewTab` |
+| `OverviewTab.tsx` | 92 | Overview dashboard tab (progress, agents, merge board, agent peek) | `OverviewTab` |
 | `OperationsTab.tsx` | 100 | Operations dashboard tab (workflow, mailbox, cleanup) | `OperationsTab` |
 | `SettingsTab.tsx` | 225 | Settings dashboard tab (pools, project, workers) | `SettingsTab` |
 | `A0ConsoleView.tsx` | 105 | A0 console view (requests, conversation, workflow) | `A0ConsoleView` |
+| `AgentPeekPanel.tsx` | 72 | Real-time sliding window peek into each agent's output | `AgentPeekPanel` |
 
 ## Top-Level Files
 
@@ -34,7 +35,7 @@ TypeScript, and bundled via esbuild.
 | `main.tsx` | — | React entry point (renders `<App />`) | — |
 | `styles.css` | — | Global stylesheet | — |
 
-**Total: 12 source modules, ~3 053 lines** (from original single-file `App.tsx` at 2 959 lines, plus module overhead).
+**Total: 13 source modules, ~3 125 lines** (from original single-file `App.tsx` at 2 959 lines, plus module overhead).
 
 ## Build
 

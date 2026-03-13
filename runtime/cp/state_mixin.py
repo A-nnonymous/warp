@@ -18,17 +18,11 @@ from .utils import (
     dump_yaml,
     load_yaml,
     now_iso,
-    summarize_list,
 )
 
 
 class StateMixin:
-    """Methods for runtime state persistence, heartbeats, telemetry, monitoring, and cleanup coordination."""
-
-    def runtime_worker_entries(self) -> list[dict[str, Any]]:
-        runtime = load_yaml(STATE_DIR / "agent_runtime.yaml")
-        items = runtime.get("workers", [])
-        return items if isinstance(items, list) else []
+    """Methods for runtime state persistence, heartbeats, telemetry, monitoring, and session state."""
 
     def update_runtime_entry(
         self,
@@ -43,6 +37,8 @@ class StateMixin:
         runtime_path = STATE_DIR / "agent_runtime.yaml"
         runtime = load_yaml(runtime_path)
         workers = runtime.get("workers", [])
+        if "workers" not in runtime:
+            runtime["workers"] = workers
         target = None
         for entry in workers:
             if entry.get("agent") == worker["agent"]:
@@ -84,14 +80,20 @@ class StateMixin:
         heartbeats_path = STATE_DIR / "heartbeats.yaml"
         heartbeats = load_yaml(heartbeats_path)
         entries = heartbeats.get("agents", [])
+        target = None
         for entry in entries:
             if entry.get("agent") == agent:
-                entry["state"] = state
-                entry["last_seen"] = now_iso()
-                entry["evidence"] = evidence
-                entry["expected_next_checkin"] = "while worker process is alive"
-                entry["escalation"] = escalation
+                target = entry
                 break
+        if target is None:
+            target = {"agent": agent}
+            entries.append(target)
+            heartbeats["agents"] = entries
+        target["state"] = state
+        target["last_seen"] = now_iso()
+        target["evidence"] = evidence
+        target["expected_next_checkin"] = "while worker process is alive"
+        target["escalation"] = escalation
         heartbeats["last_updated"] = now_iso()
         dump_yaml(heartbeats_path, heartbeats)
 
@@ -188,40 +190,90 @@ class StateMixin:
     def monitor_loop(self) -> None:
         while not self.stop_event.is_set():
             with self.lock:
+                runtime_path = STATE_DIR / "agent_runtime.yaml"
+                heartbeats_path = STATE_DIR / "heartbeats.yaml"
+                runtime = load_yaml(runtime_path)
+                if "workers" not in runtime:
+                    runtime["workers"] = []
+                heartbeats = load_yaml(heartbeats_path)
+                if "agents" not in heartbeats:
+                    heartbeats["agents"] = []
+                runtime_dirty = False
+                heartbeats_dirty = False
+                stats_dirty = False
+
                 for agent, worker in list(self.processes.items()):
                     returncode = worker.process.poll()
+                    # Feed worker log tail into peek buffer
+                    try:
+                        self._feed_peek_from_log(agent, worker.log_path)
+                    except Exception:
+                        pass
                     if returncode is None:
-                        self.update_heartbeat(agent, "healthy", "process_running", "none")
-                        runtime_entry = next((w for w in self.workers if w.get("agent") == agent), None)
-                        if runtime_entry:
-                            self.update_runtime_entry(
-                                runtime_entry,
-                                worker.resource_pool,
-                                worker.provider,
-                                worker.model,
-                                "healthy",
-                            )
+                        hb_state, hb_evidence, hb_escalation = "healthy", "process_running", "none"
+                        rt_status = "healthy"
                     else:
                         if returncode == 0:
                             self.provider_stats[worker.resource_pool]["clean_exits"] += 1
                         else:
                             self.provider_stats[worker.resource_pool]["failed_exits"] += 1
-                            self.provider_stats[worker.resource_pool][
-                                "last_failure"
-                            ] = f"worker exited with {returncode}"
-                        self.persist_provider_stats()
-                        state = "offline" if returncode == 0 else "stale"
-                        escalation = "worker exited cleanly" if returncode == 0 else f"worker exited with {returncode}"
-                        self.update_heartbeat(agent, state, "process_exit", escalation)
-                        runtime_entry = next((w for w in self.workers if w.get("agent") == agent), None)
-                        if runtime_entry:
-                            self.update_runtime_entry(
-                                runtime_entry,
-                                worker.resource_pool,
-                                worker.provider,
-                                worker.model,
-                                state,
-                            )
+                            self.provider_stats[worker.resource_pool]["last_failure"] = f"worker exited with {returncode}"
+                        stats_dirty = True
+                        rt_status = "offline" if returncode == 0 else "stale"
+                        hb_state = rt_status
+                        hb_evidence = "process_exit"
+                        hb_escalation = "worker exited cleanly" if returncode == 0 else f"worker exited with {returncode}"
+
+                    # Batch heartbeat update
+                    ts = now_iso()
+                    hb_entry = next((e for e in heartbeats["agents"] if e.get("agent") == agent), None)
+                    if hb_entry is None:
+                        hb_entry = {"agent": agent}
+                        heartbeats["agents"].append(hb_entry)
+                    hb_entry.update({"state": hb_state, "last_seen": ts, "evidence": hb_evidence,
+                                     "expected_next_checkin": "while worker process is alive", "escalation": hb_escalation})
+                    heartbeats_dirty = True
+
+                    # Batch runtime update
+                    runtime_entry = next((w for w in self.workers if w.get("agent") == agent), None)
+                    if runtime_entry:
+                        rt_target = next((e for e in runtime["workers"] if e.get("agent") == agent), None)
+                        if rt_target is None:
+                            rt_target = {"agent": agent}
+                            runtime["workers"].append(rt_target)
+                        rt_target.update({
+                            "repository_name": self.project.get("repository_name", "target-repo"),
+                            "resource_pool": worker.resource_pool,
+                            "provider": worker.provider,
+                            "model": worker.model,
+                            "recursion_guard": rt_target.get("recursion_guard", ""),
+                            "launch_wrapper": rt_target.get("launch_wrapper", ""),
+                            "launch_owner": runtime_entry.get("launch_owner", "manager"),
+                            "local_workspace_root": self.project.get("local_repo_root", str(REPO_ROOT)),
+                            "repository_root": str(REPO_ROOT),
+                            "worktree_path": runtime_entry["worktree_path"],
+                            "branch": runtime_entry["branch"],
+                            "merge_target": self.integration_branch(),
+                            "environment_type": runtime_entry.get("environment_type", "uv"),
+                            "environment_path": runtime_entry.get("environment_path", "unassigned"),
+                            "sync_command": runtime_entry.get("sync_command", "uv sync"),
+                            "test_command": runtime_entry.get("test_command", "unassigned"),
+                            "submit_strategy": runtime_entry.get("submit_strategy", "patch_handoff"),
+                            "git_author_name": self.worker_git_identity(runtime_entry).get("name", ""),
+                            "git_author_email": self.worker_git_identity(runtime_entry).get("email", ""),
+                            "status": rt_status,
+                        })
+                        runtime_dirty = True
+
+                # Single dump per file
+                if heartbeats_dirty:
+                    heartbeats["last_updated"] = now_iso()
+                    dump_yaml(heartbeats_path, heartbeats)
+                if runtime_dirty:
+                    runtime["last_updated"] = now_iso()
+                    dump_yaml(runtime_path, runtime)
+                if stats_dirty:
+                    self.persist_provider_stats()
                 self.persist_manager_report()
                 self.write_session_state()
             time.sleep(5)
@@ -266,160 +318,24 @@ class StateMixin:
         if self.listen_port:
             session_state_path_for_port(self.listen_port).write_text(encoded, encoding="utf-8")
 
-    def edit_lock_state(self) -> dict[str, Any]:
-        path = STATE_DIR / "edit_locks.yaml"
-        if not path.exists():
-            return {"policy": {}, "locks": [], "last_updated": ""}
-        data = load_yaml(path)
-        if not isinstance(data, dict):
-            return {"policy": {}, "locks": [], "last_updated": ""}
-        locks = data.get("locks", [])
-        normalized_locks = []
-        for item in locks if isinstance(locks, list) else []:
-            if not isinstance(item, dict):
-                continue
-            normalized_locks.append(
-                {
-                    "path": str(item.get("path") or "").strip(),
-                    "owner": str(item.get("owner") or "").strip(),
-                    "state": str(item.get("state") or "free").strip() or "free",
-                    "intent": str(item.get("intent") or "").strip(),
-                    "updated_at": str(item.get("updated_at") or "").strip(),
-                }
-            )
-        return {
-            "policy": data.get("policy") if isinstance(data.get("policy"), dict) else {},
-            "locks": normalized_locks,
-            "last_updated": str(data.get("last_updated") or "").strip(),
-        }
+    def _feed_peek_from_log(self, agent: str, log_path) -> None:
+        """Read new lines from a worker log file and push them into the peek buffer."""
+        from pathlib import Path
+        log_path = Path(log_path)
+        if not log_path.exists():
+            return
+        if not hasattr(self, "_peek_log_offsets"):
+            self._peek_log_offsets: dict[str, int] = {}
+        offset = self._peek_log_offsets.get(agent, 0)
+        file_size = log_path.stat().st_size
+        if file_size <= offset:
+            return
+        with log_path.open("r", encoding="utf-8", errors="replace") as fh:
+            fh.seek(offset)
+            new_text = fh.read(64 * 1024)  # cap at 64KB per tick
+            new_offset = fh.tell()
+        self._peek_log_offsets[agent] = new_offset
+        lines = new_text.splitlines()
+        if lines:
+            self.peek_append(agent, lines)
 
-    def cleanup_status(self) -> dict[str, Any]:
-        runtime_state = self.dashboard_runtime_state()
-        heartbeat_state = self.dashboard_heartbeats_state()
-        runtime_workers = {
-            str(item.get("agent") or "").strip(): item
-            for item in runtime_state.get("workers", [])
-            if isinstance(item, dict)
-        }
-        heartbeat_workers = {
-            str(item.get("agent") or "").strip(): item
-            for item in heartbeat_state.get("agents", [])
-            if isinstance(item, dict)
-        }
-        locks_state = self.edit_lock_state()
-        plan_reviews_by_agent: dict[str, list[str]] = {}
-        task_reviews_by_agent: dict[str, list[str]] = {}
-        pending_plan_reviews: list[str] = []
-        pending_task_reviews: list[str] = []
-        for item in self.backlog_items():
-            task_id = str(item.get("id") or "").strip()
-            responsible_agent = str(item.get("claimed_by") or item.get("owner") or "").strip()
-            if str(item.get("plan_state") or "") == "pending_review":
-                pending_plan_reviews.append(task_id)
-                if responsible_agent:
-                    plan_reviews_by_agent.setdefault(responsible_agent, []).append(task_id)
-            if str(item.get("status") or "") == "review" or str(item.get("claim_state") or "") == "review":
-                pending_task_reviews.append(task_id)
-                if responsible_agent:
-                    task_reviews_by_agent.setdefault(responsible_agent, []).append(task_id)
-
-        active_workers = sorted(
-            agent for agent, worker in self.processes.items() if worker.process.poll() is None
-        )
-
-        locked_files: list[dict[str, str]] = []
-        locked_files_by_owner: dict[str, list[str]] = {}
-        for item in locks_state.get("locks", []):
-            state = str(item.get("state") or "free").strip() or "free"
-            if state == "free":
-                continue
-            path = str(item.get("path") or "").strip()
-            owner = str(item.get("owner") or "").strip() or "unassigned"
-            locked_files.append({"path": path, "owner": owner, "state": state})
-            locked_files_by_owner.setdefault(owner, []).append(path)
-
-        worker_rows = []
-        for worker in self.workers:
-            agent = str(worker.get("agent") or "").strip()
-            runtime_entry = runtime_workers.get(agent, {})
-            heartbeat_entry = heartbeat_workers.get(agent, {})
-            worker_plan_reviews = plan_reviews_by_agent.get(agent, [])
-            worker_task_reviews = task_reviews_by_agent.get(agent, [])
-            worker_locked_files = locked_files_by_owner.get(agent, [])
-            blockers: list[str] = []
-            if agent in active_workers:
-                blockers.append("process is still alive")
-            if worker_plan_reviews:
-                blockers.append(f"pending plan approvals: {summarize_list(worker_plan_reviews)}")
-            if worker_task_reviews:
-                blockers.append(f"pending task reviews: {summarize_list(worker_task_reviews)}")
-            if worker_locked_files:
-                blockers.append(f"locks still held: {summarize_list(worker_locked_files)}")
-            worker_rows.append(
-                {
-                    "agent": agent,
-                    "ready": len(blockers) == 0,
-                    "active": agent in active_workers,
-                    "runtime_status": str(runtime_entry.get("status") or "").strip(),
-                    "heartbeat_state": str(heartbeat_entry.get("state") or "").strip(),
-                    "pending_plan_reviews": worker_plan_reviews,
-                    "pending_task_reviews": worker_task_reviews,
-                    "locked_files": worker_locked_files,
-                    "blockers": blockers,
-                }
-            )
-
-        blockers: list[str] = []
-        if active_workers:
-            blockers.append(f"active workers must be stopped: {', '.join(active_workers)}")
-        if pending_plan_reviews:
-            blockers.append(f"pending plan approvals: {summarize_list(pending_plan_reviews)}")
-        if pending_task_reviews:
-            blockers.append(f"pending task reviews: {summarize_list(pending_task_reviews)}")
-        if locked_files:
-            blocker_summary = summarize_list(
-                [f"{item['path']} ({item['owner']})" for item in locked_files]
-            )
-            blockers.append(f"outstanding single-writer locks: {blocker_summary}")
-
-        return {
-            "ready": len(blockers) == 0,
-            "blockers": blockers,
-            "listener_active": bool(self.listener_active),
-            "active_workers": active_workers,
-            "pending_plan_reviews": pending_plan_reviews,
-            "pending_task_reviews": pending_task_reviews,
-            "locked_files": locked_files,
-            "workers": worker_rows,
-            "last_updated": now_iso(),
-        }
-
-    def confirm_team_cleanup(self, note: str = "", release_listener: bool = False) -> dict[str, Any]:
-        with self.lock:
-            cleanup = self.cleanup_status()
-            if not cleanup.get("ready"):
-                raise ValueError(f"cleanup blocked: {summarize_list(cleanup.get('blockers', []))}")
-            self.append_team_mailbox_message(
-                "A0",
-                "all",
-                "status_note",
-                note or "Cleanup gate passed; listener shutdown is now safe.",
-                [],
-                "broadcast",
-            )
-            listener_port = self.listen_port
-            listener_active = bool(self.listener_active)
-            listener_release_requested = bool(release_listener and listener_active)
-            self.last_event = "cleanup:ready:auto-release" if listener_release_requested else "cleanup:ready"
-            self.write_session_state()
-            return {
-                "cleanup": cleanup,
-                "listener_active": listener_active,
-                "listener_port": listener_port,
-                "listener_release_requested": listener_release_requested,
-                "listener_released": bool(release_listener and not listener_active),
-            }
-
-    def release_listener_after_cleanup(self, delay_seconds: float = 0.15) -> None:
-        time.sleep(delay_seconds)
-        self.enter_silent_mode()

@@ -1,17 +1,23 @@
 # Latest Checkpoint
 
-Timestamp: 2026-03-12
+Timestamp: 2026-03-13
 Project: sonicmoe-fp8
 Phase: post-audit bootstrap
 Manager: A0
 
 ## Snapshot
 
-- Governance scaffold complete, axioms.md added as human-write-only foundation
-- Bootstrap docs optimized: README 421→199 lines, validation commands single-sourced, audit feedback loop added
-- Full architecture audit completed: backend (4855 lines), frontend (2959 lines), config, state files
-- Integration tests: 24/24 passing after uv-fallback fix
-- Frontend build: skipped (current machine has no npm; static assets from prior build intact)
+- Governance scaffold complete, axioms.md in place
+- Bootstrap docs optimized and audit-maintained
+- Full architecture audit completed and acted upon
+- Integration tests: 24/24 passing (all bugs fixed)
+- Dead code removed: ~400 lines of duplicate methods across mixins
+- monitor_loop refactored: batched I/O (1 load + 1 dump per file per tick, down from N)
+- build_dashboard_state refactored: parameter threading eliminates ~10 redundant YAML reads per API call
+- utils.py / network.py / telemetry.py deduped: 6 duplicate function bodies removed
+- cli.py unreachable branch removed, signature cleaned
+- 233GB of leaked test temp dirs cleaned from /tmp
+- Stale logs, session states, generated files cleaned
 - FP8 project plan exists in `strategy/integration_plan.md`
 - Baseline trace exists in `strategy/baseline_trace.md`
 - Real implementation has not started
@@ -19,19 +25,45 @@ Manager: A0
 
 ## What Changed This Session
 
-- `governance/axioms.md`: 7 foundational axioms (human-write-only)
-- `README.md`: deduplicated commands (5→1), added key terms, disambiguated read lists
-- `bootstrap/`: audit feedback mechanism, validation single-sourced to OPERATING_LOOP.md
-- `runtime/control_plane.py`: detach_process prefers system python when yaml is available
-- `runtime/test_control_plane_integration.py`: _server_launch_cmd falls back to system python
+### Bug Fixes
+- `dashboard_mixin.py`: manager_runtime_entry no longer emits undeclared `manager_local` pool; uses `none` consistently with A0's role
+- `state_mixin.py`: `update_heartbeat` now creates new agent entries (upsert) instead of silently skipping unknown agents
+- `state_mixin.py`: `update_runtime_entry` ensures `workers` key is set on runtime dict when creating entries from empty state
+- `test_control_plane_integration.py`: setUp excludes `worktrees/`, `node_modules/`, `__pycache__/`, `.git/`, `logs/` from copytree (was copying 48GB)
+- `test_control_plane_integration.py`: setUp resets state files so tests start with clean first-launch environment
+- `test_control_plane_integration.py`: test assertions updated for `none` provider/model on A0
 
-## Known Issues From Audit
+### Refactoring
+- `launch_mixin.py`: removed dead `stop_worker`, `stop_worker_locked` duplicates (canonical copies live in `backlog_mixin.py`)
+- `state_mixin.py`: removed dead `runtime_worker_entries`, `edit_lock_state`, `cleanup_status`, `confirm_team_cleanup`, `release_listener_after_cleanup` (canonical copies live in `mailbox_mixin.py` and `backlog_mixin.py`)
+- `state_mixin.py`: `monitor_loop` rewritten to batch all heartbeat and runtime updates into single load/dump per file per tick (was N loads + N dumps per tick)
+- `dashboard_mixin.py`: `build_dashboard_state` now threads `runtime_state` and `heartbeat_state` through `merge_queue()`, `cleanup_status()`, `manager_heartbeat_entry()`, `dashboard_heartbeats_state()` — eliminates ~10 redundant `load_yaml` calls per `/api/state` request (was ~11 reads of 2 files, now 2 reads)
+- `network.py`: removed 5 duplicate function bodies (`is_placeholder_path`, `is_local_host`, `path_exists_via_ls`, `host_reachable_via_ping`, `terminate_process_tree`); canonical copies remain in `utils.py`, `network.py` re-exports `terminate_process_tree` for `cli.py`
+- `telemetry.py`: removed duplicate `merge_usage_counts` body; imports from `utils.py`
+- `telemetry.py`: `read_log_telemetry` no longer calls `progress_from_mapping()` twice per JSON line; result is cached in a local variable
+- `cli.py`: removed unreachable `elif args.command == "serve" and cold_start` branch and unused `cold_start` parameter from `apply_runtime_defaults()`
 
-- `manager_local` resource pool referenced in agent_runtime.yaml but undeclared in config/provider_stats
-- Gate G5 (Training Closure) has no backlog item
-- A5-001 task dependencies narrower than its gate G4 dependencies (potential drift)
-- 3 of 4 provider pools unreachable (only ducc_pool is live)
-- Frontend: 2959-line single-file App.tsx, no test infra, no useCallback/memo, no debounce on hydration
+### Doc Fixes
+- `bootstrap/REPO_MAP.md`: corrected `control_plane.py` description to reflect it's a 24-line re-export entry point, not the full backend
+- `governance/control_plane_playbook.md`: fixed read order numbering (was 9,10,9,10 → now 9,10,11,12)
+
+### Cleanup
+- Removed 233GB of leaked `/tmp/fp8-*` test temp directories
+- Removed `__pycache__`, empty log files, stale session state files, generated prompts/wrappers
+
+## Audit Issues Status
+
+- `manager_local` pool: FIXED (changed to `none`)
+- Gate G5 backlog item: already existed as A4-002 (checkpoint note was stale)
+- A5-001 dependency drift: still open (minor)
+- 3 of 4 provider pools unreachable: expected (only ducc_pool is configured)
+- Frontend single-file: still open (not addressed this session)
+
+## Known Remaining Technical Debt
+
+- Frontend still a single ~3000-line file with no test infrastructure
+- A5-001 dependency drift: still open (minor)
+- 3 of 4 provider pools unreachable: expected (only ducc_pool is configured)
 
 ## Current Goal
 
@@ -48,8 +80,7 @@ Pass G0 Protocol Freeze.
 
 ## Next Safe Step
 
-1. Fix state file inconsistencies (undeclared manager_local pool, missing G5 backlog item)
-2. Advance G0: launch A1 (protocol freeze) and A6 (baseline trace freeze)
+1. Advance G0: launch A1 (protocol freeze) and A6 (baseline trace freeze)
 
 ## Resume Rule
 

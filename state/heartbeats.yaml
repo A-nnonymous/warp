@@ -1,5 +1,5 @@
 project: sonicmoe-fp8
-last_updated: '2026-03-13T00:02:51'
+last_updated: '2026-03-13T13:08:28'
 policy:
   manager_review_cycle: every handoff or resume
   planning_window: one manager review cycle
@@ -14,50 +14,50 @@ agents:
   escalation: none
 - agent: A1
   role: protocol
-  state: launching
-  last_seen: '2026-03-13T00:01:41'
-  evidence: process_spawned
+  state: offline
+  last_seen: '2026-03-13T13:08:27'
+  evidence: manager_stop
   expected_next_checkin: while worker process is alive
-  escalation: waiting for first monitor check
+  escalation: none
 - agent: A2
   role: hopper-backend
-  state: launching
-  last_seen: '2026-03-13T00:02:06'
-  evidence: process_spawned
+  state: offline
+  last_seen: '2026-03-13T13:08:27'
+  evidence: manager_stop
   expected_next_checkin: while worker process is alive
-  escalation: waiting for first monitor check
+  escalation: none
 - agent: A3
   role: blackwell-backend
-  state: launching
-  last_seen: '2026-03-13T00:02:28'
-  evidence: process_spawned
+  state: offline
+  last_seen: '2026-03-13T13:08:27'
+  evidence: manager_stop
   expected_next_checkin: while worker process is alive
-  escalation: waiting for first monitor check
+  escalation: none
 - agent: A4
   role: torch-functional
-  state: launching
-  last_seen: '2026-03-13T00:02:51'
-  evidence: process_spawned
+  state: offline
+  last_seen: '2026-03-13T13:08:28'
+  evidence: manager_stop
   expected_next_checkin: while worker process is alive
-  escalation: waiting for first monitor check
+  escalation: none
 - agent: A5
   role: tests
-  state: not-started
-  last_seen: none
-  evidence: no runtime heartbeat yet
-  expected_next_checkin: when reference tensors are frozen
-  escalation: do not report as active yet
+  state: offline
+  last_seen: '2026-03-13T13:08:28'
+  evidence: manager_stop
+  expected_next_checkin: while worker process is alive
+  escalation: none
 - agent: A6
   role: baseline-compat
-  state: not-started
-  last_seen: none
-  evidence: no runtime heartbeat yet
-  expected_next_checkin: after protocol and baseline review
-  escalation: do not report as active yet
+  state: offline
+  last_seen: '2026-03-13T13:08:28'
+  evidence: manager_stop
+  expected_next_checkin: while worker process is alive
+  escalation: none
 - agent: A7
   role: perf-delivery
-  state: not-started
-  last_seen: none
-  evidence: no runtime heartbeat yet
-  expected_next_checkin: after protocol interface draft exists
-  escalation: keep queued until benchmark surface is stable
+  state: offline
+  last_seen: '2026-03-13T13:08:28'
+  evidence: manager_stop
+  expected_next_checkin: while worker process is alive
+  escalation: none

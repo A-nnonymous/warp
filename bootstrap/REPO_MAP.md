@@ -14,7 +14,8 @@ It owns:
 
 ## Highest-Value Files
 
-- `runtime/control_plane.py`: backend runtime, API surface, validation, launch, worktree management, state synthesis
+- `runtime/control_plane.py`: backward-compatible entry point that re-exports from `runtime/cp/`
+- `runtime/cp/`: backend package (16 modules): config, backlog, mailbox, routing, provider, launch, state, dashboard, API, CLI, network, telemetry, utils
 - `runtime/config_template.yaml`: cold-start fallback config
 - `runtime/local_config.yaml`: real operator config on a machine, ignored by git
 - `runtime/web/src/App.tsx`: main dashboard UI and settings logic

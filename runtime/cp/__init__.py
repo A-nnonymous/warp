@@ -12,9 +12,11 @@ from .config_mixin import ConfigMixin
 from .backlog_mixin import BacklogMixin
 from .mailbox_mixin import MailboxMixin
 from .routing_mixin import RoutingMixin
+from .context_mixin import ContextMixin
 from .provider_mixin import ProviderMixin
 from .launch_mixin import LaunchMixin
 from .state_mixin import StateMixin
+from .peek_mixin import PeekMixin
 from .dashboard_mixin import DashboardMixin
 from .api_mixin import ApiMixin
 from .cli import main
@@ -25,9 +27,11 @@ class ControlPlaneService(
     BacklogMixin,
     MailboxMixin,
     RoutingMixin,
+    ContextMixin,
     ProviderMixin,
     LaunchMixin,
     StateMixin,
+    PeekMixin,
     DashboardMixin,
     ApiMixin,
 ):

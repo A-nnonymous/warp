@@ -70,8 +70,8 @@ See `bootstrap/OPERATING_LOOP.md` for the canonical validation commands and area
 
 ## Architecture Audit Findings (2026-03-12)
 
-State file inconsistencies to address before launch:
+State file inconsistencies found during audit (status as of 2026-03-13):
 
-- `manager_local` pool referenced in agent_runtime.yaml but undeclared in config and provider_stats
-- Gate G5 has no corresponding backlog item
-- Frontend is a 2959-line single file with no test infrastructure
+- `manager_local` pool: **FIXED** — A0 now uses `none` consistently
+- Gate G5 backlog item: **RESOLVED** — A4-002 already exists
+- Frontend: **RESOLVED** — refactored from single file to 12 modules (~3053 lines across App.tsx, lib/, components/); test infrastructure still missing

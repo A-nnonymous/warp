@@ -60,6 +60,18 @@ class ApiMixin:
             except BrokenPipeError:
                 return True
             return True
+        if handler.path == "/api/peek":
+            peek_data = self.peek_read_all()
+            payload = json.dumps({"ok": True, "peek": peek_data}, default=str).encode("utf-8")
+            handler.send_response(HTTPStatus.OK)
+            handler.send_header("Content-Type", "application/json; charset=utf-8")
+            handler.send_header("Content-Length", str(len(payload)))
+            handler.end_headers()
+            try:
+                handler.wfile.write(payload)
+            except BrokenPipeError:
+                return True
+            return True
         return False
 
     def handle_api_post(self, handler: BaseHTTPRequestHandler) -> bool:
@@ -67,6 +79,19 @@ class ApiMixin:
             payload = self.parse_request_json(handler)
         except json.JSONDecodeError as exc:
             self.write_json(handler, {"ok": False, "error": f"invalid json: {exc}"}, status=400)
+            return True
+
+        if handler.path == "/api/peek":
+            agent = str(payload.get("agent", "")).strip()
+            lines = payload.get("lines", [])
+            if not agent:
+                self.write_json(handler, {"ok": False, "error": "agent is required"}, status=400)
+                return True
+            if not isinstance(lines, list) or not lines:
+                self.write_json(handler, {"ok": False, "error": "lines list is required"}, status=400)
+                return True
+            self.peek_append(agent, [str(line) for line in lines])
+            self.write_json(handler, {"ok": True, "agent": agent, "buffered": len(lines)})
             return True
 
         if handler.path == "/api/config":

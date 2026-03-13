@@ -173,3 +173,7 @@ export function updateWorkflowTask(task_id: string, updates: WorkflowPatch, note
 export function confirmTeamCleanup(note = '', release_listener = false): Promise<TeamCleanupResponse> {
   return postJson<TeamCleanupResponse>('/api/team-cleanup', { note, release_listener });
 }
+
+export function pushPeek(agent: string, lines: string[]): Promise<{ ok: boolean; agent: string; buffered: number }> {
+  return postJson<{ ok: boolean; agent: string; buffered: number }>('/api/peek', { agent, lines });
+}

@@ -6,17 +6,7 @@ from datetime import datetime
 from pathlib import Path
 from typing import Any
 
-from .utils import safe_int, slugify, truncate_text
-
-
-def merge_usage_counts(current: dict[str, int], update: dict[str, int]) -> dict[str, int]:
-    merged = dict(current)
-    for key, value in update.items():
-        merged[key] = max(int(merged.get(key, 0)), int(value))
-    total = int(merged.get("total_tokens", 0))
-    if total <= 0:
-        merged["total_tokens"] = int(merged.get("input_tokens", 0)) + int(merged.get("output_tokens", 0))
-    return merged
+from .utils import merge_usage_counts, safe_int, slugify, truncate_text
 
 
 def usage_from_mapping(payload: Any) -> dict[str, int]:
@@ -153,7 +143,9 @@ def read_log_telemetry(log_path: Path) -> dict[str, Any]:
                 parsed = None
         if isinstance(parsed, dict):
             usage = merge_usage_counts(usage, usage_from_mapping(parsed))
-            progress = progress_from_mapping(parsed) if progress_from_mapping(parsed) is not None else progress
+            parsed_progress = progress_from_mapping(parsed)
+            if parsed_progress is not None:
+                progress = parsed_progress
             message = message_from_mapping(parsed)
             if message:
                 phase = truncate_text(message)

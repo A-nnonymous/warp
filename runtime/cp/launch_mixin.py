@@ -1,7 +1,6 @@
 from __future__ import annotations
 
 import os
-import signal
 import subprocess
 import time
 from pathlib import Path
@@ -14,13 +13,11 @@ from .constants import (
 )
 from .network import LaunchPolicy, WorkerProcess, strip_command_args
 from .utils import (
-    dedupe_strings,
     format_command,
     now_iso,
     run_shell,
     slugify,
     summarize_list,
-    terminate_process_tree,
 )
 
 
@@ -40,18 +37,10 @@ class LaunchMixin:
         )
         reference_workspace_root = self.reference_workspace_root() or "unassigned"
         reference_inputs = self.reference_inputs()
-        prompt_context_files = dedupe_strings(
-            [
-                *self.prompt_context_files(),
-                *profile.get("prompt_context_files", []),
-                "governance/operating_model.md",
-                "state/backlog.yaml",
-                "state/gates.yaml",
-                "state/agent_runtime.yaml",
-            ]
-        )
+        prompt_context_files = self.scoped_context_files(worker, profile)
+        inline_state_context = self.render_inline_state_context(worker, profile)
         reference_input_text = "\n".join(f"- {item}" for item in reference_inputs) or "- none configured"
-        context_file_text = "\n".join(f"- {item}" for item in prompt_context_files)
+        context_file_text = "\n".join(f"- {item}" for item in prompt_context_files) if prompt_context_files else "- none"
         text = f"""# {worker['agent']} Worker Prompt
 
 Repository name: {self.project.get('repository_name', 'target-repo')}
@@ -80,6 +69,8 @@ Mandatory rules:
 5. Report blockers before widening scope.
 6. Do not edit shared control-plane files unless the manager explicitly asks and the lock is held.
 7. Commit only on your assigned branch; A0 owns final merge or cherry-pick into `{self.integration_branch()}`.
+
+{inline_state_context}
 
 First files to read:
 
@@ -380,60 +371,3 @@ Primary test command:
             self.last_event = f"stop:{len(stopped)} workers"
             self.write_session_state()
             return {"ok": True, "stopped": stopped, "cleanup": self.cleanup_status()}
-
-    def stop_worker(self, agent: str, note: str = "") -> dict[str, Any]:
-        with self.lock:
-            result = self.stop_worker_locked(agent, note)
-            self.last_event = f"stop:{agent}"
-            self.write_session_state()
-            result["cleanup"] = self.cleanup_status()
-            return result
-
-    def stop_worker_locked(self, agent: str, note: str = "") -> dict[str, Any]:
-        worker_config = next((item for item in self.workers if str(item.get("agent") or "").strip() == agent), None)
-        if worker_config is None:
-            raise ValueError(f"unknown worker {agent}")
-        if agent == "A0":
-            raise ValueError("A0 cannot be shut down through the worker shutdown path")
-
-        process_entry = self.processes.get(agent)
-        runtime_entry = next(
-            (
-                item
-                for item in self.dashboard_runtime_state().get("workers", [])
-                if isinstance(item, dict) and str(item.get("agent") or "").strip() == agent
-            ),
-            {},
-        )
-        stopped = False
-        already_stopped = True
-        pool_name = str(runtime_entry.get("resource_pool") or worker_config.get("resource_pool") or "unassigned")
-        provider_name = str(runtime_entry.get("provider") or worker_config.get("provider") or "unassigned")
-        model = str(runtime_entry.get("model") or worker_config.get("model") or "unassigned")
-        if process_entry is not None:
-            already_stopped = process_entry.process.poll() is not None
-            if process_entry.process.poll() is None:
-                terminate_process_tree(process_entry.process.pid, signal.SIGTERM)
-                try:
-                    process_entry.process.wait(timeout=5)
-                except subprocess.TimeoutExpired:
-                    terminate_process_tree(process_entry.process.pid, signal.SIGKILL)
-                    process_entry.process.wait(timeout=5)
-                stopped = True
-            process_entry.log_handle.close()
-            pool_name = process_entry.resource_pool
-            provider_name = process_entry.provider
-            model = process_entry.model
-            del self.processes[agent]
-
-        self.update_heartbeat(agent, "offline", "manager_stop", note or "none")
-        self.update_runtime_entry(worker_config, pool_name, provider_name, model, "stopped")
-        self.append_team_mailbox_message(
-            "A0",
-            agent,
-            "status_note",
-            note or "A0 requested a clean worker shutdown.",
-            [str(worker_config.get("task_id") or "").strip()] if str(worker_config.get("task_id") or "").strip() else [],
-            "direct",
-        )
-        return {"ok": True, "agent": agent, "stopped": stopped, "already_stopped": already_stopped and not stopped}

@@ -65,7 +65,7 @@ def parse_args() -> argparse.Namespace:
     return parser.parse_args()
 
 
-def apply_runtime_defaults(args: argparse.Namespace, cold_start: bool) -> None:
+def apply_runtime_defaults(args: argparse.Namespace) -> None:
     if args.command in {"serve", "up"}:
         if args.host is None:
             args.host = DEFAULT_DASHBOARD_HOST
@@ -73,9 +73,6 @@ def apply_runtime_defaults(args: argparse.Namespace, cold_start: bool) -> None:
             args.port = DEFAULT_DASHBOARD_PORT
     if args.command == "serve" and not args.foreground:
         args.detach = True
-    elif args.command == "serve" and cold_start:
-        if not args.foreground:
-            args.detach = True
 
 
 def resolve_runtime_config(args: argparse.Namespace) -> tuple[Path, Path, bool, str]:
@@ -350,7 +347,7 @@ def main() -> int:
         )
         return 2
 
-    apply_runtime_defaults(args, cold_start)
+    apply_runtime_defaults(args)
 
     if args.detach and os.environ.get("CONTROL_PLANE_DETACHED") != "1":
         args.config = config_path

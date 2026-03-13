@@ -155,9 +155,13 @@ class MailboxMixin:
             "last_updated": str(data.get("last_updated") or "").strip(),
         }
 
-    def cleanup_status(self) -> dict[str, Any]:
-        runtime_state = self.dashboard_runtime_state()
-        heartbeat_state = self.dashboard_heartbeats_state()
+    def cleanup_status(
+        self,
+        runtime_state: dict[str, Any] | None = None,
+        heartbeat_state: dict[str, Any] | None = None,
+    ) -> dict[str, Any]:
+        runtime_state = runtime_state or self.dashboard_runtime_state()
+        heartbeat_state = heartbeat_state or self.dashboard_heartbeats_state(runtime_state=runtime_state)
         runtime_workers = {
             str(item.get("agent") or "").strip(): item
             for item in runtime_state.get("workers", [])

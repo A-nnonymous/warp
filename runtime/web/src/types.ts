@@ -370,6 +370,7 @@ export type DashboardState = {
   config_text: string;
   validation_errors: string[];
   launch_blockers: string[];
+  peek: Record<string, string[]>;
 };
 
 export type ConfigSaveResponse = {
