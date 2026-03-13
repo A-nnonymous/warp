@@ -1,199 +1,179 @@
-# warp control plane
+# WARP Control Plane
 
-This repository hosts a standalone multi-agent control plane for coordinating delivery work against an external target repository.
+**Workload-Aware Agents Routing Protocol** — a multi-agent orchestration system for coordinating parallel delivery work against an external target repository.
 
-WARP stands for Workload-aware Agents Routing Protocol. The control plane owns:
+WARP manages agent planning, worker lifecycle, provider routing, dependency-aware scheduling, branch integration, and runtime observability through a single control plane with a web dashboard.
 
-- agent planning and backlog state
-- worker launch and stop orchestration
-- provider and resource-pool routing
-- branch and merge visibility for manager-owned integration
-- resumable checkpoints, heartbeats, and runtime status
+## Quick Start
 
-Default target repository name: `target-repo`
+```bash
+# Dashboard only (detaches by default)
+python runtime/control_plane.py serve
 
-## Key terms
+# Dashboard + launch dependency-ready workers
+python runtime/control_plane.py up
+```
 
-- **A0 plan**: the control plane's derived target state from backlog, runtime state, task policies, and shared defaults. It is the default execution target for all workers.
-- **A0 Console**: the operational dashboard view over pending approvals, unresolved inbox items, and manager replies.
-- **override**: a human-pinned exception that takes precedence over A0 plan until cleared. `Reset to A0` removes pinned values so derivation takes over again.
-- **config fallback**: when `runtime/local_config.yaml` is missing, the runtime falls back to `runtime/config_template.yaml` and enters cold-start mode. Saving from the Settings page creates `local_config.yaml` automatically.
+Default listener: `0.0.0.0:8233`
 
-## Structure
+## Architecture
 
-- `strategy/`: program intent, scope, and baseline mapping
-- `governance/`: operating rules, decisions, and machine policy
-- `state/`: live backlog, gates, heartbeats, mailbox, and lock state
-- `status/agents/`: live worker status feeds
-- `checkpoints/`: resumable manager and worker snapshots
-- `experiments/`: experiment registry
-- `reports/`: production-facing reporting and delivery artifacts
-- `bootstrap/`: low-overhead handoff package for zero-context AI agents continuing warp development
+```
+A0 (Manager)
+├── A1  Protocol freeze       ─┐
+├── A6  Baseline trace         │  G0: no dependencies
+│                               │
+├── A2  Hopper audit      ← A1 │
+├── A3  Blackwell audit   ← A1 │  G1-G3: depend on protocol
+├── A7  Benchmark         ← A1 │
+│                               │
+├── A4  Reference path  ← A1,A6│  G1: depend on protocol + baseline
+├── A5  Baseline tests  ← A4,A6│  G4: depend on reference + baseline
+└── A4-002 Training step← A4,A5│  G5: depend on reference + tests
+```
 
-For the authoritative markdown map, read `governance/documentation_architecture.md`.
+Workers launch only when upstream dependencies are satisfied. The monitor loop auto-launches newly-runnable agents every 5 seconds.
 
-## Startup entrypoints
+## Repository Layout
 
-| Scenario | Start here |
-|----------|-----------|
-| Zero-context warp development handoff | `bootstrap/BOOTSTRAP.md` |
-| Resume an interrupted session | `RESUME.md` |
-| Cold start on a new machine | `new_machine_prompt.md` |
-
-Additional references: `governance/manager_protocol.md`, `governance/control_plane_playbook.md`, `governance/worker_launch_playbook.md`.
-
-### Minimum files for live session operator
-
-These files give a returning operator the full current state picture:
-
-1. `checkpoints/manager/latest.md`
-2. `reports/manager_report.md`
-3. `state/backlog.yaml`
-4. `state/gates.yaml`
-5. `state/heartbeats.yaml`
-6. `state/edit_locks.yaml`
-7. `state/team_mailbox.yaml`
-8. `state/agent_runtime.yaml`
-9. `status/agents/`
-10. `checkpoints/agents/`
-11. `strategy/integration_plan.md`
-12. `strategy/baseline_trace.md`
-
-For a zero-context bootstrap agent, use the read order in `bootstrap/BOOTSTRAP.md` instead.
+| Directory | Purpose |
+|-----------|---------|
+| `runtime/` | Control plane source, config, dashboard frontend |
+| `strategy/` | Program intent, scope, baseline mapping |
+| `governance/` | Operating rules, decisions, machine policy |
+| `state/` | Live backlog, gates, heartbeats, mailbox, locks |
+| `status/agents/` | Per-worker status feeds |
+| `checkpoints/` | Resumable manager and worker snapshots |
+| `reports/` | Delivery artifacts and manager reports |
+| `bootstrap/` | Zero-context handoff package for new sessions |
 
 ## Commands
 
-All commands run from the `warp` repo root.
-
-### Core operations
+### Lifecycle
 
 | Command | Effect |
 |---------|--------|
-| `python runtime/control_plane.py serve` | Start dashboard only (detaches by default) |
-| `python runtime/control_plane.py up` | Start dashboard and launch all configured workers |
-| `python runtime/control_plane.py stop-agents` | Stop workers, keep dashboard running |
-| `python runtime/control_plane.py silent` | Close dashboard listener, keep workers running |
-| `python runtime/control_plane.py stop-all` | Stop both listener and worker fleet |
+| `serve` | Start dashboard, no workers |
+| `up` | Start dashboard + launch workers |
+| `stop-agents` | Stop workers, keep dashboard |
+| `silent` | Close dashboard, keep workers |
+| `stop-all` | Stop everything |
 
-Default listener: `0.0.0.0:8233`.
+### Flags
 
-### Optional flags
+| Flag | Purpose |
+|------|---------|
+| `--foreground` | Keep `serve` attached to shell |
+| `--open-browser` | Auto-open dashboard |
+| `--bootstrap` | Force cold-start mode |
+| `--host <addr>` | Bind address |
+| `--port <port>` | Listen port |
+| `--config <path>` | Non-default config file |
 
-Add only when the default path is not enough:
+### Minimal Environment Fallback
 
-- `--open-browser`: open dashboard in browser after startup
-- `--foreground`: keep `serve` attached to current shell
-- `--bootstrap`: force template-backed cold-start mode
-- `--host <addr>`: bind to specific address
-- `--port <port>`: use different port
-- `--config <path>`: load non-default config file
-- `--log-file <path>`: change detached log path
-- `--detach`: force detach on non-`serve` command
-
-### Compatibility fallback
-
-On a machine without the full CUDA stack:
-
-`uv run --no-project --with 'PyYAML>=6.0.2' python runtime/control_plane.py serve`
-
-### Stop behavior details
-
-- `silent`: closes HTTP listener, updates session state, leaves workers alone. Use when reducing exposure without interrupting work.
-- `stop-all`: terminates worker process groups (not just parent PIDs), waits for listener port to be released before returning.
-- `stop-listener`: compatibility alias for `silent`.
-- The runtime records per-port session state, so `--port 8233` targets the correct instance.
-
-### Resume after stop-agents
-
-1. Click `Launch` in dashboard to restart workers with current config.
-2. Click `Restart` for a full stop-and-relaunch cycle.
-3. Re-run `up` if the control plane itself is not running.
-
-## Deployment assumption
-
-Target: Linux with Hopper or Blackwell GPUs and a fully provisioned SonicMoE runtime environment.
-
-- Expected hardware: H100, H200, B200, or GB200
-- Expected environment: CUDA, PyTorch, Triton, and SonicMoE dependencies already installed
-- Worker `test_command` values run immediately without extra setup
-
-For Blackwell kernels on B200/GB200, set `USE_QUACK_GEMM=1` in the worker environment.
-
-## Frontend architecture
-
-Dashboard is served as compiled static assets from `runtime/web/static/`.
-
-- Source: `runtime/web/src/`
-- Rebuild after edits: `cd runtime/web && npm install && npm run build`
-- UI state managed in React
-
-## Settings workflow
-
-1. Run `serve` to prepare config, or `up` to launch immediately.
-2. Open Settings, fill Project (especially `Local Repo Root`) so A0 can derive worktree paths.
-3. Confirm Merge Policy and Resource Pools.
-4. In Worker Defaults, set only common values you want standardized. Leave advanced defaults blank unless needed.
-5. In Worker Config, treat A0 plan as default. Only add overrides for real exceptions.
-6. Use `Reset to A0` to clear unnecessary manual values.
-7. Validate and save each section, then launch or restart from top bar.
-
-### Config minimum
-
-Set at minimum in `runtime/local_config.yaml`:
-
-- `project.local_repo_root`
-- `project.reference_workspace_root` (if needed)
-- provider credentials or `auth_mode: session` for session-backed providers like `ducc`
-- `project.integration_branch`
-
-A0 derives worker worktree paths under `warp/worktrees/` by default. The template pins the default pool to `ducc_pool` with `ducc` first.
-
-## Collaboration protocol
-
-Warp treats collaboration as durable repository state, not transient provider chat.
-
-- Tasks are claimed, reviewed, reopened, and completed through explicit state transitions
-- `state/team_mailbox.yaml` is the provider-agnostic inbox
-- A0 Console exposes mailbox peek, composer, and workflow patching (replan, reassign, reopen presets)
-- Cleanup readiness tracks active workers, pending reviews, and outstanding locks before team release
-- Workers can be shut down individually without collapsing the listener
+```bash
+uv run --no-project --with 'PyYAML>=6.0.2' python runtime/control_plane.py serve
+```
 
 ## Dashboard
 
-Three tabs:
+### Toolbar
 
-1. **Overview**: agent health, delivery progress, branch merge status
-2. **Operations**: commands, validation, provider queue, merge queue, runtime state, heartbeats, backlog, manager report
-3. **Settings**: project, pools, merge policy, worker defaults, worker overrides
+Launch | Restart | **Soft Stop** | Stop Agents | Silent Mode | Stop All | Refresh
 
-Top bar: Launch, Restart, Stop Agents, Silent Mode, Stop All, Refresh, Copy Command.
+- **Soft Stop**: saves each agent's progress to `checkpoints/agents/` before stopping — safe for session handoff
+- **Stop Agents**: immediate SIGTERM, no checkpoint
 
-## Operating rules
+### Tabs
 
-### Execution topology
+| Tab | Content |
+|-----|---------|
+| **Overview** | Task DAG, agent peek (real-time output), progress metrics, branch merge status, agent health cards |
+| **Operations** | Provider queue, processes, backlog, gates, runtime topology, heartbeats, mailbox, manager report |
+| **Settings** | Project paths, resource pools, merge policy, worker defaults, per-worker overrides |
 
-Every worker must be recorded in `state/agent_runtime.yaml` before it is counted as active.
+### A0 Console
+
+Pop-out window for manager approvals, unblock decisions, resume notes, and workflow patching. Accessible from Overview or toolbar.
+
+## Configuration
+
+Minimum in `runtime/local_config.yaml`:
+
+```yaml
+project:
+  local_repo_root: /path/to/target-repo
+  integration_branch: main
+
+providers:
+  ducc:
+    auth_mode: session
+```
+
+A0 derives worktree paths, branches, and test commands automatically from backlog state. Use Settings to override only when needed; `Reset to A0` clears manual pins.
+
+### Per-Agent Identity
+
+Each worker commits under its own name:
+
+| Agent | Git Name | Email |
+|-------|----------|-------|
+| A0 | A0-Manager | panzhaowu@baidu.com |
+| A1 | A1-Protocol | panzhaowu@baidu.com |
+| A2 | A2-Hopper | panzhaowu@baidu.com |
+| ... | A{n}-{Role} | panzhaowu@baidu.com |
+
+## Key Concepts
+
+| Term | Definition |
+|------|-----------|
+| **A0 Plan** | Derived target state from backlog + runtime + task policies. Default execution target for all workers. |
+| **Override** | Human-pinned exception over A0 plan. `Reset to A0` removes it. |
+| **Soft Stop** | Checkpoint-then-stop: launches a brief session per agent to save progress before shutdown. |
+| **Task DAG** | Dependency graph on Overview tab. Nodes colored by status: green=done, blue=active, amber=pending, gray=blocked. |
+| **Peek** | Real-time sliding window of each agent's parsed output (from ducc stream-json). |
+
+## Operational State
+
+### Session Resume
+
+| Scenario | Start here |
+|----------|-----------|
+| Zero-context handoff | `bootstrap/BOOTSTRAP.md` |
+| Resume interrupted session | `RESUME.md` |
+| Cold start on new machine | `new_machine_prompt.md` |
+
+### Minimum Files for Live Session
+
+1. `checkpoints/manager/latest.md`
+2. `reports/manager_report.md`
+3. `state/backlog.yaml` + `state/gates.yaml`
+4. `state/heartbeats.yaml` + `state/agent_runtime.yaml`
+5. `state/team_mailbox.yaml` + `state/edit_locks.yaml`
+6. `status/agents/` + `checkpoints/agents/`
+7. `strategy/integration_plan.md` + `strategy/baseline_trace.md`
+
+### Heartbeats
+
+States: `healthy` | `stale` | `not-started` | `offline`. Tracked in `state/heartbeats.yaml`.
 
 ### Concurrency
 
 High-conflict control files are single-writer. Claim in `state/edit_locks.yaml` before editing.
 
-### Agent checkpoints
+## Deployment
 
-Each worker maintains:
-- `status/A*.md` for live status
-- `checkpoints/agents/A*.md` for resumable checkpoint
+Target: Linux with Hopper or Blackwell GPUs and a provisioned SonicMoE environment.
 
-### Heartbeats
+- Hardware: H100, H200, B200, or GB200
+- Stack: CUDA + PyTorch + Triton + SonicMoE
+- Blackwell kernels: set `USE_QUACK_GEMM=1` in worker environment
 
-Tracked in `state/heartbeats.yaml`: `healthy`, `stale`, `not-started`, `offline`.
+### Frontend Rebuild
 
-The manager must include heartbeat state in every production status report.
+```bash
+cd runtime/web && npm install && npm run build
+```
 
-### Remote access
-
-If the hostname resolves to IPv6 first, the runtime brings up an IPv4 listener on `0.0.0.0` by default, then adds IPv6 as secondary.
-
-## Rule
-
-No work is considered active unless it is reflected here.
+Source in `runtime/web/src/`, static assets served from `runtime/web/static/`.
