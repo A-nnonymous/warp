@@ -213,6 +213,7 @@ Primary test command:
         prompt_transport = self.provider_prompt_transport(provider_name, provider)
         command = self.sanitize_provider_command(provider_name, command, prompt_transport)
         env = os.environ.copy()
+        env.pop("CLAUDECODE", None)
         recursion_guard = self.provider_recursion_guard_mode(provider_name, provider)
         launch_wrapper = ""
         api_value = pool.get("api_key", "")
@@ -302,10 +303,17 @@ Primary test command:
             resolved_policy = policy or self.default_launch_policy()
             if restart:
                 self.stop_workers()
+            control = self.compute_manager_control_state()
+            launchable = set(control["runnable_agents"] + control["active_agents"] + control["attention_agents"])
             launched: list[dict[str, Any]] = []
+            skipped: list[str] = []
             failures: list[dict[str, str]] = []
             for worker in self.workers:
-                if worker["agent"] in self.processes and self.processes[worker["agent"]].process.poll() is None:
+                agent = worker["agent"]
+                if agent in self.processes and self.processes[agent].process.poll() is None:
+                    continue
+                if agent not in launchable:
+                    skipped.append(agent)
                     continue
                 try:
                     launched.append(self.launch_worker(worker, policy=resolved_policy))
@@ -352,6 +360,7 @@ Primary test command:
             return {
                 "ok": len(failures) == 0,
                 "launched": launched,
+                "skipped_blocked": skipped,
                 "failures": failures,
                 "error": error_summary,
                 "launch_policy": {
@@ -359,6 +368,153 @@ Primary test command:
                     "provider": resolved_policy.provider,
                     "model": resolved_policy.model,
                 },
+            }
+
+    def render_checkpoint_prompt(self, worker: dict[str, Any]) -> Path:
+        """Render a short checkpoint prompt that asks the agent to save its progress."""
+        prompt_path = PROMPT_DIR / f"{worker['agent']}_checkpoint.md"
+        task_id = worker.get("task_id", "unassigned")
+        task_title = self.task_title(task_id)
+        text = f"""# {worker['agent']} Checkpoint Session
+
+Repository name: {self.project.get('repository_name', 'target-repo')}
+Agent: {worker['agent']}
+Task: {task_id} - {task_title}
+Worktree: {worker['worktree_path']}
+Branch: {worker['branch']}
+
+You are being asked to save a checkpoint before session ends.
+
+Instructions:
+
+1. Write a checkpoint file at `checkpoints/agents/{worker['agent']}_checkpoint.md` summarizing:
+   - What you have accomplished so far on this task
+   - Key files you created or modified
+   - What remains to be done
+   - Any blockers or important discoveries
+   - Current test status
+2. Focus only on the work itself, not on the control-plane or session mechanics.
+3. Be concise but thorough — this checkpoint is for the next session to resume your work.
+4. Commit the checkpoint file on your branch with message "checkpoint: {task_id} session pause".
+"""
+        prompt_path.write_text(text, encoding="utf-8")
+        return prompt_path
+
+    def soft_stop_all(self, timeout: int = 120) -> dict[str, Any]:
+        """Gracefully stop all agents after launching checkpoint sessions to save progress."""
+        with self.lock:
+            # Identify active agents
+            active_agents: list[str] = []
+            for agent, wp in self.processes.items():
+                if wp.process.poll() is None:
+                    active_agents.append(agent)
+
+            if not active_agents:
+                return {"ok": True, "stopped": [], "checkpointed": [], "skipped": [], "cleanup": self.cleanup_status()}
+
+            # Stop current processes first
+            stopped: list[str] = []
+            for agent in active_agents:
+                result = self.stop_worker_locked(agent)
+                if result.get("stopped") or result.get("already_stopped"):
+                    stopped.append(agent)
+
+            # Launch checkpoint sessions for each previously-active agent
+            checkpoint_procs: list[tuple[str, subprocess.Popen]] = []
+            checkpointed: list[str] = []
+            skipped: list[str] = []
+            for agent_name in active_agents:
+                worker = next((w for w in self.workers if w["agent"] == agent_name), None)
+                if not worker:
+                    skipped.append(agent_name)
+                    continue
+                try:
+                    pool_name = worker.get("resource_pool") or "ducc_pool"
+                    pool = self.resource_pools.get(pool_name, {})
+                    provider_name = worker.get("provider") or pool.get("provider") or "ducc"
+                    provider = self.providers.get(provider_name, {})
+                    model = worker.get("model") or pool.get("model") or "unknown"
+                    template = worker.get("command_template") or provider.get("command_template")
+                    if not template:
+                        skipped.append(agent_name)
+                        continue
+
+                    prompt_path = self.render_checkpoint_prompt(worker)
+                    prompt_transport = self.provider_prompt_transport(provider_name, provider)
+                    values = {
+                        "agent": worker["agent"],
+                        "model": model,
+                        "prompt_file": str(prompt_path),
+                        "worktree_path": worker["worktree_path"],
+                        "branch": worker["branch"],
+                        "repository_name": self.project.get("repository_name", "target-repo"),
+                        "reference_workspace_root": self.reference_workspace_root() or "unassigned",
+                    }
+                    command = format_command(template, values)
+                    command = self.sanitize_provider_command(provider_name, command, prompt_transport)
+                    env = os.environ.copy()
+                    env.pop("CLAUDECODE", None)
+                    api_value = pool.get("api_key", "")
+                    api_env_name = provider.get("api_key_env_name")
+                    if (
+                        self.provider_auth_mode(provider) == "api_key"
+                        and api_env_name
+                        and api_value
+                        and api_value != "replace_me_or_use_api_key_env"
+                    ):
+                        env[api_env_name] = api_value
+                    extra_env = pool.get("extra_env", {})
+                    if isinstance(extra_env, dict):
+                        env.update({str(k): str(v) for k, v in extra_env.items()})
+                    env.update(self.guarded_worker_env(worker, provider_name, provider))
+                    if self.provider_uses_exec_wrapper(provider_name, provider):
+                        wrapper_path = self.ensure_provider_exec_wrapper(provider_name)
+                        command = [str(wrapper_path), *command]
+
+                    log_path = LOG_DIR / f"{agent_name}_checkpoint.log"
+                    log_handle = log_path.open("w", encoding="utf-8")
+                    prompt_handle = prompt_path.open("r", encoding="utf-8") if prompt_transport == "stdin" else None
+                    proc = subprocess.Popen(
+                        command,
+                        cwd=worker["worktree_path"],
+                        stdout=log_handle,
+                        stderr=subprocess.STDOUT,
+                        stdin=prompt_handle if prompt_handle is not None else subprocess.DEVNULL,
+                        text=True,
+                        env=env,
+                        start_new_session=True,
+                    )
+                    if prompt_handle is not None:
+                        prompt_handle.close()
+                    checkpoint_procs.append((agent_name, proc))
+                    self.peek_append(agent_name, [f"[checkpoint] saving progress for {agent_name}..."])
+                except Exception:
+                    skipped.append(agent_name)
+
+        # Wait for checkpoint processes outside the lock
+        for agent_name, proc in checkpoint_procs:
+            try:
+                proc.wait(timeout=timeout)
+                checkpointed.append(agent_name)
+                self.peek_append(agent_name, [f"[checkpoint] {agent_name} progress saved"])
+            except subprocess.TimeoutExpired:
+                proc.terminate()
+                try:
+                    proc.wait(timeout=5)
+                except subprocess.TimeoutExpired:
+                    proc.kill()
+                skipped.append(agent_name)
+                self.peek_append(agent_name, [f"[checkpoint] {agent_name} timed out, killed"])
+
+        with self.lock:
+            self.last_event = f"soft_stop:{len(checkpointed)} checkpointed, {len(stopped)} stopped"
+            self.write_session_state()
+            return {
+                "ok": True,
+                "stopped": stopped,
+                "checkpointed": checkpointed,
+                "skipped": skipped,
+                "cleanup": self.cleanup_status(),
             }
 
     def stop_workers(self) -> dict[str, Any]:

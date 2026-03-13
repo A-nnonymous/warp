@@ -1111,7 +1111,7 @@ var require_react_development = __commonJS({
           var dispatcher = resolveDispatcher();
           return dispatcher.useCallback(callback, deps);
         }
-        function useMemo2(create, deps) {
+        function useMemo3(create, deps) {
           var dispatcher = resolveDispatcher();
           return dispatcher.useMemo(create, deps);
         }
@@ -1883,7 +1883,7 @@ var require_react_development = __commonJS({
         exports.useImperativeHandle = useImperativeHandle;
         exports.useInsertionEffect = useInsertionEffect;
         exports.useLayoutEffect = useLayoutEffect;
-        exports.useMemo = useMemo2;
+        exports.useMemo = useMemo3;
         exports.useReducer = useReducer;
         exports.useRef = useRef3;
         exports.useState = useState2;
@@ -24463,11 +24463,11 @@ var require_react_jsx_runtime_development = __commonJS({
             return jsxWithValidation(type, props, key, false);
           }
         }
-        var jsx10 = jsxWithValidationDynamic;
-        var jsxs9 = jsxWithValidationStatic;
+        var jsx11 = jsxWithValidationDynamic;
+        var jsxs10 = jsxWithValidationStatic;
         exports.Fragment = REACT_FRAGMENT_TYPE;
-        exports.jsx = jsx10;
-        exports.jsxs = jsxs9;
+        exports.jsx = jsx11;
+        exports.jsxs = jsxs10;
       })();
     }
   }
@@ -24486,11 +24486,11 @@ var require_jsx_runtime = __commonJS({
 });
 
 // src/main.tsx
-var import_react3 = __toESM(require_react(), 1);
+var import_react4 = __toESM(require_react(), 1);
 var import_client = __toESM(require_client(), 1);
 
 // src/App.tsx
-var import_react2 = __toESM(require_react(), 1);
+var import_react3 = __toESM(require_react(), 1);
 
 // src/api.ts
 function summarizeItems(items, limit = 4) {
@@ -24577,6 +24577,9 @@ function launchWorkers(restart, launchPolicy) {
 }
 function stopWorkers() {
   return postJson("/api/stop", {});
+}
+function softStopWorkers(timeout = 120) {
+  return postJson("/api/soft-stop", { timeout });
 }
 function stopAll() {
   return postJson("/api/stop-all", {});
@@ -26059,98 +26062,261 @@ function PeekWindow({ agent, lines }) {
   ] });
 }
 
-// src/components/OverviewTab.tsx
+// src/components/TaskDAG.tsx
+var import_react2 = __toESM(require_react(), 1);
 var import_jsx_runtime4 = __toESM(require_jsx_runtime(), 1);
+var NODE_W = 150;
+var NODE_H = 62;
+var LAYER_GAP_X = 200;
+var COL_GAP_Y = 90;
+var PAD_X = 40;
+var PAD_Y = 30;
+var STATUS_COLORS = {
+  completed: { fill: "#0f2e24", stroke: "#22c55e", text: "#86efac" },
+  done: { fill: "#0f2e24", stroke: "#22c55e", text: "#86efac" },
+  merged: { fill: "#0f2e24", stroke: "#22c55e", text: "#86efac" },
+  active: { fill: "#0f1e3a", stroke: "#3b82f6", text: "#93c5fd" },
+  healthy: { fill: "#0f1e3a", stroke: "#3b82f6", text: "#93c5fd" },
+  pending: { fill: "#1a1a0f", stroke: "#f59e0b", text: "#fcd34d" },
+  blocked: { fill: "#14181f", stroke: "#6b7280", text: "#9ca3af" },
+  launch_failed: { fill: "#2a0f18", stroke: "#ef4444", text: "#fca5a5" }
+};
+function statusStyle(status) {
+  return STATUS_COLORS[status] || STATUS_COLORS.pending;
+}
+function buildDag(items, runtimeAgents) {
+  if (!items.length) return { nodes: [], width: 0, height: 0 };
+  const byId = /* @__PURE__ */ new Map();
+  for (const item of items) byId.set(item.id, item);
+  const layerMap = /* @__PURE__ */ new Map();
+  function getLayer(id) {
+    if (layerMap.has(id)) return layerMap.get(id);
+    const item = byId.get(id);
+    if (!item || !item.dependencies?.length) {
+      layerMap.set(id, 0);
+      return 0;
+    }
+    let maxDep = 0;
+    for (const dep of item.dependencies) {
+      maxDep = Math.max(maxDep, getLayer(dep) + 1);
+    }
+    layerMap.set(id, maxDep);
+    return maxDep;
+  }
+  for (const item of items) getLayer(item.id);
+  const layers = /* @__PURE__ */ new Map();
+  for (const item of items) {
+    const l = layerMap.get(item.id) || 0;
+    if (!layers.has(l)) layers.set(l, []);
+    layers.get(l).push(item);
+  }
+  const maxLayer = Math.max(...Array.from(layers.keys()));
+  const maxColCount = Math.max(...Array.from(layers.values()).map((g) => g.length));
+  const nodes = [];
+  for (let l = 0; l <= maxLayer; l++) {
+    const group = layers.get(l) || [];
+    group.sort((a, b) => a.id.localeCompare(b.id));
+    const totalHeight = group.length * NODE_H + (group.length - 1) * COL_GAP_Y;
+    const maxTotalHeight = maxColCount * NODE_H + (maxColCount - 1) * COL_GAP_Y;
+    const offsetY = (maxTotalHeight - totalHeight) / 2;
+    for (let c = 0; c < group.length; c++) {
+      const item = group[c];
+      let effectiveStatus = item.status;
+      if (runtimeAgents.has(item.owner) && (effectiveStatus === "pending" || effectiveStatus === "blocked")) {
+        effectiveStatus = "active";
+      }
+      nodes.push({
+        id: item.id,
+        title: item.title || item.id,
+        owner: item.owner,
+        gate: item.gate,
+        status: effectiveStatus,
+        deps: item.dependencies || [],
+        layer: l,
+        col: c,
+        x: PAD_X + l * LAYER_GAP_X,
+        y: PAD_Y + offsetY + c * (NODE_H + COL_GAP_Y)
+      });
+    }
+  }
+  const width = PAD_X * 2 + maxLayer * LAYER_GAP_X + NODE_W;
+  const height = PAD_Y * 2 + maxColCount * NODE_H + (maxColCount - 1) * COL_GAP_Y;
+  return { nodes, width, height };
+}
+function TaskDAG({ data }) {
+  const items = data.backlog?.items || [];
+  const runtimeAgents = (0, import_react2.useMemo)(() => {
+    const set = /* @__PURE__ */ new Set();
+    for (const w of data.runtime?.workers || []) {
+      if (w.status === "active" || w.status === "healthy") set.add(w.agent);
+    }
+    return set;
+  }, [data.runtime]);
+  const { nodes, width, height } = (0, import_react2.useMemo)(() => buildDag(items, runtimeAgents), [items, runtimeAgents]);
+  if (!nodes.length) {
+    return /* @__PURE__ */ (0, import_jsx_runtime4.jsxs)("section", { className: "card", children: [
+      /* @__PURE__ */ (0, import_jsx_runtime4.jsx)("h2", { children: "Task DAG" }),
+      /* @__PURE__ */ (0, import_jsx_runtime4.jsx)("div", { className: "small muted", children: "No backlog items to visualize." })
+    ] });
+  }
+  const nodeById = new Map(nodes.map((n) => [n.id, n]));
+  const edges = [];
+  for (const node of nodes) {
+    for (const dep of node.deps) {
+      const src = nodeById.get(dep);
+      if (src) edges.push({ from: src, to: node });
+    }
+  }
+  return /* @__PURE__ */ (0, import_jsx_runtime4.jsxs)("section", { className: "card", children: [
+    /* @__PURE__ */ (0, import_jsx_runtime4.jsx)("div", { className: "panel-title", children: /* @__PURE__ */ (0, import_jsx_runtime4.jsxs)("div", { children: [
+      /* @__PURE__ */ (0, import_jsx_runtime4.jsx)("h2", { children: "Task DAG" }),
+      /* @__PURE__ */ (0, import_jsx_runtime4.jsx)("p", { className: "small", children: "Dependency graph showing task flow, status, and gate assignments." })
+    ] }) }),
+    /* @__PURE__ */ (0, import_jsx_runtime4.jsx)("div", { className: "dag-container", children: /* @__PURE__ */ (0, import_jsx_runtime4.jsxs)("svg", { viewBox: `0 0 ${width} ${height}`, width, height, style: { maxWidth: "100%", height: "auto" }, children: [
+      /* @__PURE__ */ (0, import_jsx_runtime4.jsx)("defs", { children: /* @__PURE__ */ (0, import_jsx_runtime4.jsx)("marker", { id: "dag-arrow", viewBox: "0 0 10 10", refX: "10", refY: "5", markerWidth: "8", markerHeight: "8", orient: "auto-start-reverse", children: /* @__PURE__ */ (0, import_jsx_runtime4.jsx)("path", { d: "M0 0 L10 5 L0 10 z", fill: "#64748b" }) }) }),
+      edges.map(({ from, to }) => {
+        const x1 = from.x + NODE_W;
+        const y1 = from.y + NODE_H / 2;
+        const x2 = to.x;
+        const y2 = to.y + NODE_H / 2;
+        const cx1 = x1 + (x2 - x1) * 0.4;
+        const cx2 = x2 - (x2 - x1) * 0.4;
+        return /* @__PURE__ */ (0, import_jsx_runtime4.jsx)(
+          "path",
+          {
+            d: `M${x1},${y1} C${cx1},${y1} ${cx2},${y2} ${x2},${y2}`,
+            fill: "none",
+            stroke: "#475569",
+            strokeWidth: 2,
+            markerEnd: "url(#dag-arrow)",
+            opacity: 0.6
+          },
+          `${from.id}-${to.id}`
+        );
+      }),
+      nodes.map((node) => {
+        const style = statusStyle(node.status);
+        return /* @__PURE__ */ (0, import_jsx_runtime4.jsxs)("g", { children: [
+          /* @__PURE__ */ (0, import_jsx_runtime4.jsx)(
+            "rect",
+            {
+              x: node.x,
+              y: node.y,
+              width: NODE_W,
+              height: NODE_H,
+              rx: 10,
+              ry: 10,
+              fill: style.fill,
+              stroke: style.stroke,
+              strokeWidth: 2
+            }
+          ),
+          /* @__PURE__ */ (0, import_jsx_runtime4.jsx)("text", { x: node.x + NODE_W / 2, y: node.y + 20, textAnchor: "middle", fill: style.text, fontSize: 13, fontWeight: 700, children: node.id }),
+          /* @__PURE__ */ (0, import_jsx_runtime4.jsxs)("text", { x: node.x + NODE_W / 2, y: node.y + 36, textAnchor: "middle", fill: "#94a3b8", fontSize: 10, children: [
+            node.owner,
+            " \xB7 ",
+            node.gate
+          ] }),
+          /* @__PURE__ */ (0, import_jsx_runtime4.jsx)("text", { x: node.x + NODE_W / 2, y: node.y + 52, textAnchor: "middle", fill: style.text, fontSize: 10, opacity: 0.8, children: node.status })
+        ] }, node.id);
+      })
+    ] }) })
+  ] });
+}
+
+// src/components/OverviewTab.tsx
+var import_jsx_runtime5 = __toESM(require_jsx_runtime(), 1);
 function OverviewTab({ data, agentRows, progress, onOpenA0Console }) {
   const mergeQueue = data.merge_queue || [];
   const mergeReady = mergeQueue.filter((item) => ["offline", "stopped"].includes(String(item.status))).length;
   const mergeActive = mergeQueue.filter((item) => ["active", "healthy"].includes(String(item.status))).length;
   const duccPool = data.provider_queue.find((item) => item.provider === "ducc");
-  return /* @__PURE__ */ (0, import_jsx_runtime4.jsxs)("div", { className: "tab-body", children: [
-    /* @__PURE__ */ (0, import_jsx_runtime4.jsxs)("section", { className: "overview-hero", children: [
-      /* @__PURE__ */ (0, import_jsx_runtime4.jsxs)("section", { className: "card progress-card", children: [
-        /* @__PURE__ */ (0, import_jsx_runtime4.jsxs)("div", { className: "page-header", children: [
-          /* @__PURE__ */ (0, import_jsx_runtime4.jsxs)("div", { children: [
-            /* @__PURE__ */ (0, import_jsx_runtime4.jsx)("h2", { children: "Overall Progress" }),
-            /* @__PURE__ */ (0, import_jsx_runtime4.jsx)("p", { className: "small", children: "A compact view of delivery momentum and the current control-plane state." })
+  return /* @__PURE__ */ (0, import_jsx_runtime5.jsxs)("div", { className: "tab-body", children: [
+    /* @__PURE__ */ (0, import_jsx_runtime5.jsxs)("section", { className: "overview-hero", children: [
+      /* @__PURE__ */ (0, import_jsx_runtime5.jsxs)("section", { className: "card progress-card", children: [
+        /* @__PURE__ */ (0, import_jsx_runtime5.jsxs)("div", { className: "page-header", children: [
+          /* @__PURE__ */ (0, import_jsx_runtime5.jsxs)("div", { children: [
+            /* @__PURE__ */ (0, import_jsx_runtime5.jsx)("h2", { children: "Overall Progress" }),
+            /* @__PURE__ */ (0, import_jsx_runtime5.jsx)("p", { className: "small", children: "A compact view of delivery momentum and the current control-plane state." })
           ] }),
-          /* @__PURE__ */ (0, import_jsx_runtime4.jsxs)("div", { className: "small muted", children: [
+          /* @__PURE__ */ (0, import_jsx_runtime5.jsxs)("div", { className: "small muted", children: [
             progress.passedGates,
             "/",
             progress.totalGates,
             " gates passed"
           ] })
         ] }),
-        /* @__PURE__ */ (0, import_jsx_runtime4.jsx)("div", { className: "progress-bar", children: /* @__PURE__ */ (0, import_jsx_runtime4.jsx)("div", { className: "progress-fill", style: { width: `${progress.progress}%` } }) }),
-        /* @__PURE__ */ (0, import_jsx_runtime4.jsxs)("div", { className: "summary", children: [
-          /* @__PURE__ */ (0, import_jsx_runtime4.jsx)(Metric, { label: "Agents", value: agentRows.length, hint: `${progress.activeAgents} active or healthy` }),
-          /* @__PURE__ */ (0, import_jsx_runtime4.jsx)(Metric, { label: "Overall Progress", value: `${progress.progress}%`, hint: `${progress.passedGates}/${progress.totalGates} gates passed` }),
-          /* @__PURE__ */ (0, import_jsx_runtime4.jsx)(Metric, { label: "Attention Needed", value: progress.attentionAgents, hint: `${progress.blockedItems} backlog items blocked` }),
-          /* @__PURE__ */ (0, import_jsx_runtime4.jsx)(Metric, { label: "Pending Reviews", value: progress.reviewItems + progress.planPending, hint: `${progress.mailboxPending} mailbox item(s) open` })
+        /* @__PURE__ */ (0, import_jsx_runtime5.jsx)("div", { className: "progress-bar", children: /* @__PURE__ */ (0, import_jsx_runtime5.jsx)("div", { className: "progress-fill", style: { width: `${progress.progress}%` } }) }),
+        /* @__PURE__ */ (0, import_jsx_runtime5.jsxs)("div", { className: "summary", children: [
+          /* @__PURE__ */ (0, import_jsx_runtime5.jsx)(Metric, { label: "Agents", value: agentRows.length, hint: `${progress.activeAgents} active or healthy` }),
+          /* @__PURE__ */ (0, import_jsx_runtime5.jsx)(Metric, { label: "Overall Progress", value: `${progress.progress}%`, hint: `${progress.passedGates}/${progress.totalGates} gates passed` }),
+          /* @__PURE__ */ (0, import_jsx_runtime5.jsx)(Metric, { label: "Attention Needed", value: progress.attentionAgents, hint: `${progress.blockedItems} backlog items blocked` }),
+          /* @__PURE__ */ (0, import_jsx_runtime5.jsx)(Metric, { label: "Pending Reviews", value: progress.reviewItems + progress.planPending, hint: `${progress.mailboxPending} mailbox item(s) open` })
         ] }),
-        /* @__PURE__ */ (0, import_jsx_runtime4.jsxs)("div", { className: "progress-list", children: [
-          /* @__PURE__ */ (0, import_jsx_runtime4.jsx)(ProgressRow, { label: "Backlog", value: `${progress.completedItems}/${progress.totalItems} completed` }),
-          /* @__PURE__ */ (0, import_jsx_runtime4.jsx)(ProgressRow, { label: "Blocked work", value: `${progress.blockedItems} items` }),
-          /* @__PURE__ */ (0, import_jsx_runtime4.jsx)(ProgressRow, { label: "Claimed work", value: `${progress.claimedItems} items` }),
-          /* @__PURE__ */ (0, import_jsx_runtime4.jsx)(ProgressRow, { label: "Awaiting review", value: `${progress.reviewItems} handoff(s), ${progress.planPending} plan(s)` }),
-          /* @__PURE__ */ (0, import_jsx_runtime4.jsx)(ProgressRow, { label: "Agents needing action", value: `${progress.attentionAgents}` }),
-          /* @__PURE__ */ (0, import_jsx_runtime4.jsx)(ProgressRow, { label: "Current gate", value: progress.openGate ? `${progress.openGate.id} \xB7 ${progress.openGate.name}` : "All gates passed" })
+        /* @__PURE__ */ (0, import_jsx_runtime5.jsxs)("div", { className: "progress-list", children: [
+          /* @__PURE__ */ (0, import_jsx_runtime5.jsx)(ProgressRow, { label: "Backlog", value: `${progress.completedItems}/${progress.totalItems} completed` }),
+          /* @__PURE__ */ (0, import_jsx_runtime5.jsx)(ProgressRow, { label: "Blocked work", value: `${progress.blockedItems} items` }),
+          /* @__PURE__ */ (0, import_jsx_runtime5.jsx)(ProgressRow, { label: "Claimed work", value: `${progress.claimedItems} items` }),
+          /* @__PURE__ */ (0, import_jsx_runtime5.jsx)(ProgressRow, { label: "Awaiting review", value: `${progress.reviewItems} handoff(s), ${progress.planPending} plan(s)` }),
+          /* @__PURE__ */ (0, import_jsx_runtime5.jsx)(ProgressRow, { label: "Agents needing action", value: `${progress.attentionAgents}` }),
+          /* @__PURE__ */ (0, import_jsx_runtime5.jsx)(ProgressRow, { label: "Current gate", value: progress.openGate ? `${progress.openGate.id} \xB7 ${progress.openGate.name}` : "All gates passed" })
         ] })
       ] }),
-      /* @__PURE__ */ (0, import_jsx_runtime4.jsxs)("section", { className: "card", children: [
-        /* @__PURE__ */ (0, import_jsx_runtime4.jsx)("div", { className: "page-header", children: /* @__PURE__ */ (0, import_jsx_runtime4.jsxs)("div", { children: [
-          /* @__PURE__ */ (0, import_jsx_runtime4.jsx)("h2", { children: "Program Snapshot" }),
-          /* @__PURE__ */ (0, import_jsx_runtime4.jsx)("p", { className: "small", children: "What is blocked, what is runnable, and which event happened last." })
+      /* @__PURE__ */ (0, import_jsx_runtime5.jsxs)("section", { className: "card", children: [
+        /* @__PURE__ */ (0, import_jsx_runtime5.jsx)("div", { className: "page-header", children: /* @__PURE__ */ (0, import_jsx_runtime5.jsxs)("div", { children: [
+          /* @__PURE__ */ (0, import_jsx_runtime5.jsx)("h2", { children: "Program Snapshot" }),
+          /* @__PURE__ */ (0, import_jsx_runtime5.jsx)("p", { className: "small", children: "What is blocked, what is runnable, and which event happened last." })
         ] }) }),
-        /* @__PURE__ */ (0, import_jsx_runtime4.jsxs)("div", { className: "helper-list", children: [
-          /* @__PURE__ */ (0, import_jsx_runtime4.jsx)(HelperCard, { title: "Startup state", body: data.mode.reason || data.mode.state }),
-          /* @__PURE__ */ (0, import_jsx_runtime4.jsx)(HelperCard, { title: "Config target", body: data.mode.persist_config_path }),
-          /* @__PURE__ */ (0, import_jsx_runtime4.jsx)(HelperCard, { title: "Last event", body: data.last_event || "none" }),
-          /* @__PURE__ */ (0, import_jsx_runtime4.jsx)(HelperCard, { title: "Launch posture", body: data.launch_blockers.length ? `${data.launch_blockers.length} blocker(s)` : "ready to launch" }),
-          /* @__PURE__ */ (0, import_jsx_runtime4.jsx)(HelperCard, { title: "A0 approvals", body: data.a0_console.pending_count ? `${data.a0_console.pending_count} pending request(s)` : "no pending requests" }),
-          /* @__PURE__ */ (0, import_jsx_runtime4.jsx)(HelperCard, { title: "Team mailbox", body: data.team_mailbox.pending_count ? `${data.team_mailbox.pending_count} open message(s)` : "mailbox is clear" }),
-          /* @__PURE__ */ (0, import_jsx_runtime4.jsx)(HelperCard, { title: "Cleanup", body: data.cleanup.ready ? "ready to release the team" : `${data.cleanup.blockers.length} cleanup blocker(s)` }),
-          /* @__PURE__ */ (0, import_jsx_runtime4.jsx)(HelperCard, { title: "ducc pool", body: duccPool ? `${duccPool.active_workers} active \xB7 ${formatTokenCount(duccPool.usage?.total_tokens)} tokens` : "ducc pool not configured" })
+        /* @__PURE__ */ (0, import_jsx_runtime5.jsxs)("div", { className: "helper-list", children: [
+          /* @__PURE__ */ (0, import_jsx_runtime5.jsx)(HelperCard, { title: "Startup state", body: data.mode.reason || data.mode.state }),
+          /* @__PURE__ */ (0, import_jsx_runtime5.jsx)(HelperCard, { title: "Config target", body: data.mode.persist_config_path }),
+          /* @__PURE__ */ (0, import_jsx_runtime5.jsx)(HelperCard, { title: "Last event", body: data.last_event || "none" }),
+          /* @__PURE__ */ (0, import_jsx_runtime5.jsx)(HelperCard, { title: "Launch posture", body: data.launch_blockers.length ? `${data.launch_blockers.length} blocker(s)` : "ready to launch" }),
+          /* @__PURE__ */ (0, import_jsx_runtime5.jsx)(HelperCard, { title: "A0 approvals", body: data.a0_console.pending_count ? `${data.a0_console.pending_count} pending request(s)` : "no pending requests" }),
+          /* @__PURE__ */ (0, import_jsx_runtime5.jsx)(HelperCard, { title: "Team mailbox", body: data.team_mailbox.pending_count ? `${data.team_mailbox.pending_count} open message(s)` : "mailbox is clear" }),
+          /* @__PURE__ */ (0, import_jsx_runtime5.jsx)(HelperCard, { title: "Cleanup", body: data.cleanup.ready ? "ready to release the team" : `${data.cleanup.blockers.length} cleanup blocker(s)` }),
+          /* @__PURE__ */ (0, import_jsx_runtime5.jsx)(HelperCard, { title: "ducc pool", body: duccPool ? `${duccPool.active_workers} active \xB7 ${formatTokenCount(duccPool.usage?.total_tokens)} tokens` : "ducc pool not configured" })
         ] }),
-        /* @__PURE__ */ (0, import_jsx_runtime4.jsx)("div", { className: "toolbar-group", children: /* @__PURE__ */ (0, import_jsx_runtime4.jsx)("button", { className: "ghost", type: "button", onClick: onOpenA0Console, children: "Open A0 Console" }) })
+        /* @__PURE__ */ (0, import_jsx_runtime5.jsx)("div", { className: "toolbar-group", children: /* @__PURE__ */ (0, import_jsx_runtime5.jsx)("button", { className: "ghost", type: "button", onClick: onOpenA0Console, children: "Open A0 Console" }) })
       ] })
     ] }),
-    /* @__PURE__ */ (0, import_jsx_runtime4.jsxs)("section", { className: "card", children: [
-      /* @__PURE__ */ (0, import_jsx_runtime4.jsxs)("div", { className: "panel-title", children: [
-        /* @__PURE__ */ (0, import_jsx_runtime4.jsxs)("div", { children: [
-          /* @__PURE__ */ (0, import_jsx_runtime4.jsx)("h2", { children: "Branch Merge Status" }),
-          /* @__PURE__ */ (0, import_jsx_runtime4.jsx)("p", { className: "small", children: "Manager-owned merge visibility for every worker branch." })
+    /* @__PURE__ */ (0, import_jsx_runtime5.jsx)(TaskDAG, { data }),
+    /* @__PURE__ */ (0, import_jsx_runtime5.jsx)(AgentPeekPanel, { data }),
+    /* @__PURE__ */ (0, import_jsx_runtime5.jsxs)("section", { className: "card", children: [
+      /* @__PURE__ */ (0, import_jsx_runtime5.jsxs)("div", { className: "panel-title", children: [
+        /* @__PURE__ */ (0, import_jsx_runtime5.jsxs)("div", { children: [
+          /* @__PURE__ */ (0, import_jsx_runtime5.jsx)("h2", { children: "Branch Merge Status" }),
+          /* @__PURE__ */ (0, import_jsx_runtime5.jsx)("p", { className: "small", children: "Manager-owned merge visibility for every worker branch." })
         ] }),
-        /* @__PURE__ */ (0, import_jsx_runtime4.jsxs)("div", { className: "small muted", children: [
+        /* @__PURE__ */ (0, import_jsx_runtime5.jsxs)("div", { className: "small muted", children: [
           mergeActive,
           " in progress, ",
           mergeReady,
           " ready for review"
         ] })
       ] }),
-      /* @__PURE__ */ (0, import_jsx_runtime4.jsx)("div", { className: "merge-board", children: mergeQueue.length ? mergeQueue.map((item) => /* @__PURE__ */ (0, import_jsx_runtime4.jsx)(MergeCard, { item }, `${item.agent}-${item.branch}`)) : /* @__PURE__ */ (0, import_jsx_runtime4.jsx)("div", { className: "small muted", children: "No worker branches registered for manager merge review." }) })
+      /* @__PURE__ */ (0, import_jsx_runtime5.jsx)("div", { className: "merge-board", children: mergeQueue.length ? mergeQueue.map((item) => /* @__PURE__ */ (0, import_jsx_runtime5.jsx)(MergeCard, { item }, `${item.agent}-${item.branch}`)) : /* @__PURE__ */ (0, import_jsx_runtime5.jsx)("div", { className: "small muted", children: "No worker branches registered for manager merge review." }) })
     ] }),
-    /* @__PURE__ */ (0, import_jsx_runtime4.jsx)(AgentPeekPanel, { data }),
-    /* @__PURE__ */ (0, import_jsx_runtime4.jsxs)("section", { className: "card", children: [
-      /* @__PURE__ */ (0, import_jsx_runtime4.jsxs)("div", { className: "panel-title", children: [
-        /* @__PURE__ */ (0, import_jsx_runtime4.jsxs)("div", { children: [
-          /* @__PURE__ */ (0, import_jsx_runtime4.jsx)("h2", { children: "Agent Dashboards" }),
-          /* @__PURE__ */ (0, import_jsx_runtime4.jsx)("p", { className: "small", children: "Health, execution context, and current ownership." })
+    /* @__PURE__ */ (0, import_jsx_runtime5.jsxs)("section", { className: "card", children: [
+      /* @__PURE__ */ (0, import_jsx_runtime5.jsxs)("div", { className: "panel-title", children: [
+        /* @__PURE__ */ (0, import_jsx_runtime5.jsxs)("div", { children: [
+          /* @__PURE__ */ (0, import_jsx_runtime5.jsx)("h2", { children: "Agent Dashboards" }),
+          /* @__PURE__ */ (0, import_jsx_runtime5.jsx)("p", { className: "small", children: "Health, execution context, and current ownership." })
         ] }),
-        /* @__PURE__ */ (0, import_jsx_runtime4.jsxs)("div", { className: "small muted", children: [
+        /* @__PURE__ */ (0, import_jsx_runtime5.jsxs)("div", { className: "small muted", children: [
           progress.activeAgents,
           " active, ",
           progress.attentionAgents,
           " need attention"
         ] })
       ] }),
-      /* @__PURE__ */ (0, import_jsx_runtime4.jsx)("div", { className: "agent-wall", children: agentRows.map((item) => /* @__PURE__ */ (0, import_jsx_runtime4.jsx)(AgentCard, { item }, item.agent)) })
+      /* @__PURE__ */ (0, import_jsx_runtime5.jsx)("div", { className: "agent-wall", children: agentRows.map((item) => /* @__PURE__ */ (0, import_jsx_runtime5.jsx)(AgentCard, { item }, item.agent)) })
     ] })
   ] });
 }
 
 // src/components/OperationsTab.tsx
-var import_jsx_runtime5 = __toESM(require_jsx_runtime(), 1);
+var import_jsx_runtime6 = __toESM(require_jsx_runtime(), 1);
 function OperationsTab({
   data,
   mailboxDraft,
@@ -26180,101 +26346,101 @@ function OperationsTab({
   const mailboxRows = (data.team_mailbox.messages || []).map((item) => ({ id: item.id, from: item.from, to: item.to, topic: item.topic, ack_state: item.ack_state, related_task_ids: (item.related_task_ids || []).join(", "), created_at: item.created_at, body: item.body }));
   const mailboxParticipants = Array.from(/* @__PURE__ */ new Set(["A0", ...(data.resolved_workers || []).map((item) => item.agent).filter(Boolean)])).sort();
   const cleanup = data.cleanup;
-  return /* @__PURE__ */ (0, import_jsx_runtime5.jsxs)("div", { className: "tab-body", children: [
-    /* @__PURE__ */ (0, import_jsx_runtime5.jsxs)("section", { className: "grid", children: [
-      /* @__PURE__ */ (0, import_jsx_runtime5.jsx)(WorkflowBriefCard, { data }),
-      /* @__PURE__ */ (0, import_jsx_runtime5.jsx)(MailboxPeekCard, { data })
+  return /* @__PURE__ */ (0, import_jsx_runtime6.jsxs)("div", { className: "tab-body", children: [
+    /* @__PURE__ */ (0, import_jsx_runtime6.jsxs)("section", { className: "grid", children: [
+      /* @__PURE__ */ (0, import_jsx_runtime6.jsx)(WorkflowBriefCard, { data }),
+      /* @__PURE__ */ (0, import_jsx_runtime6.jsx)(MailboxPeekCard, { data })
     ] }),
-    /* @__PURE__ */ (0, import_jsx_runtime5.jsxs)("section", { className: "grid", children: [
-      /* @__PURE__ */ (0, import_jsx_runtime5.jsxs)("section", { className: "card", children: [
-        /* @__PURE__ */ (0, import_jsx_runtime5.jsx)("h2", { children: "Commands" }),
-        /* @__PURE__ */ (0, import_jsx_runtime5.jsx)("pre", { children: `serve:
+    /* @__PURE__ */ (0, import_jsx_runtime6.jsxs)("section", { className: "grid", children: [
+      /* @__PURE__ */ (0, import_jsx_runtime6.jsxs)("section", { className: "card", children: [
+        /* @__PURE__ */ (0, import_jsx_runtime6.jsx)("h2", { children: "Commands" }),
+        /* @__PURE__ */ (0, import_jsx_runtime6.jsx)("pre", { children: `serve:
 ${data.commands.serve}
 
 up:
 ${data.commands.up}` })
       ] }),
-      /* @__PURE__ */ (0, import_jsx_runtime5.jsxs)("section", { className: "card", children: [
-        /* @__PURE__ */ (0, import_jsx_runtime5.jsx)("h2", { children: "Validation" }),
-        /* @__PURE__ */ (0, import_jsx_runtime5.jsx)("pre", { children: renderValidation(data) })
+      /* @__PURE__ */ (0, import_jsx_runtime6.jsxs)("section", { className: "card", children: [
+        /* @__PURE__ */ (0, import_jsx_runtime6.jsx)("h2", { children: "Validation" }),
+        /* @__PURE__ */ (0, import_jsx_runtime6.jsx)("pre", { children: renderValidation(data) })
       ] })
     ] }),
-    /* @__PURE__ */ (0, import_jsx_runtime5.jsxs)("section", { className: "grid", children: [
-      /* @__PURE__ */ (0, import_jsx_runtime5.jsxs)("section", { className: "card", children: [
-        /* @__PURE__ */ (0, import_jsx_runtime5.jsx)("h2", { children: "Provider Queue" }),
-        /* @__PURE__ */ (0, import_jsx_runtime5.jsx)(DataTable, { columns: ["resource_pool", "provider", "priority", "binary_found", "recursion_guard", "launch_wrapper", "auth_mode", "auth_ready", "launch_ready", "active_workers", "progress_pct", "total_tokens", "auth_detail", "connection_quality", "work_quality", "score"], rows: providerRows })
+    /* @__PURE__ */ (0, import_jsx_runtime6.jsxs)("section", { className: "grid", children: [
+      /* @__PURE__ */ (0, import_jsx_runtime6.jsxs)("section", { className: "card", children: [
+        /* @__PURE__ */ (0, import_jsx_runtime6.jsx)("h2", { children: "Provider Queue" }),
+        /* @__PURE__ */ (0, import_jsx_runtime6.jsx)(DataTable, { columns: ["resource_pool", "provider", "priority", "binary_found", "recursion_guard", "launch_wrapper", "auth_mode", "auth_ready", "launch_ready", "active_workers", "progress_pct", "total_tokens", "auth_detail", "connection_quality", "work_quality", "score"], rows: providerRows })
       ] }),
-      /* @__PURE__ */ (0, import_jsx_runtime5.jsxs)("section", { className: "card", children: [
-        /* @__PURE__ */ (0, import_jsx_runtime5.jsx)("h2", { children: "Merge Queue" }),
-        /* @__PURE__ */ (0, import_jsx_runtime5.jsx)(DataTable, { columns: ["agent", "branch", "submit_strategy", "worker_identity", "merge_target", "status", "manager_action"], rows: mergeRows })
+      /* @__PURE__ */ (0, import_jsx_runtime6.jsxs)("section", { className: "card", children: [
+        /* @__PURE__ */ (0, import_jsx_runtime6.jsx)("h2", { children: "Merge Queue" }),
+        /* @__PURE__ */ (0, import_jsx_runtime6.jsx)(DataTable, { columns: ["agent", "branch", "submit_strategy", "worker_identity", "merge_target", "status", "manager_action"], rows: mergeRows })
       ] })
     ] }),
-    /* @__PURE__ */ (0, import_jsx_runtime5.jsxs)("section", { className: "grid", children: [
-      /* @__PURE__ */ (0, import_jsx_runtime5.jsxs)("section", { className: "card", children: [
-        /* @__PURE__ */ (0, import_jsx_runtime5.jsx)("h2", { children: "Active Processes" }),
-        /* @__PURE__ */ (0, import_jsx_runtime5.jsx)(DataTable, { columns: ["agent", "provider", "model", "alive", "pid", "resource_pool", "progress_pct", "total_tokens", "phase", "recursion_guard", "wrapper_path", "returncode"], rows: processRows })
+    /* @__PURE__ */ (0, import_jsx_runtime6.jsxs)("section", { className: "grid", children: [
+      /* @__PURE__ */ (0, import_jsx_runtime6.jsxs)("section", { className: "card", children: [
+        /* @__PURE__ */ (0, import_jsx_runtime6.jsx)("h2", { children: "Active Processes" }),
+        /* @__PURE__ */ (0, import_jsx_runtime6.jsx)(DataTable, { columns: ["agent", "provider", "model", "alive", "pid", "resource_pool", "progress_pct", "total_tokens", "phase", "recursion_guard", "wrapper_path", "returncode"], rows: processRows })
       ] }),
-      /* @__PURE__ */ (0, import_jsx_runtime5.jsxs)("section", { className: "card", children: [
-        /* @__PURE__ */ (0, import_jsx_runtime5.jsx)("h2", { children: "Project" }),
-        /* @__PURE__ */ (0, import_jsx_runtime5.jsx)(DataTable, { columns: ["key", "value"], rows: projectRows })
+      /* @__PURE__ */ (0, import_jsx_runtime6.jsxs)("section", { className: "card", children: [
+        /* @__PURE__ */ (0, import_jsx_runtime6.jsx)("h2", { children: "Project" }),
+        /* @__PURE__ */ (0, import_jsx_runtime6.jsx)(DataTable, { columns: ["key", "value"], rows: projectRows })
       ] })
     ] }),
-    /* @__PURE__ */ (0, import_jsx_runtime5.jsxs)("section", { className: "grid", children: [
-      /* @__PURE__ */ (0, import_jsx_runtime5.jsxs)("section", { className: "card", children: [
-        /* @__PURE__ */ (0, import_jsx_runtime5.jsx)("h2", { children: "Runtime Topology" }),
-        /* @__PURE__ */ (0, import_jsx_runtime5.jsx)(DataTable, { columns: ["agent", "resource_pool", "provider", "model", "branch", "recursion_guard", "launch_wrapper", "status"], rows: data.runtime.workers || [] })
+    /* @__PURE__ */ (0, import_jsx_runtime6.jsxs)("section", { className: "grid", children: [
+      /* @__PURE__ */ (0, import_jsx_runtime6.jsxs)("section", { className: "card", children: [
+        /* @__PURE__ */ (0, import_jsx_runtime6.jsx)("h2", { children: "Runtime Topology" }),
+        /* @__PURE__ */ (0, import_jsx_runtime6.jsx)(DataTable, { columns: ["agent", "resource_pool", "provider", "model", "branch", "recursion_guard", "launch_wrapper", "status"], rows: data.runtime.workers || [] })
       ] }),
-      /* @__PURE__ */ (0, import_jsx_runtime5.jsxs)("section", { className: "card", children: [
-        /* @__PURE__ */ (0, import_jsx_runtime5.jsx)("h2", { children: "Heartbeats" }),
-        /* @__PURE__ */ (0, import_jsx_runtime5.jsx)(DataTable, { columns: ["agent", "state", "last_seen", "expected_next_checkin"], rows: data.heartbeats.agents || [] })
+      /* @__PURE__ */ (0, import_jsx_runtime6.jsxs)("section", { className: "card", children: [
+        /* @__PURE__ */ (0, import_jsx_runtime6.jsx)("h2", { children: "Heartbeats" }),
+        /* @__PURE__ */ (0, import_jsx_runtime6.jsx)(DataTable, { columns: ["agent", "state", "last_seen", "expected_next_checkin"], rows: data.heartbeats.agents || [] })
       ] })
     ] }),
-    /* @__PURE__ */ (0, import_jsx_runtime5.jsxs)("section", { className: "grid", children: [
-      /* @__PURE__ */ (0, import_jsx_runtime5.jsxs)("section", { className: "card", children: [
-        /* @__PURE__ */ (0, import_jsx_runtime5.jsx)("h2", { children: "Backlog" }),
-        /* @__PURE__ */ (0, import_jsx_runtime5.jsx)(DataTable, { columns: ["id", "owner", "claimed_by", "claim_state", "plan_state", "status", "gate", "title"], rows: backlogRows })
+    /* @__PURE__ */ (0, import_jsx_runtime6.jsxs)("section", { className: "grid", children: [
+      /* @__PURE__ */ (0, import_jsx_runtime6.jsxs)("section", { className: "card", children: [
+        /* @__PURE__ */ (0, import_jsx_runtime6.jsx)("h2", { children: "Backlog" }),
+        /* @__PURE__ */ (0, import_jsx_runtime6.jsx)(DataTable, { columns: ["id", "owner", "claimed_by", "claim_state", "plan_state", "status", "gate", "title"], rows: backlogRows })
       ] }),
-      /* @__PURE__ */ (0, import_jsx_runtime5.jsxs)("section", { className: "card", children: [
-        /* @__PURE__ */ (0, import_jsx_runtime5.jsx)("h2", { children: "Gates" }),
-        /* @__PURE__ */ (0, import_jsx_runtime5.jsx)(DataTable, { columns: ["id", "name", "status", "owner"], rows: data.gates.gates || [] })
+      /* @__PURE__ */ (0, import_jsx_runtime6.jsxs)("section", { className: "card", children: [
+        /* @__PURE__ */ (0, import_jsx_runtime6.jsx)("h2", { children: "Gates" }),
+        /* @__PURE__ */ (0, import_jsx_runtime6.jsx)(DataTable, { columns: ["id", "name", "status", "owner"], rows: data.gates.gates || [] })
       ] })
     ] }),
-    /* @__PURE__ */ (0, import_jsx_runtime5.jsx)(MailboxComposerCard, { draft: mailboxDraft, onChange: onMailboxDraftChange, onSend: onSendMailboxMessage, participants: mailboxParticipants, disabled: actionInFlight }),
-    /* @__PURE__ */ (0, import_jsx_runtime5.jsx)(WorkflowPatchCard, { data, draft: workflowDraft, onChange: onWorkflowDraftChange, onSubmit: onApplyWorkflowUpdate, disabled: actionInFlight }),
-    /* @__PURE__ */ (0, import_jsx_runtime5.jsxs)("section", { className: "card", children: [
-      /* @__PURE__ */ (0, import_jsx_runtime5.jsxs)("div", { className: "panel-title", children: [
-        /* @__PURE__ */ (0, import_jsx_runtime5.jsxs)("div", { children: [
-          /* @__PURE__ */ (0, import_jsx_runtime5.jsx)("h2", { children: "Cleanup Readiness" }),
-          /* @__PURE__ */ (0, import_jsx_runtime5.jsx)("p", { className: "small", children: "Cleanup remains blocked while workers are alive, reviews are unresolved, or single-writer locks are still held." })
+    /* @__PURE__ */ (0, import_jsx_runtime6.jsx)(MailboxComposerCard, { draft: mailboxDraft, onChange: onMailboxDraftChange, onSend: onSendMailboxMessage, participants: mailboxParticipants, disabled: actionInFlight }),
+    /* @__PURE__ */ (0, import_jsx_runtime6.jsx)(WorkflowPatchCard, { data, draft: workflowDraft, onChange: onWorkflowDraftChange, onSubmit: onApplyWorkflowUpdate, disabled: actionInFlight }),
+    /* @__PURE__ */ (0, import_jsx_runtime6.jsxs)("section", { className: "card", children: [
+      /* @__PURE__ */ (0, import_jsx_runtime6.jsxs)("div", { className: "panel-title", children: [
+        /* @__PURE__ */ (0, import_jsx_runtime6.jsxs)("div", { children: [
+          /* @__PURE__ */ (0, import_jsx_runtime6.jsx)("h2", { children: "Cleanup Readiness" }),
+          /* @__PURE__ */ (0, import_jsx_runtime6.jsx)("p", { className: "small", children: "Cleanup remains blocked while workers are alive, reviews are unresolved, or single-writer locks are still held." })
         ] }),
-        /* @__PURE__ */ (0, import_jsx_runtime5.jsx)("div", { className: classNames("chip", cleanup.ready ? "state-active" : "state-stale"), children: cleanup.ready ? "Ready" : "Blocked" })
+        /* @__PURE__ */ (0, import_jsx_runtime6.jsx)("div", { className: classNames("chip", cleanup.ready ? "state-active" : "state-stale"), children: cleanup.ready ? "Ready" : "Blocked" })
       ] }),
-      cleanup.blockers.length ? /* @__PURE__ */ (0, import_jsx_runtime5.jsxs)("div", { className: "merge-list-block", children: [
-        /* @__PURE__ */ (0, import_jsx_runtime5.jsx)("strong", { children: "Cleanup blockers" }),
-        /* @__PURE__ */ (0, import_jsx_runtime5.jsx)("ul", { children: cleanup.blockers.map((entry) => /* @__PURE__ */ (0, import_jsx_runtime5.jsx)("li", { children: entry }, entry)) })
-      ] }) : /* @__PURE__ */ (0, import_jsx_runtime5.jsx)("div", { className: "small muted", children: "No cleanup blockers remain. The team cleanup gate can be confirmed safely." }),
-      /* @__PURE__ */ (0, import_jsx_runtime5.jsxs)("div", { className: "toolbar-group a0-actions", children: [
-        /* @__PURE__ */ (0, import_jsx_runtime5.jsxs)("label", { className: "toggle", children: [
-          /* @__PURE__ */ (0, import_jsx_runtime5.jsx)("input", { type: "checkbox", checked: cleanupReleaseListener, onChange: (event) => onCleanupReleaseChange(event.target.checked) }),
+      cleanup.blockers.length ? /* @__PURE__ */ (0, import_jsx_runtime6.jsxs)("div", { className: "merge-list-block", children: [
+        /* @__PURE__ */ (0, import_jsx_runtime6.jsx)("strong", { children: "Cleanup blockers" }),
+        /* @__PURE__ */ (0, import_jsx_runtime6.jsx)("ul", { children: cleanup.blockers.map((entry) => /* @__PURE__ */ (0, import_jsx_runtime6.jsx)("li", { children: entry }, entry)) })
+      ] }) : /* @__PURE__ */ (0, import_jsx_runtime6.jsx)("div", { className: "small muted", children: "No cleanup blockers remain. The team cleanup gate can be confirmed safely." }),
+      /* @__PURE__ */ (0, import_jsx_runtime6.jsxs)("div", { className: "toolbar-group a0-actions", children: [
+        /* @__PURE__ */ (0, import_jsx_runtime6.jsxs)("label", { className: "toggle", children: [
+          /* @__PURE__ */ (0, import_jsx_runtime6.jsx)("input", { type: "checkbox", checked: cleanupReleaseListener, onChange: (event) => onCleanupReleaseChange(event.target.checked) }),
           " Auto-release listener after confirm"
         ] }),
-        /* @__PURE__ */ (0, import_jsx_runtime5.jsx)("button", { type: "button", onClick: onConfirmCleanup, disabled: actionInFlight || !cleanup.ready, children: "Confirm cleanup gate" })
+        /* @__PURE__ */ (0, import_jsx_runtime6.jsx)("button", { type: "button", onClick: onConfirmCleanup, disabled: actionInFlight || !cleanup.ready, children: "Confirm cleanup gate" })
       ] }),
-      /* @__PURE__ */ (0, import_jsx_runtime5.jsx)("div", { className: "merge-board", children: (cleanup.workers || []).map((item) => /* @__PURE__ */ (0, import_jsx_runtime5.jsx)(CleanupWorkerCard, { item, onStopWorker, disabled: actionInFlight }, item.agent)) })
+      /* @__PURE__ */ (0, import_jsx_runtime6.jsx)("div", { className: "merge-board", children: (cleanup.workers || []).map((item) => /* @__PURE__ */ (0, import_jsx_runtime6.jsx)(CleanupWorkerCard, { item, onStopWorker, disabled: actionInFlight }, item.agent)) })
     ] }),
-    /* @__PURE__ */ (0, import_jsx_runtime5.jsxs)("section", { className: "card", children: [
-      /* @__PURE__ */ (0, import_jsx_runtime5.jsx)("h2", { children: "Team Mailbox" }),
-      /* @__PURE__ */ (0, import_jsx_runtime5.jsx)(DataTable, { columns: ["id", "from", "to", "topic", "ack_state", "related_task_ids", "created_at", "body"], rows: mailboxRows })
+    /* @__PURE__ */ (0, import_jsx_runtime6.jsxs)("section", { className: "card", children: [
+      /* @__PURE__ */ (0, import_jsx_runtime6.jsx)("h2", { children: "Team Mailbox" }),
+      /* @__PURE__ */ (0, import_jsx_runtime6.jsx)(DataTable, { columns: ["id", "from", "to", "topic", "ack_state", "related_task_ids", "created_at", "body"], rows: mailboxRows })
     ] }),
-    /* @__PURE__ */ (0, import_jsx_runtime5.jsxs)("section", { className: "card", children: [
-      /* @__PURE__ */ (0, import_jsx_runtime5.jsx)("h2", { children: "Manager Report" }),
-      /* @__PURE__ */ (0, import_jsx_runtime5.jsx)("pre", { children: data.manager_report })
+    /* @__PURE__ */ (0, import_jsx_runtime6.jsxs)("section", { className: "card", children: [
+      /* @__PURE__ */ (0, import_jsx_runtime6.jsx)("h2", { children: "Manager Report" }),
+      /* @__PURE__ */ (0, import_jsx_runtime6.jsx)("pre", { children: data.manager_report })
     ] })
   ] });
 }
 
 // src/components/SettingsTab.tsx
-var import_jsx_runtime6 = __toESM(require_jsx_runtime(), 1);
+var import_jsx_runtime7 = __toESM(require_jsx_runtime(), 1);
 function SettingsTab({
   data,
   draftConfig,
@@ -26302,49 +26468,49 @@ function SettingsTab({
   const plannedWorkers = buildPlannedWorkers(data, draftConfig);
   const resolvedByAgent = buildResolvedWorkerMap(data);
   const issues = buildIssueMap(allIssues);
-  return /* @__PURE__ */ (0, import_jsx_runtime6.jsx)("div", { className: "tab-body", children: /* @__PURE__ */ (0, import_jsx_runtime6.jsxs)("section", { className: "card", children: [
-    /* @__PURE__ */ (0, import_jsx_runtime6.jsx)("div", { className: "page-header", children: /* @__PURE__ */ (0, import_jsx_runtime6.jsxs)("div", { children: [
-      /* @__PURE__ */ (0, import_jsx_runtime6.jsx)("h2", { children: "Settings" }),
-      /* @__PURE__ */ (0, import_jsx_runtime6.jsx)("p", { className: "small", children: "A0 now auto-hydrates the worker roster, branch proposals, worktree paths, and shared defaults. You should mostly verify project paths, pool routing, and true exceptions." })
+  return /* @__PURE__ */ (0, import_jsx_runtime7.jsx)("div", { className: "tab-body", children: /* @__PURE__ */ (0, import_jsx_runtime7.jsxs)("section", { className: "card", children: [
+    /* @__PURE__ */ (0, import_jsx_runtime7.jsx)("div", { className: "page-header", children: /* @__PURE__ */ (0, import_jsx_runtime7.jsxs)("div", { children: [
+      /* @__PURE__ */ (0, import_jsx_runtime7.jsx)("h2", { children: "Settings" }),
+      /* @__PURE__ */ (0, import_jsx_runtime7.jsx)("p", { className: "small", children: "A0 now auto-hydrates the worker roster, branch proposals, worktree paths, and shared defaults. You should mostly verify project paths, pool routing, and true exceptions." })
     ] }) }),
-    /* @__PURE__ */ (0, import_jsx_runtime6.jsxs)("div", { className: "settings-stack", children: [
-      /* @__PURE__ */ (0, import_jsx_runtime6.jsxs)("section", { className: "helper-card settings-card settings-card-wide", children: [
-        /* @__PURE__ */ (0, import_jsx_runtime6.jsx)(SectionHeader, { title: "Resource Pools", section: "resource_pools", status: sectionStatuses.resource_pools, onValidate: onValidateSection, onSave: onSaveSection, action: /* @__PURE__ */ (0, import_jsx_runtime6.jsx)("button", { className: "ghost", type: "button", onClick: onAddPool, children: "Add Pool" }) }),
-        /* @__PURE__ */ (0, import_jsx_runtime6.jsx)(SectionIssueList, { issues: collectSectionIssues("resource_pools", allIssues) }),
-        /* @__PURE__ */ (0, import_jsx_runtime6.jsx)("div", { className: "pool-strip", children: Object.entries(pools).map(([poolName, pool]) => /* @__PURE__ */ (0, import_jsx_runtime6.jsxs)("div", { className: "subcard pool-card", children: [
-          /* @__PURE__ */ (0, import_jsx_runtime6.jsx)("div", { className: "subcard-title", children: poolName }),
-          /* @__PURE__ */ (0, import_jsx_runtime6.jsxs)("div", { className: "field-grid", children: [
-            /* @__PURE__ */ (0, import_jsx_runtime6.jsx)(SelectField, { label: "Provider", value: String(pool.provider || ""), onChange: (value) => onPoolChange(poolName, "provider", value), issues: issues[`resource_pools.${poolName}.provider`], options: providerOptions }),
-            /* @__PURE__ */ (0, import_jsx_runtime6.jsx)(Field, { label: "Model", value: String(pool.model || ""), onChange: (value) => onPoolChange(poolName, "model", value), issues: issues[`resource_pools.${poolName}.model`] }),
-            /* @__PURE__ */ (0, import_jsx_runtime6.jsx)(Field, { label: "Priority", type: "number", value: Number(pool.priority ?? 100), onChange: (value) => onPoolChange(poolName, "priority", value), issues: issues[`resource_pools.${poolName}.priority`] }),
-            /* @__PURE__ */ (0, import_jsx_runtime6.jsx)(Field, { label: "API Key", value: String(pool.api_key || ""), onChange: (value) => onPoolChange(poolName, "api_key", value) })
+    /* @__PURE__ */ (0, import_jsx_runtime7.jsxs)("div", { className: "settings-stack", children: [
+      /* @__PURE__ */ (0, import_jsx_runtime7.jsxs)("section", { className: "helper-card settings-card settings-card-wide", children: [
+        /* @__PURE__ */ (0, import_jsx_runtime7.jsx)(SectionHeader, { title: "Resource Pools", section: "resource_pools", status: sectionStatuses.resource_pools, onValidate: onValidateSection, onSave: onSaveSection, action: /* @__PURE__ */ (0, import_jsx_runtime7.jsx)("button", { className: "ghost", type: "button", onClick: onAddPool, children: "Add Pool" }) }),
+        /* @__PURE__ */ (0, import_jsx_runtime7.jsx)(SectionIssueList, { issues: collectSectionIssues("resource_pools", allIssues) }),
+        /* @__PURE__ */ (0, import_jsx_runtime7.jsx)("div", { className: "pool-strip", children: Object.entries(pools).map(([poolName, pool]) => /* @__PURE__ */ (0, import_jsx_runtime7.jsxs)("div", { className: "subcard pool-card", children: [
+          /* @__PURE__ */ (0, import_jsx_runtime7.jsx)("div", { className: "subcard-title", children: poolName }),
+          /* @__PURE__ */ (0, import_jsx_runtime7.jsxs)("div", { className: "field-grid", children: [
+            /* @__PURE__ */ (0, import_jsx_runtime7.jsx)(SelectField, { label: "Provider", value: String(pool.provider || ""), onChange: (value) => onPoolChange(poolName, "provider", value), issues: issues[`resource_pools.${poolName}.provider`], options: providerOptions }),
+            /* @__PURE__ */ (0, import_jsx_runtime7.jsx)(Field, { label: "Model", value: String(pool.model || ""), onChange: (value) => onPoolChange(poolName, "model", value), issues: issues[`resource_pools.${poolName}.model`] }),
+            /* @__PURE__ */ (0, import_jsx_runtime7.jsx)(Field, { label: "Priority", type: "number", value: Number(pool.priority ?? 100), onChange: (value) => onPoolChange(poolName, "priority", value), issues: issues[`resource_pools.${poolName}.priority`] }),
+            /* @__PURE__ */ (0, import_jsx_runtime7.jsx)(Field, { label: "API Key", value: String(pool.api_key || ""), onChange: (value) => onPoolChange(poolName, "api_key", value) })
           ] })
         ] }, poolName)) })
       ] }),
-      /* @__PURE__ */ (0, import_jsx_runtime6.jsxs)("div", { className: "settings-duo", children: [
-        /* @__PURE__ */ (0, import_jsx_runtime6.jsxs)("section", { className: "helper-card settings-card", children: [
-          /* @__PURE__ */ (0, import_jsx_runtime6.jsx)(SectionHeader, { title: "Project", section: "project", status: sectionStatuses.project, onValidate: onValidateSection, onSave: onSaveSection }),
-          /* @__PURE__ */ (0, import_jsx_runtime6.jsx)(SectionIssueList, { issues: collectSectionIssues("project", allIssues) }),
-          /* @__PURE__ */ (0, import_jsx_runtime6.jsxs)("div", { className: "field-grid", children: [
-            /* @__PURE__ */ (0, import_jsx_runtime6.jsx)(Field, { label: "Repository", value: project.repository_name || "", onChange: (value) => onProjectChange("repository_name", value), issues: issues["project.repository_name"] }),
-            /* @__PURE__ */ (0, import_jsx_runtime6.jsx)(Field, { label: "Local Repo Root", value: project.local_repo_root || "", onChange: (value) => onProjectChange("local_repo_root", value), issues: issues["project.local_repo_root"] }),
-            /* @__PURE__ */ (0, import_jsx_runtime6.jsx)(Field, { label: "Reference Workspace", value: projectReferenceWorkspace(project), onChange: (value) => onProjectChange("reference_workspace_root", value), issues: issues["project.reference_workspace_root"], helpText: "Optional shared reference repo or baseline workspace for task guidance." }),
-            /* @__PURE__ */ (0, import_jsx_runtime6.jsx)(Field, { label: "Dashboard Host", value: dashboard.host || "", onChange: (value) => onProjectChange("dashboard.host", value), issues: issues["project.dashboard.host"] }),
-            /* @__PURE__ */ (0, import_jsx_runtime6.jsx)(Field, { label: "Dashboard Port", type: "number", value: dashboard.port || 8233, onChange: (value) => onProjectChange("dashboard.port", value), issues: issues["project.dashboard.port"] })
+      /* @__PURE__ */ (0, import_jsx_runtime7.jsxs)("div", { className: "settings-duo", children: [
+        /* @__PURE__ */ (0, import_jsx_runtime7.jsxs)("section", { className: "helper-card settings-card", children: [
+          /* @__PURE__ */ (0, import_jsx_runtime7.jsx)(SectionHeader, { title: "Project", section: "project", status: sectionStatuses.project, onValidate: onValidateSection, onSave: onSaveSection }),
+          /* @__PURE__ */ (0, import_jsx_runtime7.jsx)(SectionIssueList, { issues: collectSectionIssues("project", allIssues) }),
+          /* @__PURE__ */ (0, import_jsx_runtime7.jsxs)("div", { className: "field-grid", children: [
+            /* @__PURE__ */ (0, import_jsx_runtime7.jsx)(Field, { label: "Repository", value: project.repository_name || "", onChange: (value) => onProjectChange("repository_name", value), issues: issues["project.repository_name"] }),
+            /* @__PURE__ */ (0, import_jsx_runtime7.jsx)(Field, { label: "Local Repo Root", value: project.local_repo_root || "", onChange: (value) => onProjectChange("local_repo_root", value), issues: issues["project.local_repo_root"] }),
+            /* @__PURE__ */ (0, import_jsx_runtime7.jsx)(Field, { label: "Reference Workspace", value: projectReferenceWorkspace(project), onChange: (value) => onProjectChange("reference_workspace_root", value), issues: issues["project.reference_workspace_root"], helpText: "Optional shared reference repo or baseline workspace for task guidance." }),
+            /* @__PURE__ */ (0, import_jsx_runtime7.jsx)(Field, { label: "Dashboard Host", value: dashboard.host || "", onChange: (value) => onProjectChange("dashboard.host", value), issues: issues["project.dashboard.host"] }),
+            /* @__PURE__ */ (0, import_jsx_runtime7.jsx)(Field, { label: "Dashboard Port", type: "number", value: dashboard.port || 8233, onChange: (value) => onProjectChange("dashboard.port", value), issues: issues["project.dashboard.port"] })
           ] })
         ] }),
-        /* @__PURE__ */ (0, import_jsx_runtime6.jsxs)("section", { className: "helper-card settings-card", children: [
-          /* @__PURE__ */ (0, import_jsx_runtime6.jsx)(SectionHeader, { title: "Merge Policy", section: "merge_policy", status: sectionStatuses.merge_policy, onValidate: onValidateSection, onSave: onSaveSection }),
-          /* @__PURE__ */ (0, import_jsx_runtime6.jsx)(SectionIssueList, { issues: collectSectionIssues("merge_policy", allIssues) }),
-          /* @__PURE__ */ (0, import_jsx_runtime6.jsxs)("div", { className: "field-grid", children: [
-            /* @__PURE__ */ (0, import_jsx_runtime6.jsx)(Field, { label: "Integration Branch", value: project.integration_branch || project.base_branch || "", onChange: (value) => onMergeChange("integration_branch", value), issues: issues["project.integration_branch"] }),
-            /* @__PURE__ */ (0, import_jsx_runtime6.jsx)(Field, { label: "Manager Name", value: project.manager_git_identity?.name || "", onChange: (value) => onMergeChange("manager_git_identity.name", value) }),
-            /* @__PURE__ */ (0, import_jsx_runtime6.jsx)(Field, { label: "Manager Email", value: project.manager_git_identity?.email || "", onChange: (value) => onMergeChange("manager_git_identity.email", value) })
+        /* @__PURE__ */ (0, import_jsx_runtime7.jsxs)("section", { className: "helper-card settings-card", children: [
+          /* @__PURE__ */ (0, import_jsx_runtime7.jsx)(SectionHeader, { title: "Merge Policy", section: "merge_policy", status: sectionStatuses.merge_policy, onValidate: onValidateSection, onSave: onSaveSection }),
+          /* @__PURE__ */ (0, import_jsx_runtime7.jsx)(SectionIssueList, { issues: collectSectionIssues("merge_policy", allIssues) }),
+          /* @__PURE__ */ (0, import_jsx_runtime7.jsxs)("div", { className: "field-grid", children: [
+            /* @__PURE__ */ (0, import_jsx_runtime7.jsx)(Field, { label: "Integration Branch", value: project.integration_branch || project.base_branch || "", onChange: (value) => onMergeChange("integration_branch", value), issues: issues["project.integration_branch"] }),
+            /* @__PURE__ */ (0, import_jsx_runtime7.jsx)(Field, { label: "Manager Name", value: project.manager_git_identity?.name || "", onChange: (value) => onMergeChange("manager_git_identity.name", value) }),
+            /* @__PURE__ */ (0, import_jsx_runtime7.jsx)(Field, { label: "Manager Email", value: project.manager_git_identity?.email || "", onChange: (value) => onMergeChange("manager_git_identity.email", value) })
           ] })
         ] })
       ] }),
-      /* @__PURE__ */ (0, import_jsx_runtime6.jsxs)("section", { className: "helper-card settings-card settings-card-wide", children: [
-        /* @__PURE__ */ (0, import_jsx_runtime6.jsx)(
+      /* @__PURE__ */ (0, import_jsx_runtime7.jsxs)("section", { className: "helper-card settings-card settings-card-wide", children: [
+        /* @__PURE__ */ (0, import_jsx_runtime7.jsx)(
           SectionHeader,
           {
             title: "Worker Defaults",
@@ -26353,31 +26519,31 @@ function SettingsTab({
             onValidate: onValidateSection,
             onSave: onSaveSection,
             subtitle: "Common defaults are the few knobs you may actually standardize across workers. Advanced defaults are fallback overrides for exceptional environments.",
-            action: /* @__PURE__ */ (0, import_jsx_runtime6.jsx)("button", { className: "ghost", type: "button", onClick: onResetWorkerDefaults, children: "Reset to A0" })
+            action: /* @__PURE__ */ (0, import_jsx_runtime7.jsx)("button", { className: "ghost", type: "button", onClick: onResetWorkerDefaults, children: "Reset to A0" })
           }
         ),
-        /* @__PURE__ */ (0, import_jsx_runtime6.jsx)(SectionIssueList, { issues: collectSectionIssues("worker_defaults", allIssues) }),
-        /* @__PURE__ */ (0, import_jsx_runtime6.jsx)("p", { className: "small muted", children: "These values apply to every worker unless a row below overrides them. Blank fields are auto-filled from runtime conventions or sensible defaults where possible, so the main path should stay sparse." }),
-        /* @__PURE__ */ (0, import_jsx_runtime6.jsxs)("div", { className: "field-grid compact-field-grid", children: [
-          /* @__PURE__ */ (0, import_jsx_runtime6.jsx)(Field, { label: "Default Pool", value: workerDefaults.resource_pool || "", onChange: (value) => onWorkerChange(-1, "worker_defaults.resource_pool", value), issues: issues["worker_defaults.resource_pool"], helpText: "Leave blank to rely on pool queue or per-worker overrides." }),
-          /* @__PURE__ */ (0, import_jsx_runtime6.jsx)(Field, { label: "Default Pool Queue", value: stringifyQueue(workerDefaults.resource_pool_queue), onChange: (value) => onWorkerChange(-1, "worker_defaults.resource_pool_queue", value), issues: issues["worker_defaults.resource_pool_queue"], placeholder: "ducc_pool" }),
-          /* @__PURE__ */ (0, import_jsx_runtime6.jsx)(SelectField, { label: "Default Environment", value: workerDefaults.environment_type || "uv", onChange: (value) => onWorkerChange(-1, "worker_defaults.environment_type", value), options: ["uv", "venv", "none"] }),
-          /* @__PURE__ */ (0, import_jsx_runtime6.jsx)(Field, { label: "Default Environment Path", value: workerDefaults.environment_path || "", onChange: (value) => onWorkerChange(-1, "worker_defaults.environment_path", value), issues: issues["worker_defaults.environment_path"] })
+        /* @__PURE__ */ (0, import_jsx_runtime7.jsx)(SectionIssueList, { issues: collectSectionIssues("worker_defaults", allIssues) }),
+        /* @__PURE__ */ (0, import_jsx_runtime7.jsx)("p", { className: "small muted", children: "These values apply to every worker unless a row below overrides them. Blank fields are auto-filled from runtime conventions or sensible defaults where possible, so the main path should stay sparse." }),
+        /* @__PURE__ */ (0, import_jsx_runtime7.jsxs)("div", { className: "field-grid compact-field-grid", children: [
+          /* @__PURE__ */ (0, import_jsx_runtime7.jsx)(Field, { label: "Default Pool", value: workerDefaults.resource_pool || "", onChange: (value) => onWorkerChange(-1, "worker_defaults.resource_pool", value), issues: issues["worker_defaults.resource_pool"], helpText: "Leave blank to rely on pool queue or per-worker overrides." }),
+          /* @__PURE__ */ (0, import_jsx_runtime7.jsx)(Field, { label: "Default Pool Queue", value: stringifyQueue(workerDefaults.resource_pool_queue), onChange: (value) => onWorkerChange(-1, "worker_defaults.resource_pool_queue", value), issues: issues["worker_defaults.resource_pool_queue"], placeholder: "ducc_pool" }),
+          /* @__PURE__ */ (0, import_jsx_runtime7.jsx)(SelectField, { label: "Default Environment", value: workerDefaults.environment_type || "uv", onChange: (value) => onWorkerChange(-1, "worker_defaults.environment_type", value), options: ["uv", "venv", "none"] }),
+          /* @__PURE__ */ (0, import_jsx_runtime7.jsx)(Field, { label: "Default Environment Path", value: workerDefaults.environment_path || "", onChange: (value) => onWorkerChange(-1, "worker_defaults.environment_path", value), issues: issues["worker_defaults.environment_path"] })
         ] }),
-        /* @__PURE__ */ (0, import_jsx_runtime6.jsxs)("details", { className: "advanced-panel defaults-panel", children: [
-          /* @__PURE__ */ (0, import_jsx_runtime6.jsx)("summary", { children: "Advanced defaults" }),
-          /* @__PURE__ */ (0, import_jsx_runtime6.jsxs)("div", { className: "field-grid advanced-grid", children: [
-            /* @__PURE__ */ (0, import_jsx_runtime6.jsx)(Field, { label: "Default Sync Command", value: workerDefaults.sync_command || "", onChange: (value) => onWorkerChange(-1, "worker_defaults.sync_command", value), helpText: "Leave blank to let A0 follow the environment convention." }),
-            /* @__PURE__ */ (0, import_jsx_runtime6.jsx)(Field, { label: "Default Test Command", value: workerDefaults.test_command || "", onChange: (value) => onWorkerChange(-1, "worker_defaults.test_command", value), issues: issues["worker_defaults.test_command"], helpText: "Leave blank to let task policy choose per worker." }),
-            /* @__PURE__ */ (0, import_jsx_runtime6.jsx)(Field, { label: "Default Submit Strategy", value: workerDefaults.submit_strategy || "", onChange: (value) => onWorkerChange(-1, "worker_defaults.submit_strategy", value), issues: issues["worker_defaults.submit_strategy"], helpText: "Leave blank to keep A0's standard handoff flow." }),
-            /* @__PURE__ */ (0, import_jsx_runtime6.jsx)(Field, { label: "Default Git Name", value: workerDefaults.git_identity?.name || "", onChange: (value) => onWorkerChange(-1, "worker_defaults.git_identity.name", value), issues: issues["worker_defaults.git_identity.name"] }),
-            /* @__PURE__ */ (0, import_jsx_runtime6.jsx)(Field, { label: "Default Git Email", value: workerDefaults.git_identity?.email || "", onChange: (value) => onWorkerChange(-1, "worker_defaults.git_identity.email", value), issues: issues["worker_defaults.git_identity.email"] })
+        /* @__PURE__ */ (0, import_jsx_runtime7.jsxs)("details", { className: "advanced-panel defaults-panel", children: [
+          /* @__PURE__ */ (0, import_jsx_runtime7.jsx)("summary", { children: "Advanced defaults" }),
+          /* @__PURE__ */ (0, import_jsx_runtime7.jsxs)("div", { className: "field-grid advanced-grid", children: [
+            /* @__PURE__ */ (0, import_jsx_runtime7.jsx)(Field, { label: "Default Sync Command", value: workerDefaults.sync_command || "", onChange: (value) => onWorkerChange(-1, "worker_defaults.sync_command", value), helpText: "Leave blank to let A0 follow the environment convention." }),
+            /* @__PURE__ */ (0, import_jsx_runtime7.jsx)(Field, { label: "Default Test Command", value: workerDefaults.test_command || "", onChange: (value) => onWorkerChange(-1, "worker_defaults.test_command", value), issues: issues["worker_defaults.test_command"], helpText: "Leave blank to let task policy choose per worker." }),
+            /* @__PURE__ */ (0, import_jsx_runtime7.jsx)(Field, { label: "Default Submit Strategy", value: workerDefaults.submit_strategy || "", onChange: (value) => onWorkerChange(-1, "worker_defaults.submit_strategy", value), issues: issues["worker_defaults.submit_strategy"], helpText: "Leave blank to keep A0's standard handoff flow." }),
+            /* @__PURE__ */ (0, import_jsx_runtime7.jsx)(Field, { label: "Default Git Name", value: workerDefaults.git_identity?.name || "", onChange: (value) => onWorkerChange(-1, "worker_defaults.git_identity.name", value), issues: issues["worker_defaults.git_identity.name"] }),
+            /* @__PURE__ */ (0, import_jsx_runtime7.jsx)(Field, { label: "Default Git Email", value: workerDefaults.git_identity?.email || "", onChange: (value) => onWorkerChange(-1, "worker_defaults.git_identity.email", value), issues: issues["worker_defaults.git_identity.email"] })
           ] })
         ] })
       ] }),
-      /* @__PURE__ */ (0, import_jsx_runtime6.jsx)(AutomationSummary, { draftConfig, data }),
-      /* @__PURE__ */ (0, import_jsx_runtime6.jsxs)("section", { className: "helper-card settings-card settings-card-wide", children: [
-        /* @__PURE__ */ (0, import_jsx_runtime6.jsx)(
+      /* @__PURE__ */ (0, import_jsx_runtime7.jsx)(AutomationSummary, { draftConfig, data }),
+      /* @__PURE__ */ (0, import_jsx_runtime7.jsxs)("section", { className: "helper-card settings-card settings-card-wide", children: [
+        /* @__PURE__ */ (0, import_jsx_runtime7.jsx)(
           SectionHeader,
           {
             title: "Worker Config",
@@ -26385,78 +26551,78 @@ function SettingsTab({
             status: sectionStatuses.workers,
             onValidate: onValidateSection,
             onSave: onSaveSection,
-            action: /* @__PURE__ */ (0, import_jsx_runtime6.jsxs)(import_jsx_runtime6.Fragment, { children: [
-              /* @__PURE__ */ (0, import_jsx_runtime6.jsx)("button", { className: "ghost", type: "button", onClick: onSyncWorkers, children: "Sync From Plan" }),
-              /* @__PURE__ */ (0, import_jsx_runtime6.jsx)("button", { className: "ghost", type: "button", onClick: onAutoFillWorktreePaths, children: "Auto Paths" }),
-              /* @__PURE__ */ (0, import_jsx_runtime6.jsx)("button", { className: "ghost", type: "button", onClick: onAddWorker, children: "Add Worker" })
+            action: /* @__PURE__ */ (0, import_jsx_runtime7.jsxs)(import_jsx_runtime7.Fragment, { children: [
+              /* @__PURE__ */ (0, import_jsx_runtime7.jsx)("button", { className: "ghost", type: "button", onClick: onSyncWorkers, children: "Sync From Plan" }),
+              /* @__PURE__ */ (0, import_jsx_runtime7.jsx)("button", { className: "ghost", type: "button", onClick: onAutoFillWorktreePaths, children: "Auto Paths" }),
+              /* @__PURE__ */ (0, import_jsx_runtime7.jsx)("button", { className: "ghost", type: "button", onClick: onAddWorker, children: "Add Worker" })
             ] })
           }
         ),
-        /* @__PURE__ */ (0, import_jsx_runtime6.jsx)(SectionIssueList, { issues: collectSectionIssues("workers", allIssues) }),
-        /* @__PURE__ */ (0, import_jsx_runtime6.jsxs)("p", { className: "small muted", children: [
+        /* @__PURE__ */ (0, import_jsx_runtime7.jsx)(SectionIssueList, { issues: collectSectionIssues("workers", allIssues) }),
+        /* @__PURE__ */ (0, import_jsx_runtime7.jsxs)("p", { className: "small muted", children: [
           "Detected workers from backlog/runtime: ",
           plannedWorkers.map((item) => item.agent).join(", ") || "none",
           ". A0 plan is the derived execution target. Any filled override below becomes a human-pinned exception; use Reset to A0 to clear those pins and fall back to the plan."
         ] }),
-        /* @__PURE__ */ (0, import_jsx_runtime6.jsx)("div", { className: "worker-grid", children: workers.map((worker, index) => /* @__PURE__ */ (0, import_jsx_runtime6.jsx)("div", { className: "subcard", children: (() => {
+        /* @__PURE__ */ (0, import_jsx_runtime7.jsx)("div", { className: "worker-grid", children: workers.map((worker, index) => /* @__PURE__ */ (0, import_jsx_runtime7.jsx)("div", { className: "subcard", children: (() => {
           const resolved = resolvedByAgent.get(worker.agent || "");
           const planned = workerPlanView(worker, draftConfig, data, plannedWorkers);
           const recommendation = planned.poolReason || "";
           const suggestedTest = planned.suggestedTestCommand || "";
-          return /* @__PURE__ */ (0, import_jsx_runtime6.jsxs)(import_jsx_runtime6.Fragment, { children: [
-            /* @__PURE__ */ (0, import_jsx_runtime6.jsxs)("div", { className: "subcard-title worker-card-title-row", children: [
-              /* @__PURE__ */ (0, import_jsx_runtime6.jsx)("span", { children: worker.agent || `Worker ${index + 1}` }),
-              /* @__PURE__ */ (0, import_jsx_runtime6.jsx)("button", { className: "ghost", type: "button", onClick: () => onResetWorkerOverrides(index), children: "Reset to A0" })
+          return /* @__PURE__ */ (0, import_jsx_runtime7.jsxs)(import_jsx_runtime7.Fragment, { children: [
+            /* @__PURE__ */ (0, import_jsx_runtime7.jsxs)("div", { className: "subcard-title worker-card-title-row", children: [
+              /* @__PURE__ */ (0, import_jsx_runtime7.jsx)("span", { children: worker.agent || `Worker ${index + 1}` }),
+              /* @__PURE__ */ (0, import_jsx_runtime7.jsx)("button", { className: "ghost", type: "button", onClick: () => onResetWorkerOverrides(index), children: "Reset to A0" })
             ] }),
-            recommendation ? /* @__PURE__ */ (0, import_jsx_runtime6.jsx)("p", { className: "small muted", children: recommendation }) : null,
-            /* @__PURE__ */ (0, import_jsx_runtime6.jsxs)("div", { className: "plan-grid", children: [
-              /* @__PURE__ */ (0, import_jsx_runtime6.jsxs)("div", { className: "plan-row", children: [
-                /* @__PURE__ */ (0, import_jsx_runtime6.jsx)("span", { className: "muted", children: "Task" }),
-                /* @__PURE__ */ (0, import_jsx_runtime6.jsx)("strong", { children: planned.taskId || "A0 will assign" })
+            recommendation ? /* @__PURE__ */ (0, import_jsx_runtime7.jsx)("p", { className: "small muted", children: recommendation }) : null,
+            /* @__PURE__ */ (0, import_jsx_runtime7.jsxs)("div", { className: "plan-grid", children: [
+              /* @__PURE__ */ (0, import_jsx_runtime7.jsxs)("div", { className: "plan-row", children: [
+                /* @__PURE__ */ (0, import_jsx_runtime7.jsx)("span", { className: "muted", children: "Task" }),
+                /* @__PURE__ */ (0, import_jsx_runtime7.jsx)("strong", { children: planned.taskId || "A0 will assign" })
               ] }),
-              /* @__PURE__ */ (0, import_jsx_runtime6.jsxs)("div", { className: "plan-row", children: [
-                /* @__PURE__ */ (0, import_jsx_runtime6.jsx)("span", { className: "muted", children: "Type" }),
-                /* @__PURE__ */ (0, import_jsx_runtime6.jsx)("strong", { children: planned.taskType || "default" })
+              /* @__PURE__ */ (0, import_jsx_runtime7.jsxs)("div", { className: "plan-row", children: [
+                /* @__PURE__ */ (0, import_jsx_runtime7.jsx)("span", { className: "muted", children: "Type" }),
+                /* @__PURE__ */ (0, import_jsx_runtime7.jsx)("strong", { children: planned.taskType || "default" })
               ] }),
-              /* @__PURE__ */ (0, import_jsx_runtime6.jsxs)("div", { className: "plan-row", children: [
-                /* @__PURE__ */ (0, import_jsx_runtime6.jsx)("span", { className: "muted", children: "Branch" }),
-                /* @__PURE__ */ (0, import_jsx_runtime6.jsx)("strong", { children: planned.branch || "A0 will derive" })
+              /* @__PURE__ */ (0, import_jsx_runtime7.jsxs)("div", { className: "plan-row", children: [
+                /* @__PURE__ */ (0, import_jsx_runtime7.jsx)("span", { className: "muted", children: "Branch" }),
+                /* @__PURE__ */ (0, import_jsx_runtime7.jsx)("strong", { children: planned.branch || "A0 will derive" })
               ] }),
-              /* @__PURE__ */ (0, import_jsx_runtime6.jsxs)("div", { className: "plan-row", children: [
-                /* @__PURE__ */ (0, import_jsx_runtime6.jsx)("span", { className: "muted", children: "Worktree" }),
-                /* @__PURE__ */ (0, import_jsx_runtime6.jsx)("strong", { children: planned.worktreePath || "derived from Local Repo Root" })
+              /* @__PURE__ */ (0, import_jsx_runtime7.jsxs)("div", { className: "plan-row", children: [
+                /* @__PURE__ */ (0, import_jsx_runtime7.jsx)("span", { className: "muted", children: "Worktree" }),
+                /* @__PURE__ */ (0, import_jsx_runtime7.jsx)("strong", { children: planned.worktreePath || "derived from Local Repo Root" })
               ] }),
-              /* @__PURE__ */ (0, import_jsx_runtime6.jsxs)("div", { className: "plan-row", children: [
-                /* @__PURE__ */ (0, import_jsx_runtime6.jsx)("span", { className: "muted", children: "Pool" }),
-                /* @__PURE__ */ (0, import_jsx_runtime6.jsx)("strong", { children: planned.lockedPool || planned.recommendedPool || "A0 routing" })
+              /* @__PURE__ */ (0, import_jsx_runtime7.jsxs)("div", { className: "plan-row", children: [
+                /* @__PURE__ */ (0, import_jsx_runtime7.jsx)("span", { className: "muted", children: "Pool" }),
+                /* @__PURE__ */ (0, import_jsx_runtime7.jsx)("strong", { children: planned.lockedPool || planned.recommendedPool || "A0 routing" })
               ] }),
-              /* @__PURE__ */ (0, import_jsx_runtime6.jsxs)("div", { className: "plan-row", children: [
-                /* @__PURE__ */ (0, import_jsx_runtime6.jsx)("span", { className: "muted", children: "Test" }),
-                /* @__PURE__ */ (0, import_jsx_runtime6.jsx)("strong", { children: planned.testCommand || suggestedTest || "A0 default" })
+              /* @__PURE__ */ (0, import_jsx_runtime7.jsxs)("div", { className: "plan-row", children: [
+                /* @__PURE__ */ (0, import_jsx_runtime7.jsx)("span", { className: "muted", children: "Test" }),
+                /* @__PURE__ */ (0, import_jsx_runtime7.jsx)("strong", { children: planned.testCommand || suggestedTest || "A0 default" })
               ] })
             ] }),
-            /* @__PURE__ */ (0, import_jsx_runtime6.jsxs)("div", { className: "field-grid compact-field-grid", children: [
-              /* @__PURE__ */ (0, import_jsx_runtime6.jsx)(Field, { label: "Agent", value: worker.agent || "", onChange: (value) => onWorkerChange(index, "agent", value), issues: issues[`workers[${index}].agent`] }),
-              /* @__PURE__ */ (0, import_jsx_runtime6.jsx)(Field, { label: "Pool Override", value: worker.resource_pool || "", onChange: (value) => onWorkerChange(index, "resource_pool", value), issues: issues[`workers[${index}].resource_pool`], helpText: resolved?.locked_pool ? `A0 lock: ${resolved.locked_pool}` : resolved?.recommended_pool ? `A0 recommends: ${resolved.recommended_pool}` : workerDefaults.resource_pool ? `Default: ${workerDefaults.resource_pool}` : "Blank means inherit A0 routing." })
+            /* @__PURE__ */ (0, import_jsx_runtime7.jsxs)("div", { className: "field-grid compact-field-grid", children: [
+              /* @__PURE__ */ (0, import_jsx_runtime7.jsx)(Field, { label: "Agent", value: worker.agent || "", onChange: (value) => onWorkerChange(index, "agent", value), issues: issues[`workers[${index}].agent`] }),
+              /* @__PURE__ */ (0, import_jsx_runtime7.jsx)(Field, { label: "Pool Override", value: worker.resource_pool || "", onChange: (value) => onWorkerChange(index, "resource_pool", value), issues: issues[`workers[${index}].resource_pool`], helpText: resolved?.locked_pool ? `A0 lock: ${resolved.locked_pool}` : resolved?.recommended_pool ? `A0 recommends: ${resolved.recommended_pool}` : workerDefaults.resource_pool ? `Default: ${workerDefaults.resource_pool}` : "Blank means inherit A0 routing." })
             ] }),
-            /* @__PURE__ */ (0, import_jsx_runtime6.jsxs)("details", { className: "advanced-panel", children: [
-              /* @__PURE__ */ (0, import_jsx_runtime6.jsx)("summary", { children: "Advanced overrides" }),
-              /* @__PURE__ */ (0, import_jsx_runtime6.jsxs)("div", { className: "override-toolbar", children: [
-                /* @__PURE__ */ (0, import_jsx_runtime6.jsx)("button", { className: "ghost", type: "button", onClick: () => onResetWorkerOverrides(index, "routing"), children: "Reset routing" }),
-                /* @__PURE__ */ (0, import_jsx_runtime6.jsx)("button", { className: "ghost", type: "button", onClick: () => onResetWorkerOverrides(index, "runtime"), children: "Reset runtime" })
+            /* @__PURE__ */ (0, import_jsx_runtime7.jsxs)("details", { className: "advanced-panel", children: [
+              /* @__PURE__ */ (0, import_jsx_runtime7.jsx)("summary", { children: "Advanced overrides" }),
+              /* @__PURE__ */ (0, import_jsx_runtime7.jsxs)("div", { className: "override-toolbar", children: [
+                /* @__PURE__ */ (0, import_jsx_runtime7.jsx)("button", { className: "ghost", type: "button", onClick: () => onResetWorkerOverrides(index, "routing"), children: "Reset routing" }),
+                /* @__PURE__ */ (0, import_jsx_runtime7.jsx)("button", { className: "ghost", type: "button", onClick: () => onResetWorkerOverrides(index, "runtime"), children: "Reset runtime" })
               ] }),
-              /* @__PURE__ */ (0, import_jsx_runtime6.jsxs)("div", { className: "field-grid advanced-grid", children: [
-                /* @__PURE__ */ (0, import_jsx_runtime6.jsx)(Field, { label: "Task ID Override", value: worker.task_id || "", onChange: (value) => onWorkerChange(index, "task_id", value), helpText: planned.taskId ? `A0 plan: ${planned.taskId}` : "Leave blank to inherit A0 task assignment." }),
-                /* @__PURE__ */ (0, import_jsx_runtime6.jsx)(Field, { label: "Branch Override", value: worker.branch || "", onChange: (value) => onWorkerChange(index, "branch", value), issues: issues[`workers[${index}].branch`], helpText: planned.branch ? `A0 plan: ${planned.branch}` : "Leave blank to let A0 derive the branch." }),
-                /* @__PURE__ */ (0, import_jsx_runtime6.jsx)(Field, { label: "Worktree Path Override", value: worker.worktree_path || "", onChange: (value) => onWorkerChange(index, "worktree_path", value), issues: issues[`workers[${index}].worktree_path`], helpText: planned.worktreePath ? `A0 plan: ${planned.worktreePath}` : "Leave blank to derive from Local Repo Root." }),
-                /* @__PURE__ */ (0, import_jsx_runtime6.jsx)(Field, { label: "Queue Override", value: stringifyQueue(worker.resource_pool_queue), onChange: (value) => onWorkerChange(index, "resource_pool_queue", value), issues: issues[`workers[${index}].resource_pool_queue`], placeholder: "pool_a, pool_b", helpText: resolved?.resource_pool_queue?.length ? `A0 order: ${stringifyQueue(resolved.resource_pool_queue)}` : workerDefaults.resource_pool_queue?.length ? `Default: ${stringifyQueue(workerDefaults.resource_pool_queue)}` : "Blank means inherit A0 queue." }),
-                /* @__PURE__ */ (0, import_jsx_runtime6.jsx)(SelectField, { label: "Environment Type", value: worker.environment_type || "", onChange: (value) => onWorkerChange(index, "environment_type", value), options: ["uv", "venv", "none"] }),
-                /* @__PURE__ */ (0, import_jsx_runtime6.jsx)(Field, { label: "Environment Path", value: worker.environment_path || "", onChange: (value) => onWorkerChange(index, "environment_path", value), issues: issues[`workers[${index}].environment_path`], helpText: workerDefaults.environment_path ? `Default: ${workerDefaults.environment_path}` : void 0 }),
-                /* @__PURE__ */ (0, import_jsx_runtime6.jsx)(Field, { label: "Sync Command", value: worker.sync_command || "", onChange: (value) => onWorkerChange(index, "sync_command", value), helpText: workerDefaults.sync_command ? `Default: ${workerDefaults.sync_command}` : void 0 }),
-                /* @__PURE__ */ (0, import_jsx_runtime6.jsx)(Field, { label: "Test Command", value: worker.test_command || "", onChange: (value) => onWorkerChange(index, "test_command", value), issues: issues[`workers[${index}].test_command`], helpText: suggestedTest ? `A0 picked: ${suggestedTest}` : workerDefaults.test_command ? `Default: ${workerDefaults.test_command}` : void 0 }),
-                /* @__PURE__ */ (0, import_jsx_runtime6.jsx)(Field, { label: "Submit Strategy", value: worker.submit_strategy || "", onChange: (value) => onWorkerChange(index, "submit_strategy", value), issues: issues[`workers[${index}].submit_strategy`], helpText: workerDefaults.submit_strategy ? `Default: ${workerDefaults.submit_strategy}` : void 0 }),
-                /* @__PURE__ */ (0, import_jsx_runtime6.jsx)(Field, { label: "Git Name", value: worker.git_identity?.name || "", onChange: (value) => onWorkerChange(index, "git_identity.name", value), helpText: workerDefaults.git_identity?.name ? `Default: ${workerDefaults.git_identity.name}` : void 0 }),
-                /* @__PURE__ */ (0, import_jsx_runtime6.jsx)(Field, { label: "Git Email", value: worker.git_identity?.email || "", onChange: (value) => onWorkerChange(index, "git_identity.email", value), helpText: workerDefaults.git_identity?.email ? `Default: ${workerDefaults.git_identity.email}` : void 0 })
+              /* @__PURE__ */ (0, import_jsx_runtime7.jsxs)("div", { className: "field-grid advanced-grid", children: [
+                /* @__PURE__ */ (0, import_jsx_runtime7.jsx)(Field, { label: "Task ID Override", value: worker.task_id || "", onChange: (value) => onWorkerChange(index, "task_id", value), helpText: planned.taskId ? `A0 plan: ${planned.taskId}` : "Leave blank to inherit A0 task assignment." }),
+                /* @__PURE__ */ (0, import_jsx_runtime7.jsx)(Field, { label: "Branch Override", value: worker.branch || "", onChange: (value) => onWorkerChange(index, "branch", value), issues: issues[`workers[${index}].branch`], helpText: planned.branch ? `A0 plan: ${planned.branch}` : "Leave blank to let A0 derive the branch." }),
+                /* @__PURE__ */ (0, import_jsx_runtime7.jsx)(Field, { label: "Worktree Path Override", value: worker.worktree_path || "", onChange: (value) => onWorkerChange(index, "worktree_path", value), issues: issues[`workers[${index}].worktree_path`], helpText: planned.worktreePath ? `A0 plan: ${planned.worktreePath}` : "Leave blank to derive from Local Repo Root." }),
+                /* @__PURE__ */ (0, import_jsx_runtime7.jsx)(Field, { label: "Queue Override", value: stringifyQueue(worker.resource_pool_queue), onChange: (value) => onWorkerChange(index, "resource_pool_queue", value), issues: issues[`workers[${index}].resource_pool_queue`], placeholder: "pool_a, pool_b", helpText: resolved?.resource_pool_queue?.length ? `A0 order: ${stringifyQueue(resolved.resource_pool_queue)}` : workerDefaults.resource_pool_queue?.length ? `Default: ${stringifyQueue(workerDefaults.resource_pool_queue)}` : "Blank means inherit A0 queue." }),
+                /* @__PURE__ */ (0, import_jsx_runtime7.jsx)(SelectField, { label: "Environment Type", value: worker.environment_type || "", onChange: (value) => onWorkerChange(index, "environment_type", value), options: ["uv", "venv", "none"] }),
+                /* @__PURE__ */ (0, import_jsx_runtime7.jsx)(Field, { label: "Environment Path", value: worker.environment_path || "", onChange: (value) => onWorkerChange(index, "environment_path", value), issues: issues[`workers[${index}].environment_path`], helpText: workerDefaults.environment_path ? `Default: ${workerDefaults.environment_path}` : void 0 }),
+                /* @__PURE__ */ (0, import_jsx_runtime7.jsx)(Field, { label: "Sync Command", value: worker.sync_command || "", onChange: (value) => onWorkerChange(index, "sync_command", value), helpText: workerDefaults.sync_command ? `Default: ${workerDefaults.sync_command}` : void 0 }),
+                /* @__PURE__ */ (0, import_jsx_runtime7.jsx)(Field, { label: "Test Command", value: worker.test_command || "", onChange: (value) => onWorkerChange(index, "test_command", value), issues: issues[`workers[${index}].test_command`], helpText: suggestedTest ? `A0 picked: ${suggestedTest}` : workerDefaults.test_command ? `Default: ${workerDefaults.test_command}` : void 0 }),
+                /* @__PURE__ */ (0, import_jsx_runtime7.jsx)(Field, { label: "Submit Strategy", value: worker.submit_strategy || "", onChange: (value) => onWorkerChange(index, "submit_strategy", value), issues: issues[`workers[${index}].submit_strategy`], helpText: workerDefaults.submit_strategy ? `Default: ${workerDefaults.submit_strategy}` : void 0 }),
+                /* @__PURE__ */ (0, import_jsx_runtime7.jsx)(Field, { label: "Git Name", value: worker.git_identity?.name || "", onChange: (value) => onWorkerChange(index, "git_identity.name", value), helpText: workerDefaults.git_identity?.name ? `Default: ${workerDefaults.git_identity.name}` : void 0 }),
+                /* @__PURE__ */ (0, import_jsx_runtime7.jsx)(Field, { label: "Git Email", value: worker.git_identity?.email || "", onChange: (value) => onWorkerChange(index, "git_identity.email", value), helpText: workerDefaults.git_identity?.email ? `Default: ${workerDefaults.git_identity.email}` : void 0 })
               ] })
             ] })
           ] });
@@ -26467,7 +26633,7 @@ function SettingsTab({
 }
 
 // src/components/A0ConsoleView.tsx
-var import_jsx_runtime7 = __toESM(require_jsx_runtime(), 1);
+var import_jsx_runtime8 = __toESM(require_jsx_runtime(), 1);
 function A0ConsoleView({
   data,
   standalone,
@@ -26486,42 +26652,42 @@ function A0ConsoleView({
   const requests = data.a0_console?.requests || [];
   const messages = data.a0_console?.messages || [];
   const inbox = data.a0_console?.inbox || [];
-  return /* @__PURE__ */ (0, import_jsx_runtime7.jsxs)("div", { className: classNames("tab-body", standalone && "a0-console-body"), children: [
-    /* @__PURE__ */ (0, import_jsx_runtime7.jsxs)("section", { className: "grid", children: [
-      /* @__PURE__ */ (0, import_jsx_runtime7.jsx)(WorkflowBriefCard, { data }),
-      /* @__PURE__ */ (0, import_jsx_runtime7.jsx)(MailboxPeekCard, { data })
+  return /* @__PURE__ */ (0, import_jsx_runtime8.jsxs)("div", { className: classNames("tab-body", standalone && "a0-console-body"), children: [
+    /* @__PURE__ */ (0, import_jsx_runtime8.jsxs)("section", { className: "grid", children: [
+      /* @__PURE__ */ (0, import_jsx_runtime8.jsx)(WorkflowBriefCard, { data }),
+      /* @__PURE__ */ (0, import_jsx_runtime8.jsx)(MailboxPeekCard, { data })
     ] }),
-    /* @__PURE__ */ (0, import_jsx_runtime7.jsxs)("section", { className: "card", children: [
-      /* @__PURE__ */ (0, import_jsx_runtime7.jsxs)("div", { className: "page-header", children: [
-        /* @__PURE__ */ (0, import_jsx_runtime7.jsxs)("div", { children: [
-          /* @__PURE__ */ (0, import_jsx_runtime7.jsx)("h2", { children: "A0 Console" }),
-          /* @__PURE__ */ (0, import_jsx_runtime7.jsx)("p", { className: "small", children: "Dedicated manager window for approvals, unblock instructions, and resume notes." })
+    /* @__PURE__ */ (0, import_jsx_runtime8.jsxs)("section", { className: "card", children: [
+      /* @__PURE__ */ (0, import_jsx_runtime8.jsxs)("div", { className: "page-header", children: [
+        /* @__PURE__ */ (0, import_jsx_runtime8.jsxs)("div", { children: [
+          /* @__PURE__ */ (0, import_jsx_runtime8.jsx)("h2", { children: "A0 Console" }),
+          /* @__PURE__ */ (0, import_jsx_runtime8.jsx)("p", { className: "small", children: "Dedicated manager window for approvals, unblock instructions, and resume notes." })
         ] }),
-        /* @__PURE__ */ (0, import_jsx_runtime7.jsxs)("div", { className: "small muted", children: [
+        /* @__PURE__ */ (0, import_jsx_runtime8.jsxs)("div", { className: "small muted", children: [
           data.a0_console.pending_count,
           " pending"
         ] })
       ] }),
-      /* @__PURE__ */ (0, import_jsx_runtime7.jsxs)("label", { className: "field", children: [
-        /* @__PURE__ */ (0, import_jsx_runtime7.jsx)("span", { className: "field-label", children: "Message to A0" }),
-        /* @__PURE__ */ (0, import_jsx_runtime7.jsx)("textarea", { className: "field-input field-textarea", value: composer, onChange: (event) => onComposerChange(event.target.value), placeholder: "Send a direct note to A0 outside a specific request." })
+      /* @__PURE__ */ (0, import_jsx_runtime8.jsxs)("label", { className: "field", children: [
+        /* @__PURE__ */ (0, import_jsx_runtime8.jsx)("span", { className: "field-label", children: "Message to A0" }),
+        /* @__PURE__ */ (0, import_jsx_runtime8.jsx)("textarea", { className: "field-input field-textarea", value: composer, onChange: (event) => onComposerChange(event.target.value), placeholder: "Send a direct note to A0 outside a specific request." })
       ] }),
-      /* @__PURE__ */ (0, import_jsx_runtime7.jsx)("div", { className: "toolbar-group a0-actions", children: /* @__PURE__ */ (0, import_jsx_runtime7.jsx)("button", { type: "button", onClick: onSendMessage, disabled: !composer.trim(), children: "Send to A0" }) })
+      /* @__PURE__ */ (0, import_jsx_runtime8.jsx)("div", { className: "toolbar-group a0-actions", children: /* @__PURE__ */ (0, import_jsx_runtime8.jsx)("button", { type: "button", onClick: onSendMessage, disabled: !composer.trim(), children: "Send to A0" }) })
     ] }),
-    /* @__PURE__ */ (0, import_jsx_runtime7.jsx)(WorkflowPatchCard, { data, draft: workflowDraft, onChange: onWorkflowDraftChange, onSubmit: onApplyWorkflowUpdate }),
-    /* @__PURE__ */ (0, import_jsx_runtime7.jsxs)("section", { className: "card", children: [
-      /* @__PURE__ */ (0, import_jsx_runtime7.jsx)("div", { className: "panel-title", children: /* @__PURE__ */ (0, import_jsx_runtime7.jsxs)("div", { children: [
-        /* @__PURE__ */ (0, import_jsx_runtime7.jsx)("h2", { children: "Inbox" }),
-        /* @__PURE__ */ (0, import_jsx_runtime7.jsx)("p", { className: "small", children: "Worker messages that still need acknowledgement or closure from A0." })
+    /* @__PURE__ */ (0, import_jsx_runtime8.jsx)(WorkflowPatchCard, { data, draft: workflowDraft, onChange: onWorkflowDraftChange, onSubmit: onApplyWorkflowUpdate }),
+    /* @__PURE__ */ (0, import_jsx_runtime8.jsxs)("section", { className: "card", children: [
+      /* @__PURE__ */ (0, import_jsx_runtime8.jsx)("div", { className: "panel-title", children: /* @__PURE__ */ (0, import_jsx_runtime8.jsxs)("div", { children: [
+        /* @__PURE__ */ (0, import_jsx_runtime8.jsx)("h2", { children: "Inbox" }),
+        /* @__PURE__ */ (0, import_jsx_runtime8.jsx)("p", { className: "small", children: "Worker messages that still need acknowledgement or closure from A0." })
       ] }) }),
-      /* @__PURE__ */ (0, import_jsx_runtime7.jsx)("div", { className: "merge-board", children: inbox.length ? inbox.map((item) => /* @__PURE__ */ (0, import_jsx_runtime7.jsx)(MailboxCard, { item, onAck: onMailboxAck }, item.id)) : /* @__PURE__ */ (0, import_jsx_runtime7.jsx)("div", { className: "small muted", children: "No unresolved mailbox items for A0." }) })
+      /* @__PURE__ */ (0, import_jsx_runtime8.jsx)("div", { className: "merge-board", children: inbox.length ? inbox.map((item) => /* @__PURE__ */ (0, import_jsx_runtime8.jsx)(MailboxCard, { item, onAck: onMailboxAck }, item.id)) : /* @__PURE__ */ (0, import_jsx_runtime8.jsx)("div", { className: "small muted", children: "No unresolved mailbox items for A0." }) })
     ] }),
-    /* @__PURE__ */ (0, import_jsx_runtime7.jsxs)("section", { className: "card", children: [
-      /* @__PURE__ */ (0, import_jsx_runtime7.jsx)("div", { className: "panel-title", children: /* @__PURE__ */ (0, import_jsx_runtime7.jsxs)("div", { children: [
-        /* @__PURE__ */ (0, import_jsx_runtime7.jsx)("h2", { children: "Pending Requests" }),
-        /* @__PURE__ */ (0, import_jsx_runtime7.jsx)("p", { className: "small", children: "These are the cases where A0 currently needs your decision or confirmation." })
+    /* @__PURE__ */ (0, import_jsx_runtime8.jsxs)("section", { className: "card", children: [
+      /* @__PURE__ */ (0, import_jsx_runtime8.jsx)("div", { className: "panel-title", children: /* @__PURE__ */ (0, import_jsx_runtime8.jsxs)("div", { children: [
+        /* @__PURE__ */ (0, import_jsx_runtime8.jsx)("h2", { children: "Pending Requests" }),
+        /* @__PURE__ */ (0, import_jsx_runtime8.jsx)("p", { className: "small", children: "These are the cases where A0 currently needs your decision or confirmation." })
       ] }) }),
-      /* @__PURE__ */ (0, import_jsx_runtime7.jsx)("div", { className: "merge-board", children: requests.length ? requests.map((item) => /* @__PURE__ */ (0, import_jsx_runtime7.jsx)(
+      /* @__PURE__ */ (0, import_jsx_runtime8.jsx)("div", { className: "merge-board", children: requests.length ? requests.map((item) => /* @__PURE__ */ (0, import_jsx_runtime8.jsx)(
         A0RequestCard,
         {
           item,
@@ -26531,51 +26697,51 @@ function A0ConsoleView({
           onPrepareWorkflow
         },
         item.id
-      )) : /* @__PURE__ */ (0, import_jsx_runtime7.jsx)("div", { className: "small muted", children: "No open A0 requests." }) })
+      )) : /* @__PURE__ */ (0, import_jsx_runtime8.jsx)("div", { className: "small muted", children: "No open A0 requests." }) })
     ] }),
-    /* @__PURE__ */ (0, import_jsx_runtime7.jsxs)("section", { className: "card", children: [
-      /* @__PURE__ */ (0, import_jsx_runtime7.jsx)("div", { className: "panel-title", children: /* @__PURE__ */ (0, import_jsx_runtime7.jsxs)("div", { children: [
-        /* @__PURE__ */ (0, import_jsx_runtime7.jsx)("h2", { children: "Conversation Log" }),
-        /* @__PURE__ */ (0, import_jsx_runtime7.jsx)("p", { className: "small", children: "Recent user-to-A0 messages and request responses recorded by the control plane." })
+    /* @__PURE__ */ (0, import_jsx_runtime8.jsxs)("section", { className: "card", children: [
+      /* @__PURE__ */ (0, import_jsx_runtime8.jsx)("div", { className: "panel-title", children: /* @__PURE__ */ (0, import_jsx_runtime8.jsxs)("div", { children: [
+        /* @__PURE__ */ (0, import_jsx_runtime8.jsx)("h2", { children: "Conversation Log" }),
+        /* @__PURE__ */ (0, import_jsx_runtime8.jsx)("p", { className: "small", children: "Recent user-to-A0 messages and request responses recorded by the control plane." })
       ] }) }),
-      /* @__PURE__ */ (0, import_jsx_runtime7.jsx)("div", { className: "stack-list", children: messages.length ? messages.map((item) => /* @__PURE__ */ (0, import_jsx_runtime7.jsxs)("div", { className: "subcard", children: [
-        /* @__PURE__ */ (0, import_jsx_runtime7.jsx)("div", { className: "subcard-title", children: item.action || item.direction }),
-        /* @__PURE__ */ (0, import_jsx_runtime7.jsx)("div", { className: "small muted", children: item.created_at }),
-        /* @__PURE__ */ (0, import_jsx_runtime7.jsx)("p", { children: item.body })
-      ] }, item.id)) : /* @__PURE__ */ (0, import_jsx_runtime7.jsx)("div", { className: "small muted", children: "No A0 conversation history yet." }) })
+      /* @__PURE__ */ (0, import_jsx_runtime8.jsx)("div", { className: "stack-list", children: messages.length ? messages.map((item) => /* @__PURE__ */ (0, import_jsx_runtime8.jsxs)("div", { className: "subcard", children: [
+        /* @__PURE__ */ (0, import_jsx_runtime8.jsx)("div", { className: "subcard-title", children: item.action || item.direction }),
+        /* @__PURE__ */ (0, import_jsx_runtime8.jsx)("div", { className: "small muted", children: item.created_at }),
+        /* @__PURE__ */ (0, import_jsx_runtime8.jsx)("p", { children: item.body })
+      ] }, item.id)) : /* @__PURE__ */ (0, import_jsx_runtime8.jsx)("div", { className: "small muted", children: "No A0 conversation history yet." }) })
     ] })
   ] });
 }
 
 // src/App.tsx
-var import_jsx_runtime8 = __toESM(require_jsx_runtime(), 1);
+var import_jsx_runtime9 = __toESM(require_jsx_runtime(), 1);
 function App() {
   const isA0ConsoleView = new URLSearchParams(window.location.search).get("view") === A0_CONSOLE_VIEW;
-  const [tab, setTab] = (0, import_react2.useState)("overview");
-  const [data, setData] = (0, import_react2.useState)(null);
-  const [draftConfig, setDraftConfig] = (0, import_react2.useState)({ project: {}, providers: {}, resource_pools: {}, worker_defaults: {}, workers: [] });
-  const [configDirty, setConfigDirty] = (0, import_react2.useState)(false);
-  const [launchStrategy, setLaunchStrategy] = (0, import_react2.useState)("initial_provider");
-  const [launchProvider, setLaunchProvider] = (0, import_react2.useState)("ducc");
-  const [launchModel, setLaunchModel] = (0, import_react2.useState)("");
-  const [launchDirty, setLaunchDirty] = (0, import_react2.useState)(false);
-  const [autoRefresh, setAutoRefresh] = (0, import_react2.useState)(true);
-  const [actionInFlight, setActionInFlight] = (0, import_react2.useState)(false);
-  const [status, setStatus] = (0, import_react2.useState)({ message: "", error: false });
-  const [backendIssues, setBackendIssues] = (0, import_react2.useState)([]);
-  const [sectionStatuses, setSectionStatuses] = (0, import_react2.useState)({});
-  const [a0ReplyDrafts, setA0ReplyDrafts] = (0, import_react2.useState)({});
-  const [a0Composer, setA0Composer] = (0, import_react2.useState)("");
-  const [mailboxDraft, setMailboxDraft] = (0, import_react2.useState)(DEFAULT_MAILBOX_DRAFT);
-  const [workflowDraft, setWorkflowDraft] = (0, import_react2.useState)(DEFAULT_WORKFLOW_DRAFT);
-  const [cleanupReleaseListener, setCleanupReleaseListener] = (0, import_react2.useState)(false);
-  const abortRef = (0, import_react2.useRef)(null);
-  const previousPendingA0Ref = (0, import_react2.useRef)(0);
-  const agentRows = (0, import_react2.useMemo)(() => buildAgentRows(data), [data]);
-  const progress = (0, import_react2.useMemo)(() => buildProgressModel(data, agentRows), [data, agentRows]);
-  const localIssues = (0, import_react2.useMemo)(() => getLocalValidationIssues(draftConfig, data), [draftConfig, data]);
-  const allIssues = (0, import_react2.useMemo)(() => [...localIssues, ...backendIssues], [localIssues, backendIssues]);
-  const providerOptions = (0, import_react2.useMemo)(() => Object.keys(draftConfig.providers || {}), [draftConfig.providers]);
+  const [tab, setTab] = (0, import_react3.useState)("overview");
+  const [data, setData] = (0, import_react3.useState)(null);
+  const [draftConfig, setDraftConfig] = (0, import_react3.useState)({ project: {}, providers: {}, resource_pools: {}, worker_defaults: {}, workers: [] });
+  const [configDirty, setConfigDirty] = (0, import_react3.useState)(false);
+  const [launchStrategy, setLaunchStrategy] = (0, import_react3.useState)("initial_provider");
+  const [launchProvider, setLaunchProvider] = (0, import_react3.useState)("ducc");
+  const [launchModel, setLaunchModel] = (0, import_react3.useState)("");
+  const [launchDirty, setLaunchDirty] = (0, import_react3.useState)(false);
+  const [autoRefresh, setAutoRefresh] = (0, import_react3.useState)(true);
+  const [actionInFlight, setActionInFlight] = (0, import_react3.useState)(false);
+  const [status, setStatus] = (0, import_react3.useState)({ message: "", error: false });
+  const [backendIssues, setBackendIssues] = (0, import_react3.useState)([]);
+  const [sectionStatuses, setSectionStatuses] = (0, import_react3.useState)({});
+  const [a0ReplyDrafts, setA0ReplyDrafts] = (0, import_react3.useState)({});
+  const [a0Composer, setA0Composer] = (0, import_react3.useState)("");
+  const [mailboxDraft, setMailboxDraft] = (0, import_react3.useState)(DEFAULT_MAILBOX_DRAFT);
+  const [workflowDraft, setWorkflowDraft] = (0, import_react3.useState)(DEFAULT_WORKFLOW_DRAFT);
+  const [cleanupReleaseListener, setCleanupReleaseListener] = (0, import_react3.useState)(false);
+  const abortRef = (0, import_react3.useRef)(null);
+  const previousPendingA0Ref = (0, import_react3.useRef)(0);
+  const agentRows = (0, import_react3.useMemo)(() => buildAgentRows(data), [data]);
+  const progress = (0, import_react3.useMemo)(() => buildProgressModel(data, agentRows), [data, agentRows]);
+  const localIssues = (0, import_react3.useMemo)(() => getLocalValidationIssues(draftConfig, data), [draftConfig, data]);
+  const allIssues = (0, import_react3.useMemo)(() => [...localIssues, ...backendIssues], [localIssues, backendIssues]);
+  const providerOptions = (0, import_react3.useMemo)(() => Object.keys(draftConfig.providers || {}), [draftConfig.providers]);
   const setStampedStatus = (message, error = false) => {
     const stamp = (/* @__PURE__ */ new Date()).toLocaleTimeString();
     setStatus({ message: `[${stamp}] ${message}`, error });
@@ -26606,11 +26772,11 @@ function App() {
       }
     }
   };
-  (0, import_react2.useEffect)(() => {
+  (0, import_react3.useEffect)(() => {
     void refresh(true);
     return () => abortRef.current?.abort();
   }, []);
-  (0, import_react2.useEffect)(() => {
+  (0, import_react3.useEffect)(() => {
     if (!autoRefresh || actionInFlight) {
       return;
     }
@@ -26619,7 +26785,7 @@ function App() {
     }, AUTO_REFRESH_MS);
     return () => window.clearInterval(timer);
   }, [autoRefresh, actionInFlight, configDirty, launchDirty]);
-  (0, import_react2.useEffect)(() => {
+  (0, import_react3.useEffect)(() => {
     const pendingCount = data?.a0_console?.pending_count || 0;
     if (pendingCount > previousPendingA0Ref.current && document.visibilityState !== "visible" && "Notification" in window) {
       if (Notification.permission === "granted") {
@@ -26630,7 +26796,7 @@ function App() {
     }
     previousPendingA0Ref.current = pendingCount;
   }, [data]);
-  (0, import_react2.useEffect)(() => {
+  (0, import_react3.useEffect)(() => {
     if (!data) {
       return;
     }
@@ -27035,6 +27201,11 @@ function App() {
     setStampedStatus(`stopped workers: ${response.stopped.join(", ") || "none"}`);
     await refresh(true);
   });
+  const onSoftStop = () => void runAction("soft stopping workers (checkpoint + stop)", async () => {
+    await softStopWorkers(120);
+    setStampedStatus("soft stop initiated: agents are saving checkpoints before stopping");
+    await refresh(true);
+  });
   const onStopAll = () => void runAction("stopping listener and workers", async () => {
     const response = await stopAll();
     setStampedStatus(
@@ -27175,15 +27346,15 @@ function App() {
     { label: "Updated", value: data.updated_at || "unknown" }
   ] : [];
   if (data && isA0ConsoleView) {
-    return /* @__PURE__ */ (0, import_jsx_runtime8.jsxs)("div", { children: [
-      /* @__PURE__ */ (0, import_jsx_runtime8.jsx)("header", { children: /* @__PURE__ */ (0, import_jsx_runtime8.jsx)("div", { className: "hero", children: /* @__PURE__ */ (0, import_jsx_runtime8.jsxs)("div", { children: [
-        /* @__PURE__ */ (0, import_jsx_runtime8.jsx)("div", { className: "hero-badge", children: "Manager channel" }),
-        /* @__PURE__ */ (0, import_jsx_runtime8.jsx)("h1", { children: "A0 Console" }),
-        /* @__PURE__ */ (0, import_jsx_runtime8.jsx)("p", { className: "small tagline", children: "Focused communication window for manager approvals, unblock decisions, and resume notes." })
+    return /* @__PURE__ */ (0, import_jsx_runtime9.jsxs)("div", { children: [
+      /* @__PURE__ */ (0, import_jsx_runtime9.jsx)("header", { children: /* @__PURE__ */ (0, import_jsx_runtime9.jsx)("div", { className: "hero", children: /* @__PURE__ */ (0, import_jsx_runtime9.jsxs)("div", { children: [
+        /* @__PURE__ */ (0, import_jsx_runtime9.jsx)("div", { className: "hero-badge", children: "Manager channel" }),
+        /* @__PURE__ */ (0, import_jsx_runtime9.jsx)("h1", { children: "A0 Console" }),
+        /* @__PURE__ */ (0, import_jsx_runtime9.jsx)("p", { className: "small tagline", children: "Focused communication window for manager approvals, unblock decisions, and resume notes." })
       ] }) }) }),
-      /* @__PURE__ */ (0, import_jsx_runtime8.jsxs)("main", { children: [
-        /* @__PURE__ */ (0, import_jsx_runtime8.jsx)("section", { className: "card", children: /* @__PURE__ */ (0, import_jsx_runtime8.jsx)("div", { className: classNames("status", status.error && "error"), children: status.message }) }),
-        /* @__PURE__ */ (0, import_jsx_runtime8.jsx)(
+      /* @__PURE__ */ (0, import_jsx_runtime9.jsxs)("main", { children: [
+        /* @__PURE__ */ (0, import_jsx_runtime9.jsx)("section", { className: "card", children: /* @__PURE__ */ (0, import_jsx_runtime9.jsx)("div", { className: classNames("status", status.error && "error"), children: status.message }) }),
+        /* @__PURE__ */ (0, import_jsx_runtime9.jsx)(
           A0ConsoleView,
           {
             data,
@@ -27204,28 +27375,29 @@ function App() {
       ] })
     ] });
   }
-  return /* @__PURE__ */ (0, import_jsx_runtime8.jsxs)("div", { children: [
-    /* @__PURE__ */ (0, import_jsx_runtime8.jsx)("header", { children: /* @__PURE__ */ (0, import_jsx_runtime8.jsx)("div", { className: "hero", children: /* @__PURE__ */ (0, import_jsx_runtime8.jsxs)("div", { children: [
-      /* @__PURE__ */ (0, import_jsx_runtime8.jsx)("div", { className: "hero-badge", children: "FP8 delivery orchestration" }),
-      /* @__PURE__ */ (0, import_jsx_runtime8.jsx)("h1", { children: "warp control plane" }),
-      /* @__PURE__ */ (0, import_jsx_runtime8.jsx)("p", { className: "small tagline", children: "Cold-start by default, fire-and-forget serving, editable settings forms, strict validation, and an explicit silent listener mode." })
+  return /* @__PURE__ */ (0, import_jsx_runtime9.jsxs)("div", { children: [
+    /* @__PURE__ */ (0, import_jsx_runtime9.jsx)("header", { children: /* @__PURE__ */ (0, import_jsx_runtime9.jsx)("div", { className: "hero", children: /* @__PURE__ */ (0, import_jsx_runtime9.jsxs)("div", { children: [
+      /* @__PURE__ */ (0, import_jsx_runtime9.jsx)("div", { className: "hero-badge", children: "FP8 delivery orchestration" }),
+      /* @__PURE__ */ (0, import_jsx_runtime9.jsx)("h1", { children: "warp control plane" }),
+      /* @__PURE__ */ (0, import_jsx_runtime9.jsx)("p", { className: "small tagline", children: "Cold-start by default, fire-and-forget serving, editable settings forms, strict validation, and an explicit silent listener mode." })
     ] }) }) }),
-    /* @__PURE__ */ (0, import_jsx_runtime8.jsxs)("main", { children: [
-      /* @__PURE__ */ (0, import_jsx_runtime8.jsxs)("section", { className: "card", children: [
-        /* @__PURE__ */ (0, import_jsx_runtime8.jsxs)("div", { className: "toolbar", children: [
-          /* @__PURE__ */ (0, import_jsx_runtime8.jsxs)("div", { className: "toolbar-group", children: [
-            /* @__PURE__ */ (0, import_jsx_runtime8.jsx)("button", { disabled: actionInFlight, onClick: () => onLaunch(false), children: "Launch" }),
-            /* @__PURE__ */ (0, import_jsx_runtime8.jsx)("button", { className: "secondary", disabled: actionInFlight, onClick: () => onLaunch(true), children: "Restart" }),
-            /* @__PURE__ */ (0, import_jsx_runtime8.jsx)("button", { className: "danger", disabled: actionInFlight, onClick: onStopWorkers, children: "Stop Agents" }),
-            /* @__PURE__ */ (0, import_jsx_runtime8.jsx)("button", { className: "ghost danger-outline", disabled: actionInFlight, onClick: onSilentMode, children: "Silent Mode" }),
-            /* @__PURE__ */ (0, import_jsx_runtime8.jsx)("button", { className: "danger ghost-danger", disabled: actionInFlight, onClick: onStopAll, children: "Stop All" }),
-            /* @__PURE__ */ (0, import_jsx_runtime8.jsx)("button", { className: "ghost", disabled: actionInFlight, onClick: () => void refresh(true), children: "Refresh" })
+    /* @__PURE__ */ (0, import_jsx_runtime9.jsxs)("main", { children: [
+      /* @__PURE__ */ (0, import_jsx_runtime9.jsxs)("section", { className: "card", children: [
+        /* @__PURE__ */ (0, import_jsx_runtime9.jsxs)("div", { className: "toolbar", children: [
+          /* @__PURE__ */ (0, import_jsx_runtime9.jsxs)("div", { className: "toolbar-group", children: [
+            /* @__PURE__ */ (0, import_jsx_runtime9.jsx)("button", { disabled: actionInFlight, onClick: () => onLaunch(false), children: "Launch" }),
+            /* @__PURE__ */ (0, import_jsx_runtime9.jsx)("button", { className: "secondary", disabled: actionInFlight, onClick: () => onLaunch(true), children: "Restart" }),
+            /* @__PURE__ */ (0, import_jsx_runtime9.jsx)("button", { className: "secondary", disabled: actionInFlight, onClick: onSoftStop, children: "Soft Stop" }),
+            /* @__PURE__ */ (0, import_jsx_runtime9.jsx)("button", { className: "danger", disabled: actionInFlight, onClick: onStopWorkers, children: "Stop Agents" }),
+            /* @__PURE__ */ (0, import_jsx_runtime9.jsx)("button", { className: "ghost danger-outline", disabled: actionInFlight, onClick: onSilentMode, children: "Silent Mode" }),
+            /* @__PURE__ */ (0, import_jsx_runtime9.jsx)("button", { className: "danger ghost-danger", disabled: actionInFlight, onClick: onStopAll, children: "Stop All" }),
+            /* @__PURE__ */ (0, import_jsx_runtime9.jsx)("button", { className: "ghost", disabled: actionInFlight, onClick: () => void refresh(true), children: "Refresh" })
           ] }),
-          /* @__PURE__ */ (0, import_jsx_runtime8.jsxs)("div", { className: "toolbar-group", children: [
-            data ? /* @__PURE__ */ (0, import_jsx_runtime8.jsxs)(import_jsx_runtime8.Fragment, { children: [
-              /* @__PURE__ */ (0, import_jsx_runtime8.jsxs)("label", { className: "field field-compact", children: [
-                /* @__PURE__ */ (0, import_jsx_runtime8.jsx)("span", { className: "field-label", children: "Launch Mode" }),
-                /* @__PURE__ */ (0, import_jsx_runtime8.jsx)(
+          /* @__PURE__ */ (0, import_jsx_runtime9.jsxs)("div", { className: "toolbar-group", children: [
+            data ? /* @__PURE__ */ (0, import_jsx_runtime9.jsxs)(import_jsx_runtime9.Fragment, { children: [
+              /* @__PURE__ */ (0, import_jsx_runtime9.jsxs)("label", { className: "field field-compact", children: [
+                /* @__PURE__ */ (0, import_jsx_runtime9.jsx)("span", { className: "field-label", children: "Launch Mode" }),
+                /* @__PURE__ */ (0, import_jsx_runtime9.jsx)(
                   "select",
                   {
                     className: "field-input compact-input",
@@ -27237,13 +27409,13 @@ function App() {
                         setLaunchProvider(preferredLaunchProvider(data.launch_policy));
                       }
                     },
-                    children: data.launch_policy.available_strategies.map((strategy) => /* @__PURE__ */ (0, import_jsx_runtime8.jsx)("option", { value: strategy, children: launchStrategyLabel(strategy) }, strategy))
+                    children: data.launch_policy.available_strategies.map((strategy) => /* @__PURE__ */ (0, import_jsx_runtime9.jsx)("option", { value: strategy, children: launchStrategyLabel(strategy) }, strategy))
                   }
                 )
               ] }),
-              launchStrategy !== "elastic" ? /* @__PURE__ */ (0, import_jsx_runtime8.jsxs)("label", { className: "field field-compact", children: [
-                /* @__PURE__ */ (0, import_jsx_runtime8.jsx)("span", { className: "field-label", children: "Provider" }),
-                /* @__PURE__ */ (0, import_jsx_runtime8.jsx)(
+              launchStrategy !== "elastic" ? /* @__PURE__ */ (0, import_jsx_runtime9.jsxs)("label", { className: "field field-compact", children: [
+                /* @__PURE__ */ (0, import_jsx_runtime9.jsx)("span", { className: "field-label", children: "Provider" }),
+                /* @__PURE__ */ (0, import_jsx_runtime9.jsx)(
                   "select",
                   {
                     className: "field-input compact-input",
@@ -27253,13 +27425,13 @@ function App() {
                       setLaunchDirty(true);
                       setLaunchProvider(event.target.value);
                     },
-                    children: data.launch_policy.available_providers.map((provider) => /* @__PURE__ */ (0, import_jsx_runtime8.jsx)("option", { value: provider, children: provider }, provider))
+                    children: data.launch_policy.available_providers.map((provider) => /* @__PURE__ */ (0, import_jsx_runtime9.jsx)("option", { value: provider, children: provider }, provider))
                   }
                 )
               ] }) : null,
-              launchStrategy === "selected_model" ? /* @__PURE__ */ (0, import_jsx_runtime8.jsxs)("label", { className: "field field-compact field-compact-wide", children: [
-                /* @__PURE__ */ (0, import_jsx_runtime8.jsx)("span", { className: "field-label", children: "Model" }),
-                /* @__PURE__ */ (0, import_jsx_runtime8.jsx)(
+              launchStrategy === "selected_model" ? /* @__PURE__ */ (0, import_jsx_runtime9.jsxs)("label", { className: "field field-compact field-compact-wide", children: [
+                /* @__PURE__ */ (0, import_jsx_runtime9.jsx)("span", { className: "field-label", children: "Model" }),
+                /* @__PURE__ */ (0, import_jsx_runtime9.jsx)(
                   "input",
                   {
                     className: "field-input compact-input",
@@ -27273,25 +27445,25 @@ function App() {
                 )
               ] }) : null
             ] }) : null,
-            /* @__PURE__ */ (0, import_jsx_runtime8.jsx)("button", { className: "ghost", disabled: actionInFlight, onClick: () => onCopy("serve"), children: "Copy Serve" }),
-            /* @__PURE__ */ (0, import_jsx_runtime8.jsx)("button", { className: "ghost", disabled: actionInFlight, onClick: () => onCopy("up"), children: "Copy Up" }),
-            /* @__PURE__ */ (0, import_jsx_runtime8.jsx)("button", { className: "ghost", disabled: actionInFlight, onClick: onOpenA0Console, children: "A0 Console" }),
-            /* @__PURE__ */ (0, import_jsx_runtime8.jsxs)("label", { className: "toggle", children: [
-              /* @__PURE__ */ (0, import_jsx_runtime8.jsx)("input", { type: "checkbox", checked: autoRefresh, onChange: (event) => setAutoRefresh(event.target.checked) }),
+            /* @__PURE__ */ (0, import_jsx_runtime9.jsx)("button", { className: "ghost", disabled: actionInFlight, onClick: () => onCopy("serve"), children: "Copy Serve" }),
+            /* @__PURE__ */ (0, import_jsx_runtime9.jsx)("button", { className: "ghost", disabled: actionInFlight, onClick: () => onCopy("up"), children: "Copy Up" }),
+            /* @__PURE__ */ (0, import_jsx_runtime9.jsx)("button", { className: "ghost", disabled: actionInFlight, onClick: onOpenA0Console, children: "A0 Console" }),
+            /* @__PURE__ */ (0, import_jsx_runtime9.jsxs)("label", { className: "toggle", children: [
+              /* @__PURE__ */ (0, import_jsx_runtime9.jsx)("input", { type: "checkbox", checked: autoRefresh, onChange: (event) => setAutoRefresh(event.target.checked) }),
               " Auto refresh"
             ] })
           ] })
         ] }),
-        /* @__PURE__ */ (0, import_jsx_runtime8.jsx)("div", { className: classNames("status", status.error && "error"), children: status.message })
+        /* @__PURE__ */ (0, import_jsx_runtime9.jsx)("div", { className: classNames("status", status.error && "error"), children: status.message })
       ] }),
-      /* @__PURE__ */ (0, import_jsx_runtime8.jsx)("section", { className: "card", children: /* @__PURE__ */ (0, import_jsx_runtime8.jsxs)("div", { className: "toolbar", children: [
-        /* @__PURE__ */ (0, import_jsx_runtime8.jsx)("div", { className: "tab-nav", role: "tablist", "aria-label": "Dashboard sections", children: ["overview", "operations", "settings"].map((name) => /* @__PURE__ */ (0, import_jsx_runtime8.jsx)("button", { className: classNames("nav-button", tab === name && "active"), onClick: () => setTab(name), children: name[0].toUpperCase() + name.slice(1) }, name)) }),
-        /* @__PURE__ */ (0, import_jsx_runtime8.jsx)("div", { className: "pill-row", children: topMeta.map((item) => /* @__PURE__ */ (0, import_jsx_runtime8.jsxs)("div", { className: "key-pair", children: [
-          /* @__PURE__ */ (0, import_jsx_runtime8.jsx)("span", { className: "muted", children: item.label }),
-          /* @__PURE__ */ (0, import_jsx_runtime8.jsx)("strong", { children: item.value })
+      /* @__PURE__ */ (0, import_jsx_runtime9.jsx)("section", { className: "card", children: /* @__PURE__ */ (0, import_jsx_runtime9.jsxs)("div", { className: "toolbar", children: [
+        /* @__PURE__ */ (0, import_jsx_runtime9.jsx)("div", { className: "tab-nav", role: "tablist", "aria-label": "Dashboard sections", children: ["overview", "operations", "settings"].map((name) => /* @__PURE__ */ (0, import_jsx_runtime9.jsx)("button", { className: classNames("nav-button", tab === name && "active"), onClick: () => setTab(name), children: name[0].toUpperCase() + name.slice(1) }, name)) }),
+        /* @__PURE__ */ (0, import_jsx_runtime9.jsx)("div", { className: "pill-row", children: topMeta.map((item) => /* @__PURE__ */ (0, import_jsx_runtime9.jsxs)("div", { className: "key-pair", children: [
+          /* @__PURE__ */ (0, import_jsx_runtime9.jsx)("span", { className: "muted", children: item.label }),
+          /* @__PURE__ */ (0, import_jsx_runtime9.jsx)("strong", { children: item.value })
         ] }, item.label)) })
       ] }) }),
-      data ? tab === "overview" ? /* @__PURE__ */ (0, import_jsx_runtime8.jsx)(OverviewTab, { data, agentRows, progress, onOpenA0Console }) : tab === "operations" ? /* @__PURE__ */ (0, import_jsx_runtime8.jsx)(OperationsTab, { data, mailboxDraft, workflowDraft, cleanupReleaseListener, onMailboxDraftChange, onWorkflowDraftChange, onSendMailboxMessage, onApplyWorkflowUpdate, onStopWorker, onCleanupReleaseChange: setCleanupReleaseListener, onConfirmCleanup, actionInFlight }) : /* @__PURE__ */ (0, import_jsx_runtime8.jsx)(
+      data ? tab === "overview" ? /* @__PURE__ */ (0, import_jsx_runtime9.jsx)(OverviewTab, { data, agentRows, progress, onOpenA0Console }) : tab === "operations" ? /* @__PURE__ */ (0, import_jsx_runtime9.jsx)(OperationsTab, { data, mailboxDraft, workflowDraft, cleanupReleaseListener, onMailboxDraftChange, onWorkflowDraftChange, onSendMailboxMessage, onApplyWorkflowUpdate, onStopWorker, onCleanupReleaseChange: setCleanupReleaseListener, onConfirmCleanup, actionInFlight }) : /* @__PURE__ */ (0, import_jsx_runtime9.jsx)(
         SettingsTab,
         {
           data,
@@ -27312,15 +27484,15 @@ function App() {
           onResetWorkerDefaults,
           onResetWorkerOverrides
         }
-      ) : /* @__PURE__ */ (0, import_jsx_runtime8.jsx)("section", { className: "card", children: /* @__PURE__ */ (0, import_jsx_runtime8.jsx)("div", { className: "small muted", children: "Loading dashboard state..." }) })
+      ) : /* @__PURE__ */ (0, import_jsx_runtime9.jsx)("section", { className: "card", children: /* @__PURE__ */ (0, import_jsx_runtime9.jsx)("div", { className: "small muted", children: "Loading dashboard state..." }) })
     ] })
   ] });
 }
 
 // src/main.tsx
-var import_jsx_runtime9 = __toESM(require_jsx_runtime(), 1);
+var import_jsx_runtime10 = __toESM(require_jsx_runtime(), 1);
 import_client.default.createRoot(document.getElementById("root")).render(
-  /* @__PURE__ */ (0, import_jsx_runtime9.jsx)(import_react3.default.StrictMode, { children: /* @__PURE__ */ (0, import_jsx_runtime9.jsx)(App, {}) })
+  /* @__PURE__ */ (0, import_jsx_runtime10.jsx)(import_react4.default.StrictMode, { children: /* @__PURE__ */ (0, import_jsx_runtime10.jsx)(App, {}) })
 );
 /*! Bundled license information:
 

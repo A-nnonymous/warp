@@ -43,6 +43,10 @@ providers:
     prompt_transport: stdin
     command_template:
       - ducc
+      - --print
+      - --verbose
+      - --output-format
+      - stream-json
       - --model
       - "{model}"
   opencode:

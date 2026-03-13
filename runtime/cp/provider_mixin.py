@@ -145,6 +145,7 @@ class ProviderMixin:
                 "#!/bin/sh",
                 "set -eu",
                 f"unset {CONTROL_PLANE_ALLOW_NESTED_ENV} 2>/dev/null || true",
+                "unset CLAUDECODE 2>/dev/null || true",
                 f'export {CONTROL_PLANE_WORKER_CONTEXT_ENV}="${{{CONTROL_PLANE_WORKER_CONTEXT_ENV}:-1}}"',
                 f'export {CONTROL_PLANE_RECURSION_POLICY_ENV}="${{{CONTROL_PLANE_RECURSION_POLICY_ENV}:-forbid-nested-control-plane}}"',
                 f'export {CONTROL_PLANE_GUARD_MODE_ENV}="${{{CONTROL_PLANE_GUARD_MODE_ENV}:-env+exec-wrapper}}"',

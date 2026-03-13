@@ -2,7 +2,7 @@ import { useEffect, useMemo, useRef, useState } from 'react';
 import {
   acknowledgeTeamMailboxMessage, applyTaskAction, confirmTeamCleanup,
   enableSilentMode, fetchState, launchWorkers, saveConfig, saveConfigSection,
-  sendA0Message, sendA0Response, sendTeamMailboxMessage, stopAll, stopWorker,
+  sendA0Message, sendA0Response, sendTeamMailboxMessage, softStopWorkers, stopAll, stopWorker,
   stopWorkers, updateWorkflowTask, validateConfig, validateConfigSection,
 } from './api';
 import type {
@@ -573,6 +573,12 @@ export function App() {
     await refresh(true);
   });
 
+  const onSoftStop = () => void runAction('soft stopping workers (checkpoint + stop)', async () => {
+    await softStopWorkers(120);
+    setStampedStatus('soft stop initiated: agents are saving checkpoints before stopping');
+    await refresh(true);
+  });
+
   const onStopAll = () => void runAction('stopping listener and workers', async () => {
     const response = await stopAll();
     setStampedStatus(
@@ -783,6 +789,7 @@ export function App() {
             <div className="toolbar-group">
               <button disabled={actionInFlight} onClick={() => onLaunch(false)}>Launch</button>
               <button className="secondary" disabled={actionInFlight} onClick={() => onLaunch(true)}>Restart</button>
+              <button className="secondary" disabled={actionInFlight} onClick={onSoftStop}>Soft Stop</button>
               <button className="danger" disabled={actionInFlight} onClick={onStopWorkers}>Stop Agents</button>
               <button className="ghost danger-outline" disabled={actionInFlight} onClick={onSilentMode}>Silent Mode</button>
               <button className="danger ghost-danger" disabled={actionInFlight} onClick={onStopAll}>Stop All</button>

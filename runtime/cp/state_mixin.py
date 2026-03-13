@@ -21,6 +21,69 @@ from .utils import (
 )
 
 
+def _short_path(path: str) -> str:
+    """Collapse long absolute paths to just the last 2 segments."""
+    parts = path.rstrip("/").rsplit("/", 2)
+    return "/".join(parts[-2:]) if len(parts) > 2 else path
+
+
+def _extract_stream_json_lines(raw_lines: list[str]) -> list[str]:
+    """Parse ducc stream-json lines into concise peek output.
+
+    Only keeps: assistant text (first line), tool calls (short), errors, init/done.
+    Drops: user messages, tool results, thinking, system hooks, raw noise.
+    """
+    readable: list[str] = []
+    for line in raw_lines:
+        stripped = line.strip()
+        if not stripped or not stripped.startswith("{"):
+            continue
+        try:
+            obj = json.loads(stripped)
+        except (json.JSONDecodeError, ValueError):
+            continue
+        msg_type = obj.get("type", "")
+        if msg_type == "assistant":
+            message = obj.get("message", {})
+            for block in message.get("content", []):
+                bt = block.get("type", "")
+                if bt == "text":
+                    text = block.get("text", "").strip()
+                    if text:
+                        first_line = text.split("\n", 1)[0].strip()
+                        if len(first_line) > 160:
+                            first_line = first_line[:157] + "..."
+                        readable.append(first_line)
+                elif bt == "tool_use":
+                    name = block.get("name", "?")
+                    inp = block.get("input", {})
+                    if not isinstance(inp, dict):
+                        readable.append(f">> {name}")
+                        continue
+                    if "command" in inp:
+                        cmd = inp["command"].strip().split("\n", 1)[0]
+                        if len(cmd) > 100:
+                            cmd = cmd[:97] + "..."
+                        readable.append(f">> {name} $ {cmd}")
+                    elif "file_path" in inp:
+                        readable.append(f">> {name} {_short_path(inp['file_path'])}")
+                    elif "pattern" in inp:
+                        readable.append(f">> {name} {inp['pattern']}")
+                    else:
+                        readable.append(f">> {name}")
+        elif msg_type == "tool_result":
+            if obj.get("is_error"):
+                readable.append(f"!! {obj.get('tool_name', '?')} ERROR")
+        elif msg_type == "system":
+            sub = obj.get("subtype", "")
+            if sub == "init":
+                readable.append(f"[init model={obj.get('model', '?')}]")
+            elif sub == "result":
+                cost = obj.get("cost_usd", "")
+                readable.append(f"[done cost=${cost}]")
+    return readable
+
+
 class StateMixin:
     """Methods for runtime state persistence, heartbeats, telemetry, monitoring, and session state."""
 
@@ -276,6 +339,18 @@ class StateMixin:
                     self.persist_provider_stats()
                 self.persist_manager_report()
                 self.write_session_state()
+
+                # Auto-launch agents whose dependencies just became satisfied
+                try:
+                    control = self.compute_manager_control_state()
+                    for agent_name in control["runnable_agents"]:
+                        if agent_name not in self.processes or self.processes[agent_name].process.poll() is not None:
+                            worker_cfg = next((w for w in self.workers if w["agent"] == agent_name), None)
+                            if worker_cfg:
+                                self.launch_worker(worker_cfg)
+                except Exception:
+                    pass
+
             time.sleep(5)
 
     def write_session_state(self) -> None:
@@ -319,7 +394,12 @@ class StateMixin:
             session_state_path_for_port(self.listen_port).write_text(encoded, encoding="utf-8")
 
     def _feed_peek_from_log(self, agent: str, log_path) -> None:
-        """Read new lines from a worker log file and push them into the peek buffer."""
+        """Read new lines from a worker log file and push them into the peek buffer.
+
+        If lines are stream-json (from ducc --output-format stream-json),
+        parse them and extract human-readable content.  Otherwise treat as
+        plain text.
+        """
         from pathlib import Path
         log_path = Path(log_path)
         if not log_path.exists():
@@ -335,7 +415,10 @@ class StateMixin:
             new_text = fh.read(64 * 1024)  # cap at 64KB per tick
             new_offset = fh.tell()
         self._peek_log_offsets[agent] = new_offset
-        lines = new_text.splitlines()
-        if lines:
-            self.peek_append(agent, lines)
+        raw_lines = new_text.splitlines()
+        if not raw_lines:
+            return
+        readable = _extract_stream_json_lines(raw_lines)
+        if readable:
+            self.peek_append(agent, readable)
 

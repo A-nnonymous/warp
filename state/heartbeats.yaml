@@ -1,5 +1,5 @@
 project: sonicmoe-fp8
-last_updated: '2026-03-13T13:08:28'
+last_updated: '2026-03-13T18:04:29'
 policy:
   manager_review_cycle: every handoff or resume
   planning_window: one manager review cycle
@@ -15,49 +15,49 @@ agents:
 - agent: A1
   role: protocol
   state: offline
-  last_seen: '2026-03-13T13:08:27'
+  last_seen: '2026-03-13T18:04:29'
   evidence: manager_stop
   expected_next_checkin: while worker process is alive
   escalation: none
 - agent: A2
   role: hopper-backend
   state: offline
-  last_seen: '2026-03-13T13:08:27'
+  last_seen: '2026-03-13T16:17:16'
   evidence: manager_stop
   expected_next_checkin: while worker process is alive
   escalation: none
 - agent: A3
   role: blackwell-backend
   state: offline
-  last_seen: '2026-03-13T13:08:27'
+  last_seen: '2026-03-13T16:17:16'
   evidence: manager_stop
   expected_next_checkin: while worker process is alive
   escalation: none
 - agent: A4
   role: torch-functional
   state: offline
-  last_seen: '2026-03-13T13:08:28'
+  last_seen: '2026-03-13T16:17:16'
   evidence: manager_stop
   expected_next_checkin: while worker process is alive
   escalation: none
 - agent: A5
   role: tests
   state: offline
-  last_seen: '2026-03-13T13:08:28'
+  last_seen: '2026-03-13T16:17:16'
   evidence: manager_stop
   expected_next_checkin: while worker process is alive
   escalation: none
 - agent: A6
   role: baseline-compat
   state: offline
-  last_seen: '2026-03-13T13:08:28'
+  last_seen: '2026-03-13T18:04:29'
   evidence: manager_stop
   expected_next_checkin: while worker process is alive
   escalation: none
 - agent: A7
   role: perf-delivery
   state: offline
-  last_seen: '2026-03-13T13:08:28'
+  last_seen: '2026-03-13T16:17:16'
   evidence: manager_stop
   expected_next_checkin: while worker process is alive
   escalation: none

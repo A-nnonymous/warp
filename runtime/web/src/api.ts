@@ -127,6 +127,10 @@ export function stopWorkers(): Promise<StopWorkersResponse> {
   return postJson<StopWorkersResponse>('/api/stop', {});
 }
 
+export function softStopWorkers(timeout = 120): Promise<{ ok: boolean; status: string }> {
+  return postJson<{ ok: boolean; status: string }>('/api/soft-stop', { timeout });
+}
+
 export function stopAll(): Promise<StopAllResponse> {
   return postJson<StopAllResponse>('/api/stop-all', {});
 }

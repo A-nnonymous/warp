@@ -742,3 +742,18 @@ th {
   white-space: pre-wrap;
   word-break: break-all;
 }
+.dag-container {
+  overflow-x: auto;
+  padding: 8px 0;
+}
+.dag-container svg {
+  display: block;
+  min-width: 100%;
+}
+.dag-container text {
+  font-family:
+    "Avenir Next",
+    "Segoe UI",
+    sans-serif;
+  pointer-events: none;
+}

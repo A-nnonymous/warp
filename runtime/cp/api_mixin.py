@@ -348,6 +348,13 @@ class ApiMixin:
             self.write_json(handler, result)
             return True
 
+        if handler.path == "/api/soft-stop":
+            timeout = int(payload.get("timeout", 120))
+            # Run in a thread since checkpoint sessions may take time
+            self.write_json(handler, {"ok": True, "status": "soft_stop_started"})
+            threading.Thread(target=self._run_soft_stop, args=(timeout,), daemon=True).start()
+            return True
+
         if handler.path == "/api/stop-all":
             stopped_workers = sorted(self.processes.keys())
             listener_port = self.listen_port
@@ -537,6 +544,13 @@ class ApiMixin:
             released = self.close_http_servers()
             self.last_event = f"silent_mode:listener released={released}"
             self.write_session_state()
+
+    def _run_soft_stop(self, timeout: int = 120) -> None:
+        """Background thread target for soft stop."""
+        try:
+            self.soft_stop_all(timeout=timeout)
+        except Exception:
+            pass
 
     def shutdown(self, stop_agents: bool = True) -> None:
         self.stop_event.set()

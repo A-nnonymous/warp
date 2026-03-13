@@ -1,5 +1,5 @@
 project: sonicmoe_fp8
-last_updated: '2026-03-13T13:08:28'
+last_updated: '2026-03-13T18:04:29'
 schema:
   required_fields:
   - agent
@@ -54,8 +54,8 @@ workers:
   recursion_guard: env+exec-wrapper
   launch_wrapper: /root/paddlejob/share-storage/gpfs/system-public/panzhaowu/lab/warp/runtime/generated_wrappers/ducc_single_layer.sh
   merge_target: main
-  git_author_name: FP8 Worker
-  git_author_email: fp8-worker@example.com
+  git_author_name: A1-Protocol
+  git_author_email: panzhaowu@baidu.com
 - agent: A2
   repository_name: target-repo
   resource_pool: ducc_pool
@@ -159,8 +159,8 @@ workers:
   recursion_guard: env+exec-wrapper
   launch_wrapper: /root/paddlejob/share-storage/gpfs/system-public/panzhaowu/lab/warp/runtime/generated_wrappers/ducc_single_layer.sh
   merge_target: main
-  git_author_name: A6 Baseline Worker
-  git_author_email: a6-baseline@example.com
+  git_author_name: A6-Baseline
+  git_author_email: panzhaowu@baidu.com
 - agent: A7
   repository_name: target-repo
   resource_pool: ducc_pool
