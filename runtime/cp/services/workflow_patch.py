@@ -3,7 +3,7 @@ from __future__ import annotations
 from typing import Any
 
 from ..constants import BACKLOG_COMPLETED_STATUSES, BACKLOG_PENDING_STATUSES
-from ..contracts import BacklogItem
+from ..contracts import BacklogItem, WorkflowPatch
 from ..utils import dedupe_strings, summarize_list
 
 TASK_ACTIONS = {
@@ -148,7 +148,7 @@ def summarize_workflow_patch(before: dict[str, Any], after: dict[str, Any]) -> s
     return "; ".join(changes) if changes else "workflow updated"
 
 
-def validate_workflow_updates(updates: dict[str, Any]) -> dict[str, Any]:
+def validate_workflow_updates(updates: WorkflowPatch) -> WorkflowPatch:
     if not isinstance(updates, dict) or not updates:
         raise ValueError("updates are required")
     unknown_fields = sorted(key for key in updates.keys() if key not in WORKFLOW_ALLOWED_FIELDS)
@@ -157,7 +157,7 @@ def validate_workflow_updates(updates: dict[str, Any]) -> dict[str, Any]:
     return updates
 
 
-def apply_workflow_patch(item: dict[str, Any], *, updates: dict[str, Any], current_time: str) -> BacklogItem:
+def apply_workflow_patch(item: dict[str, Any], *, updates: WorkflowPatch, current_time: str) -> BacklogItem:
     validate_workflow_updates(updates)
     next_item: BacklogItem = dict(item)
 

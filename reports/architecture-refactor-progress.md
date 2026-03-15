@@ -1,5 +1,22 @@
 # Architecture Refactor Progress
 
+- 时间：2026-03-16 03:0x CST
+- 当前阶段：已把 workflow/dashboard/mailbox 这条 manager-facing payload 链路收紧到 typed contract，contracts 不再只停留在 service 签名，开始接到 store / mixin / architecture test。
+- 本阶段代码成果：
+  - 在 `runtime/cp/contracts.py` 补齐并接线 `WorkflowPatch`、`TeamMailboxMessage`、`A0ConsoleRequest`、`A0ConsoleMessage`、`A0ConsoleState`、`ManagerConsoleState`，让 workflow patch、manager console、team mailbox 都有明确 shape。
+  - `backlog_mixin.py`、`dashboard_mixin.py`、`mailbox_mixin.py`、`state_mixin.py`、`services/dashboard_queue.py`、`services/workflow_patch.py` 全面改成 typed return / typed input，manager-facing queue/request/mailbox 链路不再继续传播裸 `dict[str, Any]`。
+  - `stores/manager_console_store.py` 增加 request/message 归一化过滤，持久化前主动丢弃脏 key / 非 dict message；`stores/mailbox_store.py` 也对 mailbox message 使用统一 typed contract。
+  - 更新 `runtime/cp/CODE_INDEX.md` 与 `runtime/test_control_plane_architecture.py`，把新增 contracts 和 manager-console normalization 行为纳入索引与架构测试面。
+- 已验证：
+  - `uv run --no-project --with 'PyYAML>=6.0.2' python -m unittest runtime.test_control_plane_architecture runtime.test_dashboard_queue_service runtime.test_workflow_patch_service runtime.test_control_plane_integration.ControlPlaneIntegrationTest.test_task_actions_drive_plan_and_review_flow runtime.test_control_plane_integration.ControlPlaneIntegrationTest.test_a0_console_records_user_reply runtime.test_control_plane_integration.ControlPlaneIntegrationTest.test_team_mailbox_send_and_acknowledge_flow` ✅
+- 当前断点：
+  - dashboard / mailbox / workflow patch 的 payload shape 已收紧，但 `merge_queue()` / `build_dashboard_state()` / 其他 dashboard assembler 仍有不少 `dict[str, Any]` 入口，后续若继续压字段漂移，可以把 runtime/dashboard 聚合视图整体升级成 typed state。
+  - backlog mailbox fanout 的 recipient/topic 决策仍留在 `backlog_mixin.py`，如果下一刀继续做 service 化，这块很适合抽成纯 notification payload service。
+- 下一步：
+  1. 继续往 dashboard runtime/state assembler 推 typed contract，把 manager-facing API/view model 再收一层。
+  2. 或回到 `backlog_mixin.py`，把 mailbox fanout / notification routing 抽成纯 service，进一步削薄 manager-side orchestration。
+  3. 继续坚持“一个阶段一个 checkpoint + 定向测试 + 单独 commit”节奏。
+
 - 时间：2026-03-16 02:1x CST
 - 当前阶段：已把 `backlog_mixin.py` 中 task action / workflow patch 的核心状态转换抽到纯 service，manager-side backlog 状态机开始脱离 mixin。
 - 本阶段代码成果：

@@ -6,6 +6,7 @@ import time
 from typing import Any
 
 from .constants import STATE_DIR
+from .contracts import BacklogItem, WorkflowPatch
 from .services import apply_task_action, apply_workflow_patch, summarize_workflow_patch, validate_workflow_updates
 from .stores import BacklogStore
 from .utils import dedupe_strings, now_iso, summarize_list, terminate_process_tree
@@ -49,7 +50,7 @@ class BacklogMixin:
                 return items[index]
         raise ValueError(f"unknown task id {task_id}")
 
-    def perform_task_action(self, task_id: str, action: str, agent: str = "", note: str = "") -> dict[str, Any]:
+    def perform_task_action(self, task_id: str, action: str, agent: str = "", note: str = "") -> BacklogItem:
         actor = str(agent or "A0").strip() or "A0"
         action_name = str(action or "").strip()
 
@@ -139,7 +140,7 @@ class BacklogMixin:
     def summarize_workflow_patch(self, before: dict[str, Any], after: dict[str, Any]) -> str:
         return summarize_workflow_patch(before, after)
 
-    def patch_workflow_item(self, task_id: str, updates: dict[str, Any], actor: str = "A0", note: str = "") -> dict[str, Any]:
+    def patch_workflow_item(self, task_id: str, updates: WorkflowPatch, actor: str = "A0", note: str = "") -> BacklogItem:
         manager = str(actor or "A0").strip() or "A0"
         if manager != "A0":
             raise ValueError("workflow updates are manager-owned and must be performed by A0")

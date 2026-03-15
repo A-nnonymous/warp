@@ -2,6 +2,7 @@ from __future__ import annotations
 
 from typing import Any
 
+from .contracts import A0ConsoleState, TeamMailboxMessage, TeamMailboxState
 from .constants import (
     MAILBOX_ACK_STATES,
     STATE_DIR,
@@ -24,16 +25,16 @@ class MailboxMixin:
     def lock_store(self) -> LockStore:
         return LockStore(STATE_DIR / "edit_locks.yaml")
 
-    def default_team_mailbox_state(self) -> dict[str, Any]:
+    def default_team_mailbox_state(self) -> TeamMailboxState:
         return self.mailbox_store().default_state()
 
-    def normalize_team_mailbox_message(self, message: dict[str, Any]) -> dict[str, Any]:
+    def normalize_team_mailbox_message(self, message: dict[str, Any]) -> TeamMailboxMessage:
         return self.mailbox_store().normalize_message(message)
 
-    def load_team_mailbox_state(self) -> dict[str, Any]:
+    def load_team_mailbox_state(self) -> TeamMailboxState:
         return self.mailbox_store().load()
 
-    def persist_team_mailbox_state(self, state: dict[str, Any]) -> None:
+    def persist_team_mailbox_state(self, state: TeamMailboxState) -> None:
         self.mailbox_store().persist(state)
 
     def append_team_mailbox_message(
@@ -44,7 +45,7 @@ class MailboxMixin:
         body: str,
         related_task_ids: list[str] | None = None,
         scope: str = "direct",
-    ) -> dict[str, Any]:
+    ) -> TeamMailboxMessage:
         with self.lock:
             state = self.load_team_mailbox_state()
             message = self.normalize_team_mailbox_message(
@@ -64,7 +65,7 @@ class MailboxMixin:
             self.persist_team_mailbox_state(state)
             return message
 
-    def acknowledge_team_mailbox_message(self, message_id: str, ack_state: str, resolution_note: str = "") -> dict[str, Any]:
+    def acknowledge_team_mailbox_message(self, message_id: str, ack_state: str, resolution_note: str = "") -> TeamMailboxMessage:
         if ack_state not in MAILBOX_ACK_STATES:
             raise ValueError(f"invalid ack state {ack_state}")
         with self.lock:
@@ -84,7 +85,7 @@ class MailboxMixin:
                 return messages[index]
         raise ValueError(f"unknown message id {message_id}")
 
-    def team_mailbox_catalog(self) -> dict[str, Any]:
+    def team_mailbox_catalog(self) -> TeamMailboxState:
         state = self.load_team_mailbox_state()
         messages = state.get("messages", [])
         pending_messages = [item for item in messages if str(item.get("ack_state") or "") != "resolved"]
@@ -208,7 +209,7 @@ class MailboxMixin:
             "last_updated": now_iso(),
         }
 
-    def record_a0_user_message(self, message: str, request_id: str = "", action: str = "note") -> dict[str, Any]:
+    def record_a0_user_message(self, message: str, request_id: str = "", action: str = "note") -> A0ConsoleState:
         with self.lock:
             stored = self.load_manager_console_state()
             requests = stored.setdefault("requests", {})

@@ -2,6 +2,7 @@ from __future__ import annotations
 
 from typing import Any, Callable
 
+from ..contracts import A0ConsoleMessage, A0ConsoleRequest, A0ConsoleState, BacklogItem, MergeQueueItem, TeamMailboxMessage
 from ..utils import now_iso, slugify, summarize_list
 
 
@@ -26,7 +27,7 @@ def build_merge_queue(
     integration_branch: str,
     manager_identity: dict[str, Any] | None,
     worker_identity_display: WorkerIdentityResolver,
-) -> list[dict[str, Any]]:
+) -> list[MergeQueueItem]:
     normalized_runtime = runtime_state if isinstance(runtime_state, dict) else {}
     normalized_heartbeats = heartbeat_state if isinstance(heartbeat_state, dict) else {}
     normalized_handoffs = handoff_by_agent if isinstance(handoff_by_agent, dict) else {}
@@ -43,7 +44,7 @@ def build_merge_queue(
     }
     manager_display = identity_display(manager_identity, "A0 manager identity")
 
-    queue: list[dict[str, Any]] = []
+    queue: list[MergeQueueItem] = []
     for worker in workers:
         agent = str(worker.get("agent", "")).strip()
         runtime_entry = runtime_workers.get(agent, {})
@@ -72,7 +73,7 @@ def build_merge_queue(
     return queue
 
 
-def manager_inbox(messages: list[dict[str, Any]] | None) -> list[dict[str, Any]]:
+def manager_inbox(messages: list[TeamMailboxMessage] | None) -> list[TeamMailboxMessage]:
     normalized_messages = messages if isinstance(messages, list) else []
     return [
         item
@@ -87,15 +88,15 @@ def manager_inbox(messages: list[dict[str, Any]] | None) -> list[dict[str, Any]]
 
 
 def build_a0_request_catalog(
-    backlog_items: list[dict[str, Any]],
-    merge_queue: list[dict[str, Any]],
-    mailbox_messages: list[dict[str, Any]] | None,
-    request_state: dict[str, dict[str, Any]] | None = None,
-    messages: list[dict[str, Any]] | None = None,
-) -> dict[str, Any]:
+    backlog_items: list[BacklogItem],
+    merge_queue: list[MergeQueueItem],
+    mailbox_messages: list[TeamMailboxMessage] | None,
+    request_state: dict[str, A0ConsoleRequest] | None = None,
+    messages: list[A0ConsoleMessage] | None = None,
+) -> A0ConsoleState:
     normalized_request_state = request_state if isinstance(request_state, dict) else {}
     normalized_messages = messages if isinstance(messages, list) else []
-    requests: list[dict[str, Any]] = []
+    requests: list[A0ConsoleRequest] = []
     inbox = manager_inbox(mailbox_messages)
 
     for item in backlog_items:

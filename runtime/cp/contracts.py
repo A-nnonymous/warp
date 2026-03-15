@@ -247,23 +247,47 @@ class MergeQueueItem(TypedDict, total=False):
     manager_action: str
 
 
-class TeamMailboxMessage(TypedDict, total=False):
-    id: str
-    from_: NotRequired[str]
-    from_field: NotRequired[str]
-    to: str
-    scope: str
-    topic: str
-    body: str
-    related_task_ids: list[str]
-    created_at: str
-    ack_state: str
-    resolution_note: str
-    acked_at: str
+class WorkflowPatch(TypedDict, total=False):
+    title: str
+    task_type: str
+    owner: str
+    status: str
+    gate: str
+    priority: str
+    claim_state: str
+    claimed_by: str
+    claim_note: str
+    plan_required: bool
+    plan_state: str
+    plan_summary: str
+    plan_review_note: str
+    review_note: str
+    dependencies: list[str] | str
+    outputs: list[str] | str
+    done_when: list[str] | str
+
+
+TeamMailboxMessage = TypedDict(
+    "TeamMailboxMessage",
+    {
+        "id": str,
+        "from": NotRequired[str],
+        "to": str,
+        "scope": str,
+        "topic": str,
+        "body": str,
+        "related_task_ids": list[str],
+        "created_at": str,
+        "ack_state": str,
+        "resolution_note": str,
+        "acked_at": str,
+    },
+    total=False,
+)
 
 
 class TeamMailboxState(TypedDict, total=False):
-    messages: list[dict[str, Any]]
+    messages: list[TeamMailboxMessage]
     pending_count: int
     a0_pending_count: int
     last_updated: str
@@ -293,6 +317,41 @@ class CleanupState(TypedDict, total=False):
     last_updated: str
 
 
+class A0ConsoleRequest(TypedDict, total=False):
+    id: str
+    agent: str
+    task_id: str
+    request_type: str
+    status: str
+    title: str
+    body: str
+    requested_unlocks: list[str]
+    blockers: list[str]
+    resume_instruction: str
+    next_checkin: str
+    response_state: str
+    response_note: str
+    response_at: str
+    created_at: str
+
+
+class A0ConsoleMessage(TypedDict, total=False):
+    id: str
+    direction: str
+    request_id: str
+    action: str
+    body: str
+    created_at: str
+
+
+class A0ConsoleState(TypedDict, total=False):
+    requests: list[A0ConsoleRequest]
+    messages: list[A0ConsoleMessage]
+    inbox: list[TeamMailboxMessage]
+    pending_count: int
+    last_updated: str
+
+
 class ManagerConsoleState(TypedDict, total=False):
-    requests: dict[str, Any]
-    messages: list[dict[str, Any]]
+    requests: dict[str, A0ConsoleRequest]
+    messages: list[A0ConsoleMessage]

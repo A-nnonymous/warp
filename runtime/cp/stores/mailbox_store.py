@@ -4,7 +4,7 @@ from pathlib import Path
 from typing import Any
 
 from ..constants import MAILBOX_ACK_STATES
-from ..contracts import TeamMailboxState
+from ..contracts import TeamMailboxMessage, TeamMailboxState
 from ..utils import dedupe_strings, dump_yaml, load_yaml, now_iso, slugify
 
 
@@ -17,7 +17,7 @@ class MailboxStore:
         return {"messages": []}
 
     @staticmethod
-    def normalize_message(message: dict[str, Any]) -> dict[str, Any]:
+    def normalize_message(message: dict[str, Any]) -> TeamMailboxMessage:
         normalized = dict(message)
         topic = str(normalized.get("topic") or "status_note").strip() or "status_note"
         scope = str(normalized.get("scope") or "direct").strip() or "direct"

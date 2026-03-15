@@ -3,6 +3,7 @@ from __future__ import annotations
 import subprocess
 from typing import Any
 
+from .contracts import A0ConsoleState, MergeQueueItem
 from .constants import (
     CHECKPOINT_DIR,
     CONTROL_PLANE_RUNTIME,
@@ -379,7 +380,7 @@ Last updated: {now_iso()}
         self,
         runtime_state: dict[str, Any] | None = None,
         heartbeat_state: dict[str, Any] | None = None,
-    ) -> list[dict[str, Any]]:
+    ) -> list[MergeQueueItem]:
         runtime_state = runtime_state or self.dashboard_runtime_state()
         heartbeat_state = heartbeat_state or self.dashboard_heartbeats_state(runtime_state=runtime_state)
         runtime_workers = {
@@ -412,9 +413,9 @@ Last updated: {now_iso()}
 
     def a0_request_catalog(
         self,
-        merge_queue: list[dict[str, Any]],
+        merge_queue: list[MergeQueueItem],
         heartbeat_state: dict[str, Any] | None = None,
-    ) -> dict[str, Any]:
+    ) -> A0ConsoleState:
         stored = self.load_manager_console_state()
         mailbox_state = self.team_mailbox_catalog()
         return build_a0_request_catalog(

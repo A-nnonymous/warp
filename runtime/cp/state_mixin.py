@@ -5,6 +5,7 @@ import os
 import time
 from typing import Any
 
+from .contracts import ManagerConsoleState
 from .constants import (
     PROVIDER_STATS_PATH,
     MANAGER_CONSOLE_PATH,
@@ -171,10 +172,10 @@ class StateMixin:
     def persist_provider_stats(self) -> None:
         self.provider_stats_store().persist(self.provider_stats)
 
-    def load_manager_console_state(self) -> dict[str, Any]:
+    def load_manager_console_state(self) -> ManagerConsoleState:
         return self.manager_console_store().load()
 
-    def persist_manager_console_state(self, state: dict[str, Any]) -> None:
+    def persist_manager_console_state(self, state: ManagerConsoleState) -> None:
         self.manager_console_store().persist(state)
 
     def worker_process_telemetry(self, worker) -> dict[str, Any]:

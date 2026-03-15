@@ -5,7 +5,7 @@ import unittest
 from pathlib import Path
 
 from runtime.cp.constants import PROVIDER_STATS_PATH
-from runtime.cp.contracts import BacklogItem, CleanupState, RuntimeWorkerEntry
+from runtime.cp.contracts import A0ConsoleState, BacklogItem, CleanupState, RuntimeWorkerEntry, TeamMailboxMessage, WorkflowPatch
 from runtime.cp.stores import (
     BacklogStore,
     HeartbeatStore,
@@ -29,9 +29,15 @@ class ControlPlaneArchitectureTest(unittest.TestCase):
         backlog_item: BacklogItem = {"id": "A1-001", "status": "pending", "title": "Task"}
         runtime_worker: RuntimeWorkerEntry = {"agent": "A1", "resource_pool": "ducc_pool", "status": "active"}
         cleanup_state: CleanupState = {"ready": False, "blockers": ["active workers"]}
+        workflow_patch: WorkflowPatch = {"status": "review", "dependencies": ["A0-001"]}
+        mailbox_message: TeamMailboxMessage = {"from": "A1", "to": "A0", "topic": "status_note"}
+        a0_console: A0ConsoleState = {"requests": [], "messages": [], "inbox": [], "pending_count": 0}
         self.assertEqual(backlog_item["id"], "A1-001")
         self.assertEqual(runtime_worker["agent"], "A1")
         self.assertIn("active workers", cleanup_state["blockers"])
+        self.assertEqual(workflow_patch["status"], "review")
+        self.assertEqual(mailbox_message["from"], "A1")
+        self.assertEqual(a0_console["pending_count"], 0)
 
     def test_backlog_store_normalizes_claim_and_status(self) -> None:
         store = BacklogStore(self.root / "backlog.yaml")
@@ -111,10 +117,17 @@ class ControlPlaneArchitectureTest(unittest.TestCase):
 
     def test_manager_console_store_round_trip(self) -> None:
         store = ManagerConsoleStore(self.root / "manager_console.yaml")
-        persisted = store.persist({"requests": {"r1": {"status": "pending"}}, "messages": [{"body": "hi"}]})
+        persisted = store.persist(
+            {
+                "requests": {"r1": {"status": "pending", "request_type": "task_review"}, 7: "bad"},
+                "messages": [{"body": "hi", "direction": "user_to_a0"}, "bad"],
+            }
+        )
         self.assertIn("r1", persisted["requests"])
+        self.assertNotIn("7", persisted["requests"])
         loaded = store.load()
         self.assertEqual(loaded["messages"][0]["body"], "hi")
+        self.assertEqual(len(loaded["messages"]), 1)
 
 
 if __name__ == "__main__":
