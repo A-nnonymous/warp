@@ -14,6 +14,7 @@ from .constants import (
     STATUS_DIR,
 )
 from .markdown import parse_markdown_list, parse_markdown_paragraph, parse_markdown_sections
+from .services import compute_manager_control_state, summarize_worker_handoff
 from .utils import (
     dedupe_strings,
     load_yaml,
@@ -184,60 +185,13 @@ class DashboardMixin:
         runtime_state: dict[str, Any] | None = None,
         heartbeat_state: dict[str, Any] | None = None,
     ) -> dict[str, Any]:
-        runtime_state = runtime_state or self.dashboard_runtime_state()
-        heartbeat_state = heartbeat_state or self.dashboard_heartbeats_state()
-        runtime_workers = {
-            str(item.get("agent", "")).strip(): item
-            for item in runtime_state.get("workers", [])
-            if isinstance(item, dict)
-        }
-        heartbeat_workers = {
-            str(item.get("agent", "")).strip(): item
-            for item in heartbeat_state.get("agents", [])
-            if isinstance(item, dict)
-        }
-        backlog_items = self.backlog_items()
-        completed_task_ids = {
-            str(item.get("id", "")).strip()
-            for item in backlog_items
-            if str(item.get("status", "")).strip() in {"done", "completed", "merged"}
-        }
-
-        active_agents: list[str] = []
-        attention_agents: list[str] = []
-        runnable_agents: list[str] = []
-        blocked_agents: list[str] = []
-
-        for worker in self.workers:
-            agent = str(worker.get("agent", "")).strip()
-            runtime_entry = runtime_workers.get(agent, {})
-            heartbeat = heartbeat_workers.get(agent, {})
-            runtime_status = str(runtime_entry.get("status", "")).strip()
-            heartbeat_value = str(heartbeat.get("state", "")).strip()
-            backlog_item = self.task_record_for_worker(worker)
-            backlog_status = str(backlog_item.get("status", "")).strip()
-            dependencies = [str(item).strip() for item in backlog_item.get("dependencies", []) if str(item).strip()]
-            dependencies_ready = all(item in completed_task_ids for item in dependencies)
-
-            if runtime_status in {"launching", "healthy", "active"}:
-                active_agents.append(agent)
-                continue
-            if runtime_status.startswith("launch_failed") or heartbeat_value in {"stale", "error"}:
-                attention_agents.append(agent)
-                continue
-            if backlog_status == "blocked" or (dependencies and not dependencies_ready):
-                blocked_agents.append(agent)
-                continue
-            if backlog_status in {"pending", "queued", "not-started", "not_started", ""}:
-                runnable_agents.append(agent)
-
-        return {
-            "worker_count": len(self.workers),
-            "active_agents": active_agents,
-            "attention_agents": attention_agents,
-            "runnable_agents": runnable_agents,
-            "blocked_agents": blocked_agents,
-        }
+        return compute_manager_control_state(
+            workers=self.workers,
+            runtime_state=runtime_state or self.dashboard_runtime_state(),
+            heartbeat_state=heartbeat_state or self.dashboard_heartbeats_state(),
+            backlog_items=self.backlog_items(),
+            task_record_for_worker=self.task_record_for_worker,
+        )
 
     def render_manager_report(
         self,
@@ -401,44 +355,16 @@ Last updated: {now_iso()}
         if checkpoint_path.exists():
             checkpoint_meta, checkpoint_sections = parse_markdown_sections(checkpoint_path.read_text(encoding="utf-8"))
 
-        blockers = parse_markdown_list(status_sections.get("blockers", ""))
-        requested_unlocks = parse_markdown_list(status_sections.get("requested unlocks", ""))
-        pending_work = parse_markdown_list(checkpoint_sections.get("pending work", ""))
-        dependencies = parse_markdown_list(checkpoint_sections.get("dependencies", ""))
-        resume_instruction = parse_markdown_paragraph(checkpoint_sections.get("resume instruction", ""))
-        next_checkin = parse_markdown_paragraph(status_sections.get("next check-in condition", ""))
-
-        runtime_status = str(runtime_entry.get("status", "")).strip()
-        heartbeat_state = str(heartbeat.get("state", "")).strip()
-        heartbeat_evidence = str(heartbeat.get("evidence", "")).strip()
-        heartbeat_escalation = str(heartbeat.get("escalation", "")).strip()
-        attention_summary = ""
-        if runtime_status.startswith("launch_failed"):
-            attention_summary = runtime_status
-        elif heartbeat_evidence == "process_exit" and heartbeat_escalation and heartbeat_escalation != "none":
-            attention_summary = heartbeat_escalation
-        elif heartbeat_state in {"stale", "error"} and heartbeat_evidence:
-            attention_summary = heartbeat_escalation or heartbeat_evidence
-        elif blockers:
-            attention_summary = blockers[0]
-        elif pending_work:
-            attention_summary = pending_work[0]
-        elif heartbeat_evidence and heartbeat_evidence.lower() != "no runtime heartbeat yet":
-            attention_summary = heartbeat_escalation or heartbeat_evidence
-
-        return {
-            "checkpoint_status": checkpoint_meta.get("status")
-            or status_meta.get("status")
-            or heartbeat_state
-            or "unknown",
-            "attention_summary": attention_summary,
-            "blockers": blockers,
-            "pending_work": pending_work,
-            "requested_unlocks": requested_unlocks,
-            "dependencies": dependencies,
-            "resume_instruction": resume_instruction,
-            "next_checkin": next_checkin or str(heartbeat.get("expected_next_checkin", "")).strip(),
-        }
+        return summarize_worker_handoff(
+            runtime_entry=runtime_entry,
+            heartbeat=heartbeat,
+            status_meta=status_meta,
+            status_sections=status_sections,
+            checkpoint_meta=checkpoint_meta,
+            checkpoint_sections=checkpoint_sections,
+            parse_list=parse_markdown_list,
+            parse_paragraph=parse_markdown_paragraph,
+        )
 
     def merge_queue(
         self,

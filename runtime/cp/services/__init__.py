@@ -1,3 +1,4 @@
+from .dashboard_summary import compute_manager_control_state, summarize_worker_handoff
 from .pool_selection import (
     best_pool_for_provider,
     best_pool_for_worker,
@@ -25,6 +26,7 @@ __all__ = [
     "best_pool_for_provider",
     "best_pool_for_worker",
     "build_task_profile",
+    "compute_manager_control_state",
     "configured_pool_candidates",
     "initial_provider_name",
     "pool_rank_tuple",
@@ -33,6 +35,7 @@ __all__ = [
     "rank_pool_candidates",
     "recommended_pool_plan",
     "select_task_record_for_worker",
+    "summarize_worker_handoff",
     "suggested_branch_name",
     "suggested_task_id",
     "task_policy_config",

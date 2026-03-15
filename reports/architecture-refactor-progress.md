@@ -53,3 +53,23 @@
   1. 评估是否为 pool/provider 决策补 `contracts.py` typed dict，顺手把 dashboard 对应消费面收紧。
   2. 在 `dashboard_mixin.py` / `backlog_mixin.py` 中选一块高频决策逻辑继续抽纯 service。
   3. 继续用“service 抽离 + 定向 integration 回归”推进，避免再回到一次性全量长跑。
+
+---
+
+- 时间：2026-03-16 01:5x CST
+- 当前阶段：已把 dashboard 的 manager-control 分类与 worker handoff 摘要从 `dashboard_mixin.py` 抽到纯 service，继续把 mixin 压回 IO/编排层。
+- 本阶段代码成果：
+  - 新增 `runtime/cp/services/dashboard_summary.py`，沉淀 `compute_manager_control_state()` 与 `summarize_worker_handoff()` 两块 dashboard 核心决策逻辑。
+  - `dashboard_mixin.py` 对上述逻辑改为薄委托：mixin 只负责读取 runtime/heartbeat/backlog 与 status/checkpoint markdown，再把纯数据交给 service 判定。
+  - 新增 `runtime/test_dashboard_service.py`，覆盖 agent 分类（active / runnable / attention / blocked）与 handoff attention summary 优先级、去重、resume/next-checkin 组装。
+  - 更新 `runtime/cp/services/__init__.py` 与 `runtime/cp/CODE_INDEX.md`，把 dashboard service 纳入统一 service 层出口与索引。
+- 已验证：
+  - `uv run --no-project --with 'PyYAML>=6.0.2' python -m unittest runtime.test_control_plane_architecture runtime.test_task_routing_service runtime.test_pool_selection_service runtime.test_dashboard_service` ✅
+  - `uv run --no-project --with 'PyYAML>=6.0.2' python -m unittest runtime.test_control_plane_integration.ControlPlaneIntegrationTest.test_dashboard_exposes_manager_identity_and_handoff_details runtime.test_control_plane_integration.ControlPlaneIntegrationTest.test_a0_console_records_user_reply runtime.test_control_plane_integration.ControlPlaneIntegrationTest.test_process_exit_surfaces_escalation_in_attention_summary` ✅
+- 当前断点：
+  - `dashboard_mixin.py` 里 `merge_queue()` / `a0_request_catalog()` 仍有较重的 manager-console 聚合与 request 归并规则，尚未抽成纯 service。
+  - handoff / control state 现在已独立，但返回值仍是松散 dict；下一刀若要继续收紧，可以补 `contracts.py` 中的 dashboard typed payload。
+- 下一步：
+  1. 优先把 `merge_queue` / `a0_request_catalog` 的 request 生成与排序规则抽成 dashboard service，进一步缩小 mixin。
+  2. 或者转切 `backlog_mixin.py` 的 workflow patch / task action 规则，把 manager-side 状态机也压进纯 service。
+  3. 继续坚持“小块 service 抽离 + 定向 integration 回归 + checkpoint commit”节奏，不回到全量长跑。
