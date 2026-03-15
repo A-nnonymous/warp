@@ -3,18 +3,21 @@ from __future__ import annotations
 from pathlib import Path
 from typing import Any
 
-from .constants import (
-    DEFAULT_INITIAL_PROVIDER,
-    DEFAULT_WORKTREE_DIR,
-    REPO_ROOT,
-    STATE_DIR,
+from .constants import DEFAULT_WORKTREE_DIR, REPO_ROOT, STATE_DIR
+from .services import (
+    build_task_profile,
+    initial_provider_name,
+    provider_preference_default,
+    select_task_record_for_worker,
+    suggested_branch_name,
+    suggested_task_id,
+    task_policy_config,
+    task_policy_defaults,
+    task_policy_rule_matches,
+    task_policy_rules,
+    task_policy_types,
 )
-from .utils import (
-    dedupe_strings,
-    is_placeholder_path,
-    load_yaml,
-    slugify,
-)
+from .utils import dedupe_strings, is_placeholder_path, load_yaml
 
 
 class RoutingMixin:
@@ -53,40 +56,13 @@ class RoutingMixin:
         return dedupe_strings(values if isinstance(values, list) else [])
 
     def task_policy_config(self, config: dict[str, Any] | None = None) -> dict[str, Any]:
-        cfg = config or self.config
-        task_policies = cfg.get("task_policies", {}) if isinstance(cfg, dict) else {}
-        return task_policies if isinstance(task_policies, dict) else {}
+        return task_policy_config(config or self.config)
 
     def provider_preference_default(self, config: dict[str, Any] | None = None) -> list[str]:
-        cfg = config or self.config
-        configured_providers = cfg.get("providers", {}) if isinstance(cfg, dict) else {}
-        resource_pools = cfg.get("resource_pools", {}) if isinstance(cfg, dict) else {}
-        ordered_pools = []
-        if isinstance(resource_pools, dict):
-            ordered_pools = sorted(
-                resource_pools.items(),
-                key=lambda item: (-int(item[1].get("priority", 0)), str(item[0])),
-            )
-        ordered = [entry.get("provider", "") for _, entry in ordered_pools if isinstance(entry, dict)]
-        fallback = [DEFAULT_INITIAL_PROVIDER, *sorted(str(key) for key in configured_providers.keys())]
-        return dedupe_strings([*ordered, *fallback])
+        return provider_preference_default(config or self.config)
 
     def initial_provider_name(self, config: dict[str, Any] | None = None) -> str:
-        cfg = config or self.config
-        project = cfg.get("project", {}) if isinstance(cfg, dict) else {}
-        providers = cfg.get("providers", {}) if isinstance(cfg, dict) else {}
-        configured_initial = ""
-        if isinstance(project, dict):
-            configured_initial = str(project.get("initial_provider") or "").strip()
-        if configured_initial and configured_initial in providers:
-            return configured_initial
-        if DEFAULT_INITIAL_PROVIDER in providers:
-            return DEFAULT_INITIAL_PROVIDER
-        preferences = self.provider_preference_default(cfg)
-        for provider_name in preferences:
-            if provider_name in providers:
-                return provider_name
-        return configured_initial or DEFAULT_INITIAL_PROVIDER
+        return initial_provider_name(config or self.config)
 
     def target_repo_root(self, config: dict[str, Any] | None = None) -> Path:
         cfg = config or self.config
@@ -100,137 +76,28 @@ class RoutingMixin:
         return REPO_ROOT
 
     def task_policy_defaults(self, config: dict[str, Any] | None = None) -> dict[str, Any]:
-        policy_config = self.task_policy_config(config)
-        defaults = policy_config.get("defaults", {})
-        if not isinstance(defaults, dict):
-            defaults = {}
-        preferred_providers = defaults.get("preferred_providers")
-        if not isinstance(preferred_providers, list) or not preferred_providers:
-            preferred_providers = self.provider_preference_default(config)
-        return {
-            "task_type": str(defaults.get("task_type") or "default").strip() or "default",
-            "preferred_providers": dedupe_strings(preferred_providers),
-            "suggested_test_command": str(defaults.get("suggested_test_command") or "").strip(),
-            "prompt_context_files": dedupe_strings(defaults.get("prompt_context_files") or []),
-        }
+        return task_policy_defaults(config or self.config)
 
     def task_policy_types(self, config: dict[str, Any] | None = None) -> dict[str, dict[str, Any]]:
-        policy_config = self.task_policy_config(config)
-        types = policy_config.get("types", {})
-        if not isinstance(types, dict):
-            return {}
-        normalized: dict[str, dict[str, Any]] = {}
-        for task_type, entry in types.items():
-            if not isinstance(entry, dict):
-                continue
-            normalized[str(task_type).strip()] = {
-                "preferred_providers": dedupe_strings(entry.get("preferred_providers") or []),
-                "suggested_test_command": str(entry.get("suggested_test_command") or "").strip(),
-                "prompt_context_files": dedupe_strings(entry.get("prompt_context_files") or []),
-            }
-        return normalized
+        return task_policy_types(config or self.config)
 
     def task_policy_rules(self, config: dict[str, Any] | None = None) -> list[dict[str, Any]]:
-        policy_config = self.task_policy_config(config)
-        rules = policy_config.get("rules", [])
-        if not isinstance(rules, list):
-            return []
-        return [rule for rule in rules if isinstance(rule, dict)]
+        return task_policy_rules(config or self.config)
 
     def task_policy_rule_matches(self, rule: dict[str, Any], worker: dict[str, Any], task: dict[str, Any]) -> bool:
-        task_id = str(task.get("id") or worker.get("task_id") or "").strip()
-        title = str(task.get("title") or "").strip().lower()
-        agent = str(worker.get("agent") or "").strip()
-
-        agents = rule.get("agents")
-        if agents is not None:
-            allowed_agents = dedupe_strings(agents if isinstance(agents, list) else [])
-            if not allowed_agents or agent not in allowed_agents:
-                return False
-
-        task_ids = rule.get("task_ids")
-        if task_ids is not None:
-            allowed_task_ids = dedupe_strings(task_ids if isinstance(task_ids, list) else [])
-            if not allowed_task_ids or task_id not in allowed_task_ids:
-                return False
-
-        title_contains = rule.get("title_contains")
-        if title_contains is not None:
-            if not isinstance(title_contains, list) or not any(
-                str(fragment).strip().lower() in title for fragment in title_contains if str(fragment).strip()
-            ):
-                return False
-
-        return True
+        return task_policy_rule_matches(rule, worker, task)
 
     def task_record_for_worker(self, worker: dict[str, Any]) -> dict[str, Any]:
-        task_id = str(worker.get("task_id", "")).strip()
-        agent = str(worker.get("agent", "")).strip()
-        backlog_items = self.backlog_items()
-        if task_id:
-            for item in backlog_items:
-                if str(item.get("id", "")).strip() == task_id:
-                    return item
-        if agent:
-            owned = [item for item in backlog_items if str(item.get("owner", "")).strip() == agent]
-            if len(owned) == 1:
-                return owned[0]
-            for item in owned:
-                if str(item.get("status", "")).strip() in {"pending", "blocked", "active", "in_progress", "review"}:
-                    return item
-        return {}
+        return select_task_record_for_worker(self.backlog_items(), worker)
 
     def suggested_task_id(self, worker: dict[str, Any]) -> str:
-        if str(worker.get("task_id", "")).strip():
-            return str(worker.get("task_id", "")).strip()
-        task = self.task_record_for_worker(worker)
-        if task:
-            return str(task.get("id", "")).strip()
-        agent = str(worker.get("agent", "")).strip()
-        return f"{agent}-001" if agent else ""
+        return suggested_task_id(worker, self.backlog_items())
 
     def task_profile_for_worker(self, worker: dict[str, Any]) -> dict[str, Any]:
-        task = self.task_record_for_worker(worker)
-        task_id = str(task.get("id") or worker.get("task_id") or "").strip()
-        title = str(task.get("title") or task_id or worker.get("agent") or "").strip()
-        defaults = self.task_policy_defaults()
-        explicit_task_type = str(worker.get("task_type") or task.get("task_type") or "").strip()
-        task_type = explicit_task_type or defaults["task_type"]
-        matched_rule_name = ""
-        if not explicit_task_type:
-            for rule in self.task_policy_rules():
-                candidate_type = str(rule.get("task_type") or "").strip()
-                if not candidate_type:
-                    continue
-                if self.task_policy_rule_matches(rule, worker, task):
-                    task_type = candidate_type
-                    matched_rule_name = str(rule.get("name") or candidate_type).strip()
-                    break
-
-        policy = {**defaults, **self.task_policy_types().get(task_type, {})}
-        preferred_providers = dedupe_strings(policy.get("preferred_providers") or self.provider_preference_default())
-        return {
-            "task_id": task_id,
-            "title": title,
-            "task_type": task_type,
-            "category": task_type,
-            "preferred_providers": preferred_providers,
-            "suggested_test_command": str(policy.get("suggested_test_command") or "").strip(),
-            "prompt_context_files": dedupe_strings(policy.get("prompt_context_files") or []),
-            "matched_rule_name": matched_rule_name,
-            "task": task,
-        }
+        return build_task_profile(worker, self.backlog_items(), self.config)
 
     def suggested_branch_name(self, worker: dict[str, Any]) -> str:
-        explicit_branch = str(worker.get("branch", "")).strip()
-        if explicit_branch:
-            return explicit_branch
-        profile = self.task_profile_for_worker(worker)
-        agent = str(worker.get("agent", "")).strip().lower()
-        suffix = slugify(profile.get("title") or profile.get("task_id") or agent)
-        if agent and suffix:
-            return f"{agent}_{suffix}"
-        return ""
+        return suggested_branch_name(worker, self.task_profile_for_worker(worker))
 
     def suggested_test_command(self, worker: dict[str, Any]) -> str:
         profile = self.task_profile_for_worker(worker)
