@@ -13,12 +13,9 @@ from .constants import (
     STATE_DIR,
 )
 from .network import session_state_path_for_port
+from .stores import HeartbeatStore, ManagerConsoleStore, ProviderStatsStore, RuntimeStore
 from .telemetry import read_log_telemetry
-from .utils import (
-    dump_yaml,
-    load_yaml,
-    now_iso,
-)
+from .utils import now_iso
 
 
 def _short_path(path: str) -> str:
@@ -87,6 +84,18 @@ def _extract_stream_json_lines(raw_lines: list[str]) -> list[str]:
 class StateMixin:
     """Methods for runtime state persistence, heartbeats, telemetry, monitoring, and session state."""
 
+    def runtime_store(self) -> RuntimeStore:
+        return RuntimeStore(STATE_DIR / "agent_runtime.yaml")
+
+    def heartbeat_store(self) -> HeartbeatStore:
+        return HeartbeatStore(STATE_DIR / "heartbeats.yaml")
+
+    def provider_stats_store(self) -> ProviderStatsStore:
+        return ProviderStatsStore(PROVIDER_STATS_PATH, self.default_provider_stat_entry)
+
+    def manager_console_store(self) -> ManagerConsoleStore:
+        return ManagerConsoleStore(MANAGER_CONSOLE_PATH)
+
     def update_runtime_entry(
         self,
         worker: dict[str, Any],
@@ -97,11 +106,8 @@ class StateMixin:
         recursion_guard: str | None = None,
         launch_wrapper: str | None = None,
     ) -> None:
-        runtime_path = STATE_DIR / "agent_runtime.yaml"
-        runtime = load_yaml(runtime_path)
+        runtime = self.runtime_store().load()
         workers = runtime.get("workers", [])
-        if "workers" not in runtime:
-            runtime["workers"] = workers
         target = None
         for entry in workers:
             if entry.get("agent") == worker["agent"]:
@@ -136,12 +142,11 @@ class StateMixin:
                 "status": status,
             }
         )
-        runtime["last_updated"] = now_iso()
-        dump_yaml(runtime_path, runtime)
+        runtime["workers"] = workers
+        self.runtime_store().persist(runtime)
 
     def update_heartbeat(self, agent: str, state: str, evidence: str, escalation: str) -> None:
-        heartbeats_path = STATE_DIR / "heartbeats.yaml"
-        heartbeats = load_yaml(heartbeats_path)
+        heartbeats = self.heartbeat_store().load()
         entries = heartbeats.get("agents", [])
         target = None
         for entry in entries:
@@ -157,39 +162,20 @@ class StateMixin:
         target["evidence"] = evidence
         target["expected_next_checkin"] = "while worker process is alive"
         target["escalation"] = escalation
-        heartbeats["last_updated"] = now_iso()
-        dump_yaml(heartbeats_path, heartbeats)
+        heartbeats["agents"] = entries
+        self.heartbeat_store().persist(heartbeats)
 
     def load_provider_stats(self) -> dict[str, dict[str, Any]]:
-        data = load_yaml(PROVIDER_STATS_PATH) if PROVIDER_STATS_PATH.exists() else {}
-        if not isinstance(data, dict):
-            return {}
-        stats: dict[str, dict[str, Any]] = {}
-        for pool_name, entry in data.items():
-            if isinstance(entry, dict):
-                stats[str(pool_name)] = {**self.default_provider_stat_entry(), **entry}
-        return stats
+        return self.provider_stats_store().load()
 
     def persist_provider_stats(self) -> None:
-        PROVIDER_STATS_PATH.parent.mkdir(parents=True, exist_ok=True)
-        dump_yaml(PROVIDER_STATS_PATH, self.provider_stats)
+        self.provider_stats_store().persist(self.provider_stats)
 
     def load_manager_console_state(self) -> dict[str, Any]:
-        if not MANAGER_CONSOLE_PATH.exists():
-            return {"requests": {}, "messages": []}
-        data = load_yaml(MANAGER_CONSOLE_PATH)
-        if not isinstance(data, dict):
-            return {"requests": {}, "messages": []}
-        requests = data.get("requests", {})
-        messages = data.get("messages", [])
-        return {
-            "requests": requests if isinstance(requests, dict) else {},
-            "messages": messages if isinstance(messages, list) else [],
-        }
+        return self.manager_console_store().load()
 
     def persist_manager_console_state(self, state: dict[str, Any]) -> None:
-        MANAGER_CONSOLE_PATH.parent.mkdir(parents=True, exist_ok=True)
-        dump_yaml(MANAGER_CONSOLE_PATH, state)
+        self.manager_console_store().persist(state)
 
     def worker_process_telemetry(self, worker) -> dict[str, Any]:
         return read_log_telemetry(worker.log_path)
@@ -253,12 +239,10 @@ class StateMixin:
     def monitor_loop(self) -> None:
         while not self.stop_event.is_set():
             with self.lock:
-                runtime_path = STATE_DIR / "agent_runtime.yaml"
-                heartbeats_path = STATE_DIR / "heartbeats.yaml"
-                runtime = load_yaml(runtime_path)
+                runtime = self.runtime_store().load()
                 if "workers" not in runtime:
                     runtime["workers"] = []
-                heartbeats = load_yaml(heartbeats_path)
+                heartbeats = self.heartbeat_store().load()
                 if "agents" not in heartbeats:
                     heartbeats["agents"] = []
                 runtime_dirty = False
@@ -330,26 +314,15 @@ class StateMixin:
 
                 # Single dump per file
                 if heartbeats_dirty:
-                    heartbeats["last_updated"] = now_iso()
-                    dump_yaml(heartbeats_path, heartbeats)
+                    heartbeats["agents"] = heartbeats.get("agents", [])
+                    self.heartbeat_store().persist(heartbeats)
                 if runtime_dirty:
-                    runtime["last_updated"] = now_iso()
-                    dump_yaml(runtime_path, runtime)
+                    runtime["workers"] = runtime.get("workers", [])
+                    self.runtime_store().persist(runtime)
                 if stats_dirty:
                     self.persist_provider_stats()
                 self.persist_manager_report()
                 self.write_session_state()
-
-                # Auto-launch agents whose dependencies just became satisfied
-                try:
-                    control = self.compute_manager_control_state()
-                    for agent_name in control["runnable_agents"]:
-                        if agent_name not in self.processes or self.processes[agent_name].process.poll() is not None:
-                            worker_cfg = next((w for w in self.workers if w["agent"] == agent_name), None)
-                            if worker_cfg:
-                                self.launch_worker(worker_cfg)
-                except Exception:
-                    pass
 
             time.sleep(5)
 

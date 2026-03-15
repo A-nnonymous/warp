@@ -7,10 +7,8 @@ from .constants import (
     STATE_DIR,
     TEAM_MAILBOX_PATH,
 )
+from .stores import LockStore, MailboxStore
 from .utils import (
-    dedupe_strings,
-    dump_yaml,
-    load_yaml,
     now_iso,
     slugify,
     summarize_list,
@@ -20,49 +18,23 @@ from .utils import (
 class MailboxMixin:
     """Methods for team mailbox, edit locks, and cleanup status."""
 
+    def mailbox_store(self) -> MailboxStore:
+        return MailboxStore(TEAM_MAILBOX_PATH)
+
+    def lock_store(self) -> LockStore:
+        return LockStore(STATE_DIR / "edit_locks.yaml")
+
     def default_team_mailbox_state(self) -> dict[str, Any]:
-        return {"messages": []}
+        return self.mailbox_store().default_state()
 
     def normalize_team_mailbox_message(self, message: dict[str, Any]) -> dict[str, Any]:
-        normalized = dict(message)
-        topic = str(normalized.get("topic") or "status_note").strip() or "status_note"
-        scope = str(normalized.get("scope") or "direct").strip() or "direct"
-        if scope not in {"direct", "broadcast", "manager"}:
-            scope = "direct"
-        ack_state = str(normalized.get("ack_state") or "pending").strip() or "pending"
-        if ack_state not in MAILBOX_ACK_STATES:
-            ack_state = "pending"
-        sender = str(normalized.get("from") or "unknown").strip() or "unknown"
-        recipient = str(normalized.get("to") or ("A0" if scope == "manager" else "all")).strip() or "all"
-        created_at = str(normalized.get("created_at") or now_iso()).strip() or now_iso()
-        message_id = str(normalized.get("id") or "").strip() or slugify(f"{sender}_{recipient}_{topic}_{created_at}")
-        return {
-            **normalized,
-            "id": message_id,
-            "from": sender,
-            "to": recipient,
-            "scope": scope,
-            "topic": topic,
-            "body": str(normalized.get("body") or "").strip(),
-            "related_task_ids": dedupe_strings(normalized.get("related_task_ids") or []),
-            "created_at": created_at,
-            "ack_state": ack_state,
-            "resolution_note": str(normalized.get("resolution_note") or "").strip(),
-            "acked_at": str(normalized.get("acked_at") or "").strip(),
-        }
+        return self.mailbox_store().normalize_message(message)
 
     def load_team_mailbox_state(self) -> dict[str, Any]:
-        if not TEAM_MAILBOX_PATH.exists():
-            return self.default_team_mailbox_state()
-        data = load_yaml(TEAM_MAILBOX_PATH)
-        if not isinstance(data, dict):
-            return self.default_team_mailbox_state()
-        messages = data.get("messages", [])
-        return {"messages": [self.normalize_team_mailbox_message(item) for item in messages if isinstance(item, dict)]}
+        return self.mailbox_store().load()
 
     def persist_team_mailbox_state(self, state: dict[str, Any]) -> None:
-        messages = state.get("messages", []) if isinstance(state, dict) else []
-        dump_yaml(TEAM_MAILBOX_PATH, {"messages": [self.normalize_team_mailbox_message(item) for item in messages if isinstance(item, dict)]})
+        self.mailbox_store().persist(state)
 
     def append_team_mailbox_message(
         self,
@@ -129,31 +101,7 @@ class MailboxMixin:
         }
 
     def edit_lock_state(self) -> dict[str, Any]:
-        path = STATE_DIR / "edit_locks.yaml"
-        if not path.exists():
-            return {"policy": {}, "locks": [], "last_updated": ""}
-        data = load_yaml(path)
-        if not isinstance(data, dict):
-            return {"policy": {}, "locks": [], "last_updated": ""}
-        locks = data.get("locks", [])
-        normalized_locks = []
-        for item in locks if isinstance(locks, list) else []:
-            if not isinstance(item, dict):
-                continue
-            normalized_locks.append(
-                {
-                    "path": str(item.get("path") or "").strip(),
-                    "owner": str(item.get("owner") or "").strip(),
-                    "state": str(item.get("state") or "free").strip() or "free",
-                    "intent": str(item.get("intent") or "").strip(),
-                    "updated_at": str(item.get("updated_at") or "").strip(),
-                }
-            )
-        return {
-            "policy": data.get("policy") if isinstance(data.get("policy"), dict) else {},
-            "locks": normalized_locks,
-            "last_updated": str(data.get("last_updated") or "").strip(),
-        }
+        return self.lock_store().load()
 
     def cleanup_status(
         self,

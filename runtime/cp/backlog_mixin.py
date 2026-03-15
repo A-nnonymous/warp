@@ -6,17 +6,12 @@ import time
 from typing import Any
 
 from .constants import (
-    BACKLOG_ACTIVE_STATUSES,
-    BACKLOG_CLAIM_STATES,
-    BACKLOG_COMPLETED_STATUSES,
     BACKLOG_PENDING_STATUSES,
-    BACKLOG_PLAN_STATES,
     STATE_DIR,
 )
+from .stores import BacklogStore
 from .utils import (
     dedupe_strings,
-    dump_yaml,
-    load_yaml,
     now_iso,
     summarize_list,
     terminate_process_tree,
@@ -26,96 +21,23 @@ from .utils import (
 class BacklogMixin:
     """Methods for backlog / task lifecycle and worker stop / workflow operations."""
 
+    def backlog_store(self) -> BacklogStore:
+        return BacklogStore(STATE_DIR / "backlog.yaml")
+
     def backlog_items(self) -> list[dict[str, Any]]:
         return self.load_backlog_state().get("items", [])
 
     def default_backlog_state(self) -> dict[str, Any]:
-        return {
-            "project": "",
-            "last_updated": "",
-            "manager": "A0",
-            "phase": "",
-            "items": [],
-        }
+        return self.backlog_store().default_state()
 
     def normalize_backlog_item(self, item: dict[str, Any]) -> dict[str, Any]:
-        normalized = dict(item)
-        status = str(normalized.get("status") or "pending").strip() or "pending"
-        claim_state = str(normalized.get("claim_state") or "").strip()
-        claimed_by = str(normalized.get("claimed_by") or "").strip()
-        if claim_state not in BACKLOG_CLAIM_STATES:
-            if status in BACKLOG_COMPLETED_STATUSES:
-                claim_state = "completed"
-            elif status == "review":
-                claim_state = "review"
-            elif status in BACKLOG_ACTIVE_STATUSES:
-                claim_state = "in_progress"
-            elif claimed_by:
-                claim_state = "claimed"
-            else:
-                claim_state = "unclaimed"
-        if claim_state == "completed" and status not in BACKLOG_COMPLETED_STATUSES:
-            status = "completed"
-        elif claim_state == "review":
-            status = "review"
-        elif claim_state == "in_progress" and status in BACKLOG_PENDING_STATUSES:
-            status = "active"
-
-        plan_required = bool(normalized.get("plan_required", False))
-        plan_state = str(normalized.get("plan_state") or "none").strip() or "none"
-        if plan_state not in BACKLOG_PLAN_STATES:
-            plan_state = "none"
-
-        normalized["id"] = str(normalized.get("id") or "").strip()
-        normalized["title"] = str(normalized.get("title") or normalized["id"] or "unassigned task").strip()
-        normalized["task_type"] = str(normalized.get("task_type") or "default").strip() or "default"
-        normalized["owner"] = str(normalized.get("owner") or "").strip()
-        normalized["status"] = status
-        normalized["gate"] = str(normalized.get("gate") or "").strip()
-        normalized["priority"] = str(normalized.get("priority") or "").strip()
-        normalized["dependencies"] = dedupe_strings(normalized.get("dependencies") or [])
-        normalized["outputs"] = [str(value).strip() for value in normalized.get("outputs") or [] if str(value).strip()]
-        normalized["done_when"] = [str(value).strip() for value in normalized.get("done_when") or [] if str(value).strip()]
-        normalized["claim_state"] = claim_state
-        normalized["claimed_by"] = claimed_by
-        normalized["claimed_at"] = str(normalized.get("claimed_at") or "").strip()
-        normalized["claim_note"] = str(normalized.get("claim_note") or "").strip()
-        normalized["plan_required"] = plan_required
-        normalized["plan_state"] = plan_state
-        normalized["plan_summary"] = str(normalized.get("plan_summary") or "").strip()
-        normalized["plan_review_note"] = str(normalized.get("plan_review_note") or "").strip()
-        normalized["plan_reviewed_at"] = str(normalized.get("plan_reviewed_at") or "").strip()
-        normalized["review_requested_at"] = str(normalized.get("review_requested_at") or "").strip()
-        normalized["review_note"] = str(normalized.get("review_note") or "").strip()
-        normalized["completed_at"] = str(normalized.get("completed_at") or "").strip()
-        normalized["completed_by"] = str(normalized.get("completed_by") or "").strip()
-        normalized["updated_at"] = str(normalized.get("updated_at") or "").strip()
-        return normalized
+        return self.backlog_store().normalize_item(item)
 
     def load_backlog_state(self) -> dict[str, Any]:
-        state = self.default_backlog_state()
-        if not (STATE_DIR / "backlog.yaml").exists():
-            return state
-        data = load_yaml(STATE_DIR / "backlog.yaml")
-        if not isinstance(data, dict):
-            return state
-        for key, value in data.items():
-            if key != "items":
-                state[key] = value
-        items = data.get("items", [])
-        state["items"] = [self.normalize_backlog_item(item) for item in items if isinstance(item, dict)]
-        return state
+        return self.backlog_store().load()
 
     def persist_backlog_state(self, state: dict[str, Any]) -> None:
-        payload = self.default_backlog_state()
-        if isinstance(state, dict):
-            for key, value in state.items():
-                if key != "items":
-                    payload[key] = value
-        payload["last_updated"] = now_iso()
-        items = state.get("items", []) if isinstance(state, dict) else []
-        payload["items"] = [self.normalize_backlog_item(item) for item in items if isinstance(item, dict)]
-        dump_yaml(STATE_DIR / "backlog.yaml", payload)
+        self.backlog_store().persist(state)
 
     def update_backlog_item(self, task_id: str, updater: Any) -> dict[str, Any]:
         with self.lock:

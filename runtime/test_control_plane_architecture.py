@@ -1,0 +1,121 @@
+from __future__ import annotations
+
+import tempfile
+import unittest
+from pathlib import Path
+
+from runtime.cp.constants import PROVIDER_STATS_PATH
+from runtime.cp.contracts import BacklogItem, CleanupState, RuntimeWorkerEntry
+from runtime.cp.stores import (
+    BacklogStore,
+    HeartbeatStore,
+    LockStore,
+    MailboxStore,
+    ManagerConsoleStore,
+    ProviderStatsStore,
+    RuntimeStore,
+)
+
+
+class ControlPlaneArchitectureTest(unittest.TestCase):
+    def setUp(self) -> None:
+        self.temp_dir = tempfile.TemporaryDirectory(prefix="warp-arch-")
+        self.root = Path(self.temp_dir.name)
+
+    def tearDown(self) -> None:
+        self.temp_dir.cleanup()
+
+    def test_contracts_are_runtime_typing_shapes(self) -> None:
+        backlog_item: BacklogItem = {"id": "A1-001", "status": "pending", "title": "Task"}
+        runtime_worker: RuntimeWorkerEntry = {"agent": "A1", "resource_pool": "ducc_pool", "status": "active"}
+        cleanup_state: CleanupState = {"ready": False, "blockers": ["active workers"]}
+        self.assertEqual(backlog_item["id"], "A1-001")
+        self.assertEqual(runtime_worker["agent"], "A1")
+        self.assertIn("active workers", cleanup_state["blockers"])
+
+    def test_backlog_store_normalizes_claim_and_status(self) -> None:
+        store = BacklogStore(self.root / "backlog.yaml")
+        persisted = store.persist(
+            {
+                "project": "demo",
+                "items": [
+                    {
+                        "id": "A1-001",
+                        "title": "Example",
+                        "status": "in_progress",
+                        "claimed_by": "A1",
+                        "dependencies": ["A0", "A0", "A2"],
+                    }
+                ],
+            }
+        )
+        item = persisted["items"][0]
+        self.assertEqual(item["claim_state"], "in_progress")
+        self.assertEqual(item["status"], "in_progress")
+        self.assertEqual(item["dependencies"], ["A0", "A2"])
+        loaded = store.load()
+        self.assertEqual(loaded["items"][0]["id"], "A1-001")
+
+    def test_mailbox_store_normalizes_scope_and_ack_state(self) -> None:
+        store = MailboxStore(self.root / "team_mailbox.yaml")
+        persisted = store.persist(
+            {
+                "messages": [
+                    {
+                        "from": "A1",
+                        "to": "A0",
+                        "scope": "weird",
+                        "topic": "status_note",
+                        "body": "hello",
+                        "ack_state": "bogus",
+                        "related_task_ids": ["A1-001", "A1-001"],
+                    }
+                ]
+            }
+        )
+        message = persisted["messages"][0]
+        self.assertEqual(message["scope"], "direct")
+        self.assertEqual(message["ack_state"], "pending")
+        self.assertEqual(message["related_task_ids"], ["A1-001"])
+        self.assertTrue(message["id"])
+
+    def test_runtime_store_normalizes_worker_entries(self) -> None:
+        store = RuntimeStore(self.root / "agent_runtime.yaml")
+        persisted = store.persist({"workers": [{"agent": "A1", "resource_pool": "", "provider": "", "model": ""}]})
+        worker = persisted["workers"][0]
+        self.assertEqual(worker["resource_pool"], "unassigned")
+        self.assertEqual(worker["provider"], "unassigned")
+        self.assertEqual(worker["model"], "unassigned")
+
+    def test_heartbeat_store_round_trip(self) -> None:
+        store = HeartbeatStore(self.root / "heartbeats.yaml")
+        persisted = store.persist({"agents": [{"agent": "A1", "state": "healthy", "evidence": "log", "expected_next_checkin": "soon", "escalation": "none"}]})
+        self.assertEqual(persisted["agents"][0]["state"], "healthy")
+        loaded = store.load()
+        self.assertEqual(loaded["agents"][0]["agent"], "A1")
+
+    def test_lock_store_round_trip(self) -> None:
+        store = LockStore(self.root / "edit_locks.yaml")
+        persisted = store.persist({"policy": {"single_writer": True}, "locks": [{"path": "state/backlog.yaml", "owner": "A1", "state": "held"}]})
+        self.assertEqual(persisted["locks"][0]["owner"], "A1")
+        loaded = store.load()
+        self.assertEqual(loaded["policy"]["single_writer"], True)
+
+    def test_provider_stats_store_applies_default_entry_factory(self) -> None:
+        store = ProviderStatsStore(self.root / PROVIDER_STATS_PATH.name, lambda: {"score": 0, "latency_ms": None})
+        persisted = store.persist({"ducc_pool": {"score": 3}})
+        self.assertEqual(persisted["ducc_pool"]["score"], 3)
+        loaded = store.load()
+        self.assertEqual(loaded["ducc_pool"]["score"], 3)
+        self.assertIsNone(loaded["ducc_pool"]["latency_ms"])
+
+    def test_manager_console_store_round_trip(self) -> None:
+        store = ManagerConsoleStore(self.root / "manager_console.yaml")
+        persisted = store.persist({"requests": {"r1": {"status": "pending"}}, "messages": [{"body": "hi"}]})
+        self.assertIn("r1", persisted["requests"])
+        loaded = store.load()
+        self.assertEqual(loaded["messages"][0]["body"], "hi")
+
+
+if __name__ == "__main__":
+    unittest.main()

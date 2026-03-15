@@ -39,6 +39,7 @@ It owns:
 - `governance/manager_protocol.md`: manager contract, interruption priority, self-evolution, planning authority
 - `governance/documentation_architecture.md`: markdown responsibility map
 - `governance/control_plane_playbook.md`: change checklist for warp itself
+- `governance/control_plane_architecture_blueprint.md`: target architecture and implementation todo for the next control-plane evolution stage
 - `governance/worker_launch_playbook.md`: worker launch semantics
 - `governance/operating_model.md`: durable collaboration model
 - `governance/agent_team_patterns.md`: intended multi-agent coordination primitives

@@ -23,6 +23,7 @@ Each markdown file should have one primary responsibility.
 - `governance/control_plane_playbook.md`: how to change `warp` without regressing the operator path
 - `governance/worker_launch_playbook.md`: worker launch and runtime execution semantics
 - `governance/agent_team_patterns.md`: rationale behind current coordination primitives
+- `governance/control_plane_architecture_blueprint.md`: target control-plane architecture and implementation todo for the next-stage runtime evolution
 - `governance/documentation_architecture.md`: this file, which assigns markdown responsibilities
 
 ### 3. Strategy Documents

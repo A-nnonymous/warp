@@ -303,17 +303,12 @@ Primary test command:
             resolved_policy = policy or self.default_launch_policy()
             if restart:
                 self.stop_workers()
-            control = self.compute_manager_control_state()
-            launchable = set(control["runnable_agents"] + control["active_agents"] + control["attention_agents"])
             launched: list[dict[str, Any]] = []
             skipped: list[str] = []
             failures: list[dict[str, str]] = []
             for worker in self.workers:
                 agent = worker["agent"]
                 if agent in self.processes and self.processes[agent].process.poll() is None:
-                    continue
-                if agent not in launchable:
-                    skipped.append(agent)
                     continue
                 try:
                     launched.append(self.launch_worker(worker, policy=resolved_policy))
