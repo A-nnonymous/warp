@@ -1,5 +1,24 @@
 # Architecture Refactor Progress
 
+- 时间：2026-03-16 02:1x CST
+- 当前阶段：已把 `backlog_mixin.py` 中 task action / workflow patch 的核心状态转换抽到纯 service，manager-side backlog 状态机开始脱离 mixin。
+- 本阶段代码成果：
+  - 新增 `runtime/cp/services/workflow_patch.py`，沉淀 `apply_task_action()`、`apply_workflow_patch()`、`validate_workflow_updates()`、`summarize_workflow_patch()`，统一承载 claim/start/plan/review/complete/reopen 与 workflow patch 的纯状态转换。
+  - `backlog_mixin.py` 的 `perform_task_action()` / `patch_workflow_item()` / `summarize_workflow_patch()` 改成薄委托：mixin 只保留 backlog 持久化、mailbox fanout 与 manager-owned orchestration。
+  - 新增 `runtime/test_workflow_patch_service.py`，覆盖 task action 状态流转、plan-approval completion guard、workflow patch list/timestamp shaping、非法字段校验与 patch summary。
+  - 更新 `runtime/cp/services/__init__.py` 与 `runtime/cp/CODE_INDEX.md`，把 workflow patch service 纳入统一 service 层出口与索引。
+- 已验证：
+  - `uv run --no-project --with 'PyYAML>=6.0.2' python -m unittest runtime.test_workflow_patch_service runtime.test_control_plane_architecture runtime.test_control_plane_integration.ControlPlaneIntegrationTest.test_task_actions_drive_plan_and_review_flow runtime.test_control_plane_integration.ControlPlaneIntegrationTest.test_workflow_update_allows_a0_replan` ✅
+- 当前断点：
+  - backlog 的纯状态转换已抽离，但 mailbox recipient/topic 决策仍在 `backlog_mixin.py`；若继续收口，下一刀可以把 manager notification fanout 也提成 service payload。
+  - workflow/task action 现在仍返回松散 dict；若想继续压字段漂移风险，可以在 `contracts.py` 里补 task action / workflow patch 相关 typed payload。
+- 下一步：
+  1. 评估是否继续把 backlog mailbox fanout / notification payload 也抽成纯 service。
+  2. 或补 `contracts.py` typed contract，把 workflow/task action 的 service I/O 收紧。
+  3. 继续坚持“小块 service 抽离 + 定向 integration 回归 + checkpoint commit”，不回到大颗粒长跑。
+
+---
+
 - 时间：2026-03-15 20:xx CST
 - 当前阶段：先读 diff 与 integration 失败，正在定位兼容性回归。
 - 已观察到的高优先级失败：A0 console / manager_console、port busy launch failure、invalid pool repair、missing provider credentials aggregation、workflow/attention summary 相关。

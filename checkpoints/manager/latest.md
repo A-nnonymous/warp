@@ -1,5 +1,51 @@
 # Latest Checkpoint
 
+Timestamp: 2026-03-16 02:1x CST
+Project: sonicmoe-fp8
+Phase: control-plane architecture refactor
+Manager: A0
+
+## Snapshot
+
+- Latest completed stage commit before this session: `e4d25fc` (`extract dashboard queue service`)
+- This stage extracted backlog workflow/task-action semantics into `runtime/cp/services/workflow_patch.py`
+- `backlog_mixin.py` now delegates task action mutation, workflow patch shaping, and patch summary generation to pure service helpers
+- New targeted test file `runtime/test_workflow_patch_service.py` covers claim/plan/review/complete guards, workflow patch shaping, validation, and summary text
+- Targeted regression/integration slice is green:
+  - `runtime.test_workflow_patch_service`
+  - `runtime.test_control_plane_architecture`
+  - `runtime.test_control_plane_integration.ControlPlaneIntegrationTest.test_task_actions_drive_plan_and_review_flow`
+  - `runtime.test_control_plane_integration.ControlPlaneIntegrationTest.test_workflow_update_allows_a0_replan`
+- Next likely seam if continuing in a fresh session: extract backlog mailbox recipient/topic fanout or add typed contracts for workflow/task-action payloads
+
+## What Changed This Session
+
+### Refactoring
+- Added `runtime/cp/services/workflow_patch.py` with `apply_task_action()`, `apply_workflow_patch()`, `validate_workflow_updates()`, and `summarize_workflow_patch()`
+- Slimmed `runtime/cp/backlog_mixin.py` so it keeps persistence/mailbox orchestration while delegating pure backlog state transitions to the service layer
+- Exported workflow patch helpers from `runtime/cp/services/__init__.py`
+- Updated `runtime/cp/CODE_INDEX.md` to include the new workflow patch service
+
+### Tests
+- Added `runtime/test_workflow_patch_service.py`
+- Verified targeted architecture + integration regression slice remains green after extraction
+
+## Current Goal
+
+Continue shrinking manager-side mixins into pure services without breaking workflow/review semantics.
+
+## Next Safe Step
+
+1. Start a new session from this commit and choose one seam only:
+   - backlog mailbox fanout / notification payload service
+   - typed contracts for workflow/task-action payloads
+
+## Resume Rule
+
+Start from `RESUME.md`.
+
+---
+
 Timestamp: 2026-03-13
 Project: sonicmoe-fp8
 Phase: post-audit bootstrap

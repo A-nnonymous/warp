@@ -5,17 +5,10 @@ import subprocess
 import time
 from typing import Any
 
-from .constants import (
-    BACKLOG_PENDING_STATUSES,
-    STATE_DIR,
-)
+from .constants import STATE_DIR
+from .services import apply_task_action, apply_workflow_patch, summarize_workflow_patch, validate_workflow_updates
 from .stores import BacklogStore
-from .utils import (
-    dedupe_strings,
-    now_iso,
-    summarize_list,
-    terminate_process_tree,
-)
+from .utils import dedupe_strings, now_iso, summarize_list, terminate_process_tree
 
 
 class BacklogMixin:
@@ -59,74 +52,16 @@ class BacklogMixin:
     def perform_task_action(self, task_id: str, action: str, agent: str = "", note: str = "") -> dict[str, Any]:
         actor = str(agent or "A0").strip() or "A0"
         action_name = str(action or "").strip()
-        if action_name not in {"claim", "release", "start", "submit_plan", "approve_plan", "reject_plan", "request_review", "complete", "reopen"}:
-            raise ValueError(f"unsupported task action {action_name}")
 
         def mutate(item: dict[str, Any]) -> dict[str, Any]:
-            next_item = dict(item)
-            current_claimant = str(next_item.get("claimed_by") or "").strip()
-            status = str(next_item.get("status") or "pending").strip() or "pending"
-            if action_name == "claim":
-                if current_claimant and current_claimant != actor and str(next_item.get("claim_state") or "") in {"claimed", "in_progress", "review"}:
-                    raise ValueError(f"task {task_id} is already claimed by {current_claimant}")
-                next_item["claimed_by"] = actor
-                next_item["claimed_at"] = now_iso()
-                next_item["claim_state"] = "claimed"
-                next_item["claim_note"] = note
-            elif action_name == "release":
-                if current_claimant and current_claimant != actor and actor != "A0":
-                    raise ValueError(f"task {task_id} is claimed by {current_claimant}")
-                next_item["claimed_by"] = ""
-                next_item["claimed_at"] = ""
-                next_item["claim_note"] = note
-                next_item["claim_state"] = "unclaimed"
-                if status in {"active", "in_progress", "review"}:
-                    next_item["status"] = "pending"
-            elif action_name == "start":
-                next_item["claimed_by"] = actor
-                next_item["claimed_at"] = next_item.get("claimed_at") or now_iso()
-                next_item["claim_state"] = "in_progress"
-                next_item["claim_note"] = note or next_item.get("claim_note") or "implementation started"
-                if status in BACKLOG_PENDING_STATUSES or status == "blocked":
-                    next_item["status"] = "active"
-            elif action_name == "submit_plan":
-                next_item["claimed_by"] = actor
-                next_item["claimed_at"] = next_item.get("claimed_at") or now_iso()
-                next_item["claim_state"] = "claimed"
-                next_item["plan_required"] = True
-                next_item["plan_state"] = "pending_review"
-                next_item["plan_summary"] = note
-            elif action_name == "approve_plan":
-                next_item["plan_state"] = "approved"
-                next_item["plan_review_note"] = note
-                next_item["plan_reviewed_at"] = now_iso()
-            elif action_name == "reject_plan":
-                next_item["plan_state"] = "rejected"
-                next_item["plan_review_note"] = note
-                next_item["plan_reviewed_at"] = now_iso()
-                if not next_item.get("claimed_by"):
-                    next_item["claimed_by"] = actor
-            elif action_name == "request_review":
-                next_item["claimed_by"] = current_claimant or actor
-                next_item["claim_state"] = "review"
-                next_item["status"] = "review"
-                next_item["review_note"] = note
-                next_item["review_requested_at"] = now_iso()
-            elif action_name == "complete":
-                if bool(next_item.get("plan_required")) and str(next_item.get("plan_state") or "") != "approved":
-                    raise ValueError(f"task {task_id} requires plan approval before completion")
-                next_item["claim_state"] = "completed"
-                next_item["status"] = "completed"
-                next_item["completed_at"] = now_iso()
-                next_item["completed_by"] = actor
-                next_item["review_note"] = note or next_item.get("review_note") or "manager accepted task"
-            elif action_name == "reopen":
-                next_item["status"] = "pending"
-                next_item["claim_state"] = "claimed" if current_claimant else "unclaimed"
-                next_item["completed_at"] = ""
-                next_item["completed_by"] = ""
-                next_item["review_note"] = note
-            return next_item
+            return apply_task_action(
+                item,
+                task_id=task_id,
+                action=action_name,
+                actor=actor,
+                note=note,
+                current_time=now_iso(),
+            )
 
         updated = self.update_backlog_item(task_id, mutate)
         topic_map = {
@@ -202,109 +137,20 @@ class BacklogMixin:
             return result
 
     def summarize_workflow_patch(self, before: dict[str, Any], after: dict[str, Any]) -> str:
-        fields = [
-            ("owner", "owner"),
-            ("claimed_by", "claimed by"),
-            ("status", "status"),
-            ("claim_state", "claim state"),
-            ("plan_state", "plan state"),
-            ("gate", "gate"),
-            ("title", "title"),
-        ]
-        changes: list[str] = []
-        for field, label in fields:
-            previous = str(before.get(field) or "").strip()
-            current = str(after.get(field) or "").strip()
-            if previous != current:
-                changes.append(f"{label}: {previous or 'empty'} -> {current or 'empty'}")
-        previous_dependencies = dedupe_strings(before.get("dependencies") or [])
-        current_dependencies = dedupe_strings(after.get("dependencies") or [])
-        if previous_dependencies != current_dependencies:
-            changes.append(
-                f"dependencies: {summarize_list(previous_dependencies) or 'none'} -> {summarize_list(current_dependencies) or 'none'}"
-            )
-        previous_plan = str(before.get("plan_summary") or "").strip()
-        current_plan = str(after.get("plan_summary") or "").strip()
-        if previous_plan != current_plan:
-            changes.append("plan summary updated")
-        return "; ".join(changes) if changes else "workflow updated"
+        return summarize_workflow_patch(before, after)
 
     def patch_workflow_item(self, task_id: str, updates: dict[str, Any], actor: str = "A0", note: str = "") -> dict[str, Any]:
         manager = str(actor or "A0").strip() or "A0"
         if manager != "A0":
             raise ValueError("workflow updates are manager-owned and must be performed by A0")
-        if not isinstance(updates, dict) or not updates:
-            raise ValueError("updates are required")
-
-        allowed_scalar_fields = {
-            "title",
-            "task_type",
-            "owner",
-            "status",
-            "gate",
-            "priority",
-            "claim_state",
-            "claimed_by",
-            "claim_note",
-            "plan_state",
-            "plan_summary",
-            "plan_review_note",
-            "review_note",
-        }
-        allowed_list_fields = {"dependencies", "outputs", "done_when"}
-        allowed_boolean_fields = {"plan_required"}
-        unknown_fields = sorted(
-            key for key in updates.keys() if key not in allowed_scalar_fields | allowed_list_fields | allowed_boolean_fields
-        )
-        if unknown_fields:
-            raise ValueError(f"unsupported workflow update fields: {', '.join(unknown_fields)}")
+        validate_workflow_updates(updates)
 
         before = self.task_record_for_worker({"task_id": task_id})
         if not before:
             raise ValueError(f"unknown task id {task_id}")
 
         def mutate(item: dict[str, Any]) -> dict[str, Any]:
-            next_item = dict(item)
-            for field in allowed_scalar_fields:
-                if field in updates:
-                    next_item[field] = str(updates.get(field) or "").strip()
-            for field in allowed_list_fields:
-                if field in updates:
-                    value = updates.get(field) or []
-                    if isinstance(value, str):
-                        next_item[field] = dedupe_strings([part.strip() for part in value.split(",")])
-                    elif isinstance(value, list):
-                        next_item[field] = dedupe_strings(value)
-                    else:
-                        raise ValueError(f"workflow field {field} must be a list or comma-separated string")
-            if "plan_required" in updates:
-                next_item["plan_required"] = bool(updates.get("plan_required"))
-
-            claimed_by = str(next_item.get("claimed_by") or "").strip()
-            status = str(next_item.get("status") or "pending").strip() or "pending"
-            plan_state = str(next_item.get("plan_state") or "none").strip() or "none"
-
-            if claimed_by and not str(next_item.get("claimed_at") or "").strip():
-                next_item["claimed_at"] = now_iso()
-            if not claimed_by:
-                next_item["claimed_at"] = ""
-
-            if status not in BACKLOG_COMPLETED_STATUSES:
-                next_item["completed_at"] = ""
-                next_item["completed_by"] = ""
-            if status not in {"review"} and str(next_item.get("claim_state") or "") != "review":
-                next_item["review_requested_at"] = ""
-            elif not str(next_item.get("review_requested_at") or "").strip():
-                next_item["review_requested_at"] = now_iso()
-
-            if plan_state in {"approved", "rejected"}:
-                next_item["plan_reviewed_at"] = now_iso()
-            elif plan_state in {"none", "pending_review"}:
-                next_item["plan_reviewed_at"] = ""
-                if plan_state == "none":
-                    next_item["plan_review_note"] = ""
-
-            return next_item
+            return apply_workflow_patch(item, updates=updates, current_time=now_iso())
 
         updated = self.update_backlog_item(task_id, mutate)
         summary = self.summarize_workflow_patch(before, updated)

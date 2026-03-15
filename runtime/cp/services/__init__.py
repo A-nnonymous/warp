@@ -22,6 +22,7 @@ from .task_routing import (
     task_policy_rules,
     task_policy_types,
 )
+from .workflow_patch import apply_task_action, apply_workflow_patch, summarize_workflow_patch, validate_workflow_updates
 
 __all__ = [
     "best_pool_for_provider",
@@ -46,4 +47,8 @@ __all__ = [
     "task_policy_rule_matches",
     "task_policy_rules",
     "task_policy_types",
+    "apply_task_action",
+    "apply_workflow_patch",
+    "summarize_workflow_patch",
+    "validate_workflow_updates",
 ]
