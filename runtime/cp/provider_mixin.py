@@ -21,6 +21,7 @@ from .constants import (
     WRAPPER_DIR,
 )
 from .network import LaunchPolicy
+from .services import best_pool_for_provider, best_pool_for_worker, queue_pool_candidates
 from .utils import format_command, load_yaml, run_command, slugify
 
 
@@ -347,36 +348,13 @@ class ProviderMixin:
         }
 
     def candidate_pools_for_worker(self, worker: dict[str, Any]) -> list[str]:
-        if worker.get("resource_pool"):
-            return [str(worker["resource_pool"])]
-        configured_queue = worker.get("resource_pool_queue")
-        if isinstance(configured_queue, list) and configured_queue:
-            return configured_queue
-        return [item["resource_pool"] for item in self.provider_queue()]
+        return queue_pool_candidates(worker, self.provider_queue())
 
     def best_pool_for_provider(self, provider_name: str) -> tuple[str, dict[str, Any]]:
-        ordered_candidates = [item for item in self.provider_queue() if item["provider"] == provider_name]
-        if not ordered_candidates:
-            raise RuntimeError(f"no eligible resource pool candidates exist for provider {provider_name}")
-        for item in ordered_candidates:
-            if item["launch_ready"]:
-                return item["resource_pool"], item
-        return ordered_candidates[0]["resource_pool"], ordered_candidates[0]
+        return best_pool_for_provider(provider_name, self.provider_queue())
 
     def best_pool_for_worker(self, worker: dict[str, Any]) -> tuple[str, dict[str, Any]]:
-        queue = self.provider_queue()
-        evaluations = {item["resource_pool"]: item for item in queue}
-        ordered_candidates = []
-        for pool_name in self.candidate_pools_for_worker(worker):
-            if pool_name in evaluations:
-                ordered_candidates.append(evaluations[pool_name])
-        ordered_candidates.sort(key=lambda item: (-item["score"], -item["priority"], item["resource_pool"]))
-        for item in ordered_candidates:
-            if item["launch_ready"]:
-                return item["resource_pool"], item
-        if ordered_candidates:
-            return ordered_candidates[0]["resource_pool"], ordered_candidates[0]
-        raise RuntimeError(f"worker {worker['agent']} has no eligible resource pool candidates")
+        return best_pool_for_worker(worker, self.provider_queue())
 
     def resolve_pool_for_launch(self, worker: dict[str, Any], policy: LaunchPolicy) -> tuple[str, dict[str, Any]]:
         if policy.strategy == "elastic":

@@ -8,6 +8,7 @@ from .services import (
     build_task_profile,
     initial_provider_name,
     provider_preference_default,
+    recommended_pool_plan,
     select_task_record_for_worker,
     suggested_branch_name,
     suggested_task_id,
@@ -106,86 +107,14 @@ class RoutingMixin:
     def recommended_pool_plan(self, worker: dict[str, Any], config: dict[str, Any] | None = None) -> dict[str, Any]:
         cfg = config or self.config
         resource_pools = cfg.get("resource_pools", {}) if isinstance(cfg, dict) else {}
-        if not isinstance(resource_pools, dict) or not resource_pools:
-            return {
-                "recommended_pool": "",
-                "locked_pool": "",
-                "recommended_queue": [],
-                "reason": "no resource pools configured",
-            }
-
-        explicit_pool = str(worker.get("resource_pool", "")).strip()
-        explicit_queue = worker.get("resource_pool_queue")
-        defaults = self.worker_defaults(cfg)
-        candidate_pools: list[str] = []
-        if explicit_pool:
-            candidate_pools = [explicit_pool]
-        elif isinstance(explicit_queue, list) and explicit_queue:
-            candidate_pools = [str(item) for item in explicit_queue if str(item)]
-        else:
-            default_queue = defaults.get("resource_pool_queue")
-            if isinstance(default_queue, list) and default_queue:
-                candidate_pools = [str(item) for item in default_queue if str(item)]
-            elif defaults.get("resource_pool"):
-                candidate_pools = [str(defaults.get("resource_pool"))]
-            else:
-                candidate_pools = list(resource_pools.keys())
-
-        evaluations = {
-            item["resource_pool"]: item for item in self.provider_queue() if item["resource_pool"] in candidate_pools
-        }
         profile = self.task_profile_for_worker(worker)
-        preferred_providers = profile["preferred_providers"]
-
-        def pool_rank(pool_name: str) -> tuple[float, int, str]:
-            evaluation = evaluations.get(pool_name)
-            if not evaluation:
-                return (-1.0, len(preferred_providers), pool_name)
-            provider_name = str(evaluation.get("provider", ""))
-            provider_rank = (
-                preferred_providers.index(provider_name)
-                if provider_name in preferred_providers
-                else len(preferred_providers)
-            )
-            affinity_bonus = max(0, len(preferred_providers) - provider_rank) * 40
-            lock_bonus = 500 if explicit_pool and pool_name == explicit_pool else 0
-            return (float(evaluation.get("score", 0.0)) + affinity_bonus + lock_bonus, -provider_rank, pool_name)
-
-        ordered_candidates = sorted(candidate_pools, key=pool_rank, reverse=True)
-        recommended_pool = ordered_candidates[0] if ordered_candidates else ""
-        recommended_queue = ordered_candidates if ordered_candidates else candidate_pools
-        locked_pool = explicit_pool
-        reason = "explicit worker pool override"
-        if not locked_pool and recommended_pool:
-            preferred_usable_candidates: list[str] = []
-            for preferred_provider in preferred_providers:
-                provider_candidates = [
-                    pool_name
-                    for pool_name in ordered_candidates
-                    if str(evaluations.get(pool_name, {}).get("provider", "")) == preferred_provider
-                    and bool(evaluations.get(pool_name, {}).get("launch_ready"))
-                ]
-                if provider_candidates:
-                    preferred_usable_candidates = provider_candidates
-                    break
-
-            if preferred_usable_candidates:
-                locked_pool = preferred_usable_candidates[0]
-                recommended_pool = locked_pool
-                recommended_queue = [locked_pool] + [pool for pool in ordered_candidates if pool != locked_pool]
-                reason = (
-                    f"A0 locked {locked_pool} for {profile['task_type']} work using task policy plus provider quality"
-                )
-            else:
-                reason = f"A0 recommends {recommended_pool} for {profile['task_type']} work"
-        return {
-            "recommended_pool": recommended_pool,
-            "locked_pool": locked_pool,
-            "recommended_queue": recommended_queue,
-            "reason": reason,
-            "category": profile["task_type"],
-            "preferred_providers": preferred_providers,
-        }
+        return recommended_pool_plan(
+            worker=worker,
+            resource_pools=resource_pools if isinstance(resource_pools, dict) else {},
+            defaults=self.worker_defaults(cfg),
+            provider_queue=self.provider_queue(),
+            profile=profile,
+        )
 
     def suggested_worktree_path(self, worker: dict[str, Any], config: dict[str, Any] | None = None) -> str:
         cfg = config or self.config

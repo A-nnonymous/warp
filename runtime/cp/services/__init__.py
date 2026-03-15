@@ -1,3 +1,12 @@
+from .pool_selection import (
+    best_pool_for_provider,
+    best_pool_for_worker,
+    configured_pool_candidates,
+    pool_rank_tuple,
+    queue_pool_candidates,
+    rank_pool_candidates,
+    recommended_pool_plan,
+)
 from .task_routing import (
     build_task_profile,
     initial_provider_name,
@@ -13,9 +22,16 @@ from .task_routing import (
 )
 
 __all__ = [
+    "best_pool_for_provider",
+    "best_pool_for_worker",
     "build_task_profile",
+    "configured_pool_candidates",
     "initial_provider_name",
+    "pool_rank_tuple",
     "provider_preference_default",
+    "queue_pool_candidates",
+    "rank_pool_candidates",
+    "recommended_pool_plan",
     "select_task_record_for_worker",
     "suggested_branch_name",
     "suggested_task_id",
