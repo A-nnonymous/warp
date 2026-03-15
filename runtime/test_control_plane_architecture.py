@@ -5,7 +5,17 @@ import unittest
 from pathlib import Path
 
 from runtime.cp.constants import PROVIDER_STATS_PATH
-from runtime.cp.contracts import A0ConsoleState, BacklogItem, CleanupState, RuntimeWorkerEntry, TeamMailboxMessage, WorkflowPatch
+from runtime.cp.contracts import (
+    A0ConsoleState,
+    BacklogItem,
+    CleanupState,
+    DashboardState,
+    ManagerControlState,
+    RuntimeWorkerEntry,
+    TeamMailboxMessage,
+    WorkerHandoffSummary,
+    WorkflowPatch,
+)
 from runtime.cp.stores import (
     BacklogStore,
     HeartbeatStore,
@@ -32,12 +42,40 @@ class ControlPlaneArchitectureTest(unittest.TestCase):
         workflow_patch: WorkflowPatch = {"status": "review", "dependencies": ["A0-001"]}
         mailbox_message: TeamMailboxMessage = {"from": "A1", "to": "A0", "topic": "status_note"}
         a0_console: A0ConsoleState = {"requests": [], "messages": [], "inbox": [], "pending_count": 0}
+        handoff: WorkerHandoffSummary = {"checkpoint_status": "checkpointed", "pending_work": ["merge patch"]}
+        control: ManagerControlState = {"worker_count": 1, "active_agents": ["A1"]}
+        dashboard: DashboardState = {
+            "updated_at": "2026-03-16T00:00:00Z",
+            "last_event": "boot",
+            "mode": {"state": "configured", "cold_start": False, "listener_active": True},
+            "project": {"repository_name": "warp"},
+            "commands": {"serve": "python serve", "up": "python up"},
+            "manager_report": "ok",
+            "runtime": {"workers": [runtime_worker]},
+            "heartbeats": {"agents": [{"agent": "A0", "state": "healthy"}]},
+            "backlog": {"items": [backlog_item]},
+            "gates": {"gates": [{"id": "G1", "status": "open"}]},
+            "processes": {},
+            "provider_queue": [],
+            "resolved_workers": [],
+            "merge_queue": [{"agent": "A1", "checkpoint_status": handoff["checkpoint_status"]}],
+            "a0_console": a0_console,
+            "team_mailbox": {"messages": [mailbox_message], "pending_count": 1},
+            "cleanup": cleanup_state,
+            "config": {"project": {"repository_name": "warp"}},
+            "config_text": "project: warp",
+            "validation_errors": [],
+            "launch_blockers": [],
+            "peek": {},
+        }
         self.assertEqual(backlog_item["id"], "A1-001")
         self.assertEqual(runtime_worker["agent"], "A1")
         self.assertIn("active workers", cleanup_state["blockers"])
         self.assertEqual(workflow_patch["status"], "review")
         self.assertEqual(mailbox_message["from"], "A1")
         self.assertEqual(a0_console["pending_count"], 0)
+        self.assertEqual(control["worker_count"], 1)
+        self.assertEqual(dashboard["runtime"]["workers"][0]["agent"], "A1")
 
     def test_backlog_store_normalizes_claim_and_status(self) -> None:
         store = BacklogStore(self.root / "backlog.yaml")

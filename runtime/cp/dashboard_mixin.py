@@ -3,7 +3,18 @@ from __future__ import annotations
 import subprocess
 from typing import Any
 
-from .contracts import A0ConsoleState, MergeQueueItem
+from .contracts import (
+    A0ConsoleState,
+    CommandMap,
+    DashboardState,
+    HeartbeatAgent,
+    HeartbeatState,
+    ManagerControlState,
+    MergeQueueItem,
+    RuntimeState,
+    RuntimeWorkerEntry,
+    WorkerHandoffSummary,
+)
 from .constants import (
     CHECKPOINT_DIR,
     CONTROL_PLANE_RUNTIME,
@@ -31,7 +42,7 @@ from .utils import (
 class DashboardMixin:
     """Methods for building dashboard views, CLI commands, merge-queue state, and manager reporting."""
 
-    def build_dashboard_state(self) -> dict[str, Any]:
+    def build_dashboard_state(self) -> DashboardState:
         config_text = self.config_path.read_text(encoding="utf-8") if self.config_path.exists() else ""
         runtime_state = self.dashboard_runtime_state()
         heartbeat_state = self.dashboard_heartbeats_state(runtime_state=runtime_state)
@@ -71,7 +82,7 @@ class DashboardMixin:
             "peek": self.peek_read_all(),
         }
 
-    def build_cli_commands(self) -> dict[str, str]:
+    def build_cli_commands(self) -> CommandMap:
         host = self.host_override or self.project.get("dashboard", {}).get("host", DEFAULT_DASHBOARD_HOST)
         port = self.port_override or int(self.project.get("dashboard", {}).get("port", DEFAULT_DASHBOARD_PORT))
         config = str(self.persist_config_path)
@@ -145,7 +156,7 @@ class DashboardMixin:
                 return branch
         return str(self.project.get("base_branch") or self.integration_branch() or "main")
 
-    def manager_runtime_entry(self, runtime: dict[str, Any] | None = None) -> dict[str, Any]:
+    def manager_runtime_entry(self, runtime: RuntimeState | None = None) -> RuntimeWorkerEntry:
         workers = runtime.get("workers", []) if isinstance(runtime, dict) else []
         existing = next(
             (item for item in workers if isinstance(item, dict) and str(item.get("agent", "")).strip() == "A0"),
@@ -177,7 +188,7 @@ class DashboardMixin:
             "status": status,
         }
 
-    def dashboard_runtime_state(self) -> dict[str, Any]:
+    def dashboard_runtime_state(self) -> RuntimeState:
         runtime = load_yaml(STATE_DIR / "agent_runtime.yaml")
         workers = runtime.get("workers", [])
         if not isinstance(workers, list):
@@ -194,7 +205,7 @@ class DashboardMixin:
         self,
         runtime_state: dict[str, Any] | None = None,
         heartbeat_state: dict[str, Any] | None = None,
-    ) -> dict[str, Any]:
+    ) -> ManagerControlState:
         return compute_manager_control_state(
             workers=self.workers,
             runtime_state=runtime_state or self.dashboard_runtime_state(),
@@ -293,9 +304,9 @@ Last updated: {now_iso()}
 
     def manager_heartbeat_entry(
         self,
-        heartbeats: dict[str, Any] | None = None,
-        runtime_state: dict[str, Any] | None = None,
-    ) -> dict[str, Any]:
+        heartbeats: HeartbeatState | None = None,
+        runtime_state: RuntimeState | None = None,
+    ) -> HeartbeatAgent:
         agents = heartbeats.get("agents", []) if isinstance(heartbeats, dict) else []
         existing = next(
             (item for item in agents if isinstance(item, dict) and str(item.get("agent", "")).strip() == "A0"),
@@ -338,7 +349,7 @@ Last updated: {now_iso()}
             "escalation": escalation,
         }
 
-    def dashboard_heartbeats_state(self, runtime_state: dict[str, Any] | None = None) -> dict[str, Any]:
+    def dashboard_heartbeats_state(self, runtime_state: RuntimeState | None = None) -> HeartbeatState:
         heartbeats = load_yaml(STATE_DIR / "heartbeats.yaml")
         agents = heartbeats.get("agents", [])
         if not isinstance(agents, list):
@@ -353,7 +364,7 @@ Last updated: {now_iso()}
 
     def worker_handoff_summary(
         self, agent: str, runtime_entry: dict[str, Any], heartbeat: dict[str, Any]
-    ) -> dict[str, Any]:
+    ) -> WorkerHandoffSummary:
         status_path = STATUS_DIR / f"{agent}.md"
         checkpoint_path = CHECKPOINT_DIR / f"{agent}.md"
         status_meta: dict[str, str] = {}

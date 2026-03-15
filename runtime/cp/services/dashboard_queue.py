@@ -2,7 +2,15 @@ from __future__ import annotations
 
 from typing import Any, Callable
 
-from ..contracts import A0ConsoleMessage, A0ConsoleRequest, A0ConsoleState, BacklogItem, MergeQueueItem, TeamMailboxMessage
+from ..contracts import (
+    A0ConsoleMessage,
+    A0ConsoleRequest,
+    A0ConsoleState,
+    BacklogItem,
+    MergeQueueItem,
+    TeamMailboxMessage,
+    WorkerHandoffSummary,
+)
 from ..utils import now_iso, slugify, summarize_list
 
 
@@ -22,7 +30,7 @@ def build_merge_queue(
     workers: list[dict[str, Any]],
     runtime_state: dict[str, Any] | None,
     heartbeat_state: dict[str, Any] | None,
-    handoff_by_agent: dict[str, dict[str, Any]] | None,
+    handoff_by_agent: dict[str, WorkerHandoffSummary] | None,
     *,
     integration_branch: str,
     manager_identity: dict[str, Any] | None,

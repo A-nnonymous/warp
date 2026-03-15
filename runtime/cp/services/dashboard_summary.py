@@ -2,19 +2,20 @@ from __future__ import annotations
 
 from typing import Any, Callable
 
+from ..contracts import BacklogItem, HeartbeatState, ManagerControlState, RuntimeState, WorkerHandoffSummary
 from ..utils import dedupe_strings
 
 
-TaskResolver = Callable[[dict[str, Any]], dict[str, Any]]
+TaskResolver = Callable[[dict[str, Any]], BacklogItem]
 
 
 def compute_manager_control_state(
     workers: list[dict[str, Any]],
-    runtime_state: dict[str, Any] | None,
-    heartbeat_state: dict[str, Any] | None,
-    backlog_items: list[dict[str, Any]],
+    runtime_state: RuntimeState | None,
+    heartbeat_state: HeartbeatState | None,
+    backlog_items: list[BacklogItem],
     task_record_for_worker: TaskResolver,
-) -> dict[str, Any]:
+) -> ManagerControlState:
     normalized_runtime = runtime_state if isinstance(runtime_state, dict) else {}
     normalized_heartbeats = heartbeat_state if isinstance(heartbeat_state, dict) else {}
     runtime_workers = {
@@ -80,7 +81,7 @@ def summarize_worker_handoff(
     *,
     parse_list: Callable[[str], list[str]],
     parse_paragraph: Callable[[str], str],
-) -> dict[str, Any]:
+) -> WorkerHandoffSummary:
     normalized_status_meta = status_meta if isinstance(status_meta, dict) else {}
     normalized_status_sections = status_sections if isinstance(status_sections, dict) else {}
     normalized_checkpoint_meta = checkpoint_meta if isinstance(checkpoint_meta, dict) else {}

@@ -1,5 +1,22 @@
 # Architecture Refactor Progress
 
+- 时间：2026-03-16 03:3x CST
+- 当前阶段：已把 dashboard/runtime assembler 的顶层视图 contract typed 化，dashboard 现在不只 service 层 typed，连 assembler 返回面也开始有统一 shape。
+- 本阶段代码成果：
+  - 在 `runtime/cp/contracts.py` 新增 `GateState`、`ManagerControlState`、`WorkerHandoffSummary`、`CommandMap`、`DashboardMode`、`DashboardState`，把 dashboard 顶层 payload、manager control 摘要、worker handoff 摘要、CLI command/mode 这些 manager-facing assembler shape 固定下来。
+  - `dashboard_mixin.py` 的 `build_dashboard_state()`、`build_cli_commands()`、`manager_runtime_entry()`、`dashboard_runtime_state()`、`compute_manager_control_state()`、`manager_heartbeat_entry()`、`dashboard_heartbeats_state()`、`worker_handoff_summary()` 全部改成返回明确 typed contract，runtime/heartbeat/dashboard assembler 链路不再只靠裸 `dict[str, Any]` 串起来。
+  - `services/dashboard_summary.py`、`services/dashboard_queue.py` 也同步接到 `ManagerControlState` / `WorkerHandoffSummary`，让 dashboard summary/queue service 与 assembler 共用同一套 typed view model。
+  - 更新 `runtime/test_control_plane_architecture.py` 与 `runtime/cp/CODE_INDEX.md`，把新增 dashboard assembler contracts 纳入架构测试面与索引。
+- 已验证：
+  - `uv run --no-project --with 'PyYAML>=6.0.2' python -m unittest runtime.test_control_plane_architecture runtime.test_dashboard_service runtime.test_dashboard_queue_service runtime.test_control_plane_integration.ControlPlaneIntegrationTest.test_dashboard_exposes_manager_identity_and_handoff_details runtime.test_control_plane_integration.ControlPlaneIntegrationTest.test_a0_console_records_user_reply runtime.test_control_plane_integration.ControlPlaneIntegrationTest.test_team_mailbox_send_and_acknowledge_flow` ✅
+- 当前断点：
+  - dashboard 顶层 assembler 已有 typed contract，但 `launch_policy_state()`、`process_snapshot()`、`cleanup_status()`、`provider_queue()` 等子视图内部仍有较多松散 `dict[str, Any]`，后续若继续推进 typed 化，可沿 dashboard 入口继续往这些子域下钻。
+  - `backlog_mixin.py` 的 mailbox fanout / notification routing 仍是另一条自然支线，若下一阶段转切 service 抽离，这块仍然是最顺手的薄化点。
+- 下一步：
+  1. 继续把 dashboard 子视图（尤其 launch policy / process snapshot / cleanup / provider queue）收成 typed contract。
+  2. 或切去 `backlog_mixin.py`，抽 mailbox fanout / notification routing service，进一步削薄 manager-side orchestration。
+  3. 继续坚持“一个阶段一个 checkpoint + 定向测试 + 单独 commit”节奏。
+
 - 时间：2026-03-16 03:0x CST
 - 当前阶段：已把 workflow/dashboard/mailbox 这条 manager-facing payload 链路收紧到 typed contract，contracts 不再只停留在 service 签名，开始接到 store / mixin / architecture test。
 - 本阶段代码成果：

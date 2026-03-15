@@ -117,6 +117,10 @@ class GateItem(TypedDict, total=False):
     owner: str
 
 
+class GateState(TypedDict, total=False):
+    gates: list[GateItem]
+
+
 class RuntimeWorkerEntry(TypedDict, total=False):
     agent: str
     task_id: str
@@ -247,6 +251,25 @@ class MergeQueueItem(TypedDict, total=False):
     manager_action: str
 
 
+class ManagerControlState(TypedDict, total=False):
+    worker_count: int
+    active_agents: list[str]
+    attention_agents: list[str]
+    runnable_agents: list[str]
+    blocked_agents: list[str]
+
+
+class WorkerHandoffSummary(TypedDict, total=False):
+    checkpoint_status: str
+    attention_summary: str
+    blockers: list[str]
+    pending_work: list[str]
+    requested_unlocks: list[str]
+    dependencies: list[str]
+    resume_instruction: str
+    next_checkin: str
+
+
 class WorkflowPatch(TypedDict, total=False):
     title: str
     task_type: str
@@ -355,3 +378,43 @@ class A0ConsoleState(TypedDict, total=False):
 class ManagerConsoleState(TypedDict, total=False):
     requests: dict[str, A0ConsoleRequest]
     messages: list[A0ConsoleMessage]
+
+
+class CommandMap(TypedDict, total=False):
+    serve: str
+    up: str
+
+
+class DashboardMode(TypedDict, total=False):
+    state: str
+    cold_start: bool
+    listener_active: bool
+    reason: str
+    config_path: str
+    persist_config_path: str
+
+
+class DashboardState(TypedDict, total=False):
+    updated_at: str
+    last_event: str
+    mode: DashboardMode
+    project: ProjectConfig
+    commands: CommandMap
+    launch_policy: dict[str, Any]
+    manager_report: str
+    runtime: RuntimeState
+    heartbeats: HeartbeatState
+    backlog: BacklogState
+    gates: GateState
+    processes: dict[str, ProcessSnapshot]
+    provider_queue: list[ProviderQueueItem]
+    resolved_workers: list[ResolvedWorkerPlan]
+    merge_queue: list[MergeQueueItem]
+    a0_console: A0ConsoleState
+    team_mailbox: TeamMailboxState
+    cleanup: CleanupState
+    config: ConfigShape
+    config_text: str
+    validation_errors: list[str]
+    launch_blockers: list[str]
+    peek: dict[str, list[str]]
