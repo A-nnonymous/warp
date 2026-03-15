@@ -1,3 +1,4 @@
+from .dashboard_queue import build_a0_request_catalog, build_merge_queue
 from .dashboard_summary import compute_manager_control_state, summarize_worker_handoff
 from .pool_selection import (
     best_pool_for_provider,
@@ -25,6 +26,8 @@ from .task_routing import (
 __all__ = [
     "best_pool_for_provider",
     "best_pool_for_worker",
+    "build_a0_request_catalog",
+    "build_merge_queue",
     "build_task_profile",
     "compute_manager_control_state",
     "configured_pool_candidates",

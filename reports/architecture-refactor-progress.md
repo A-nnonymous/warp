@@ -56,6 +56,25 @@
 
 ---
 
+- 时间：2026-03-16 01:58 CST
+- 当前阶段：已把 dashboard 的 merge queue / A0 console request 聚合从 `dashboard_mixin.py` 抽到纯 service，manager-facing queue 规则开始脱离 mixin。
+- 本阶段代码成果：
+  - 新增 `runtime/cp/services/dashboard_queue.py`，沉淀 `build_merge_queue()`、`manager_inbox()`、`build_a0_request_catalog()`，统一承载 merge queue 行拼装、A0 inbox 过滤、plan/task review request 生成、worker intervention request 归并与排序。
+  - `dashboard_mixin.py` 的 `merge_queue()` / `a0_request_catalog()` 改成薄委托：mixin 只负责采集 runtime / heartbeat / backlog / mailbox / manager_console 状态，并把 handoff 摘要与持久化 response state 交给 service 消费。
+  - 新增 `runtime/test_dashboard_queue_service.py`，覆盖 manager-facing merge queue 行 shaping、A0 request 排序、plan/task review 与 intervention/unlock 标题规则、inbox 过滤与 pending count 计算。
+  - 更新 `runtime/cp/services/__init__.py` 与 `runtime/cp/CODE_INDEX.md`，把 dashboard queue service 纳入统一出口与索引。
+- 已验证：
+  - `uv run --no-project --with 'PyYAML>=6.0.2' python -m unittest runtime.test_control_plane_architecture runtime.test_dashboard_service runtime.test_dashboard_queue_service runtime.test_control_plane_integration.ControlPlaneIntegrationTest.test_dashboard_exposes_manager_identity_and_handoff_details runtime.test_control_plane_integration.ControlPlaneIntegrationTest.test_a0_console_records_user_reply runtime.test_control_plane_integration.ControlPlaneIntegrationTest.test_process_exit_surfaces_escalation_in_attention_summary runtime.test_control_plane_integration.ControlPlaneIntegrationTest.test_task_actions_drive_plan_and_review_flow runtime.test_control_plane_integration.ControlPlaneIntegrationTest.test_team_mailbox_send_and_acknowledge_flow` ✅
+- 当前断点：
+  - `dashboard_mixin.py` 的 queue / request 聚合已抽离，但 handoff / merge queue / A0 console payload 仍是松散 dict；若继续收紧，下一刀适合补 `contracts.py` 的 dashboard queue / request typed shape。
+  - `backlog_mixin.py` 里 workflow patch / task action 规则仍偏重，manager-side 状态机还没沉到纯 service。
+- 下一步：
+  1. 评估是否把 dashboard queue / request payload 升级成 typed contracts，顺手压缩 web/api 两侧的字段漂移风险。
+  2. 或转切 `backlog_mixin.py`，把 workflow patch / task action / review 状态转换抽到纯 service，继续削薄 manager-side mixin。
+  3. 继续坚持“小块 service 抽离 + 定向 integration 回归 + checkpoint commit”，避免回到大颗粒长跑。
+
+---
+
 - 时间：2026-03-16 01:5x CST
 - 当前阶段：已把 dashboard 的 manager-control 分类与 worker handoff 摘要从 `dashboard_mixin.py` 抽到纯 service，继续把 mixin 压回 IO/编排层。
 - 本阶段代码成果：

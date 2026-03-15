@@ -14,13 +14,16 @@ from .constants import (
     STATUS_DIR,
 )
 from .markdown import parse_markdown_list, parse_markdown_paragraph, parse_markdown_sections
-from .services import compute_manager_control_state, summarize_worker_handoff
+from .services import (
+    build_a0_request_catalog,
+    build_merge_queue,
+    compute_manager_control_state,
+    summarize_worker_handoff,
+)
 from .utils import (
     dedupe_strings,
     load_yaml,
     now_iso,
-    slugify,
-    summarize_list,
 )
 
 
@@ -119,6 +122,12 @@ class DashboardMixin:
             "name": str(identity.get("name", "")).strip(),
             "email": str(identity.get("email", "")).strip(),
         }
+
+    def _worker_identity_display(self, worker: dict[str, Any]) -> str:
+        git_identity = self.worker_git_identity(worker)
+        if git_identity["name"] and git_identity["email"]:
+            return f"{git_identity['name']} <{git_identity['email']}>"
+        return "environment default"
 
     def current_repo_branch(self) -> str:
         repo_root = self.target_repo_root()
@@ -372,48 +381,34 @@ Last updated: {now_iso()}
         heartbeat_state: dict[str, Any] | None = None,
     ) -> list[dict[str, Any]]:
         runtime_state = runtime_state or self.dashboard_runtime_state()
-        runtime_workers = {str(item.get("agent")): item for item in runtime_state.get("workers", [])}
         heartbeat_state = heartbeat_state or self.dashboard_heartbeats_state(runtime_state=runtime_state)
-        heartbeats = {str(item.get("agent")): item for item in heartbeat_state.get("agents", [])}
-        queue: list[dict[str, Any]] = []
-        manager_identity = self.manager_git_identity()
-        manager_display = (
-            f"{manager_identity['name']} <{manager_identity['email']}>"
-            if manager_identity["name"] and manager_identity["email"]
-            else "A0 manager identity"
+        runtime_workers = {
+            str(item.get("agent", "")).strip(): item
+            for item in runtime_state.get("workers", [])
+            if isinstance(item, dict)
+        }
+        heartbeat_workers = {
+            str(item.get("agent", "")).strip(): item
+            for item in heartbeat_state.get("agents", [])
+            if isinstance(item, dict)
+        }
+        handoff_by_agent = {
+            str(worker.get("agent", "")).strip(): self.worker_handoff_summary(
+                str(worker.get("agent", "")).strip(),
+                runtime_workers.get(str(worker.get("agent", "")).strip(), {}),
+                heartbeat_workers.get(str(worker.get("agent", "")).strip(), {}),
+            )
+            for worker in self.workers
+        }
+        return build_merge_queue(
+            self.workers,
+            runtime_state,
+            heartbeat_state,
+            handoff_by_agent,
+            integration_branch=self.integration_branch(),
+            manager_identity=self.manager_git_identity(),
+            worker_identity_display=lambda worker: self._worker_identity_display(worker),
         )
-        for worker in self.workers:
-            agent = str(worker.get("agent", ""))
-            runtime_entry = runtime_workers.get(agent, {})
-            heartbeat = heartbeats.get(agent, {})
-            handoff = self.worker_handoff_summary(agent, runtime_entry, heartbeat)
-            git_identity = self.worker_git_identity(worker)
-            worker_display = (
-                f"{git_identity['name']} <{git_identity['email']}>"
-                if git_identity["name"] and git_identity["email"]
-                else "environment default"
-            )
-            queue.append(
-                {
-                    "agent": agent,
-                    "branch": worker.get("branch", "unassigned"),
-                    "submit_strategy": worker.get("submit_strategy", "patch_handoff"),
-                    "merge_target": self.integration_branch(),
-                    "worker_identity": worker_display,
-                    "manager_identity": manager_display,
-                    "status": runtime_entry.get("status", heartbeat.get("state", "not_started")),
-                    "checkpoint_status": handoff["checkpoint_status"],
-                    "attention_summary": handoff["attention_summary"],
-                    "blockers": handoff["blockers"],
-                    "pending_work": handoff["pending_work"],
-                    "requested_unlocks": handoff["requested_unlocks"],
-                    "dependencies": handoff["dependencies"],
-                    "resume_instruction": handoff["resume_instruction"],
-                    "next_checkin": handoff["next_checkin"],
-                    "manager_action": f"A0 merges {worker.get('branch', 'unassigned')} into {self.integration_branch()}",
-                }
-            )
-        return queue
 
     def a0_request_catalog(
         self,
@@ -421,118 +416,11 @@ Last updated: {now_iso()}
         heartbeat_state: dict[str, Any] | None = None,
     ) -> dict[str, Any]:
         stored = self.load_manager_console_state()
-        request_state = stored.get("requests", {}) if isinstance(stored.get("requests"), dict) else {}
-        messages = stored.get("messages", []) if isinstance(stored.get("messages"), list) else []
-        requests: list[dict[str, Any]] = []
         mailbox_state = self.team_mailbox_catalog()
-        inbox = [
-            item
-            for item in mailbox_state.get("messages", [])
-            if str(item.get("ack_state") or "") != "resolved"
-            and (
-                str(item.get("to") or "") in {"A0", "a0", "manager", "all"}
-                or str(item.get("scope") or "") in {"broadcast", "manager"}
-            )
-        ]
-
-        for item in self.backlog_items():
-            task_id = str(item.get("id") or "").strip()
-            claimant = str(item.get("claimed_by") or item.get("owner") or "A?").strip() or "A?"
-            if str(item.get("plan_state") or "") == "pending_review":
-                request_id = slugify(f"{task_id}_plan_review")
-                saved = request_state.get(request_id, {}) if isinstance(request_state.get(request_id), dict) else {}
-                requests.append(
-                    {
-                        "id": request_id,
-                        "agent": claimant,
-                        "task_id": task_id,
-                        "request_type": "plan_review",
-                        "status": str(item.get("status") or "pending"),
-                        "title": f"{task_id} requests plan approval",
-                        "body": str(item.get("plan_summary") or f"{task_id} is waiting for manager review").strip(),
-                        "resume_instruction": "Approve to allow implementation, or reject with constraints.",
-                        "next_checkin": str(item.get("updated_at") or item.get("claimed_at") or "").strip(),
-                        "response_state": str(saved.get("response_state") or "pending").strip() or "pending",
-                        "response_note": str(saved.get("response_note") or item.get("plan_review_note") or "").strip(),
-                        "response_at": str(saved.get("response_at") or item.get("plan_reviewed_at") or "").strip(),
-                        "created_at": str(saved.get("created_at") or item.get("claimed_at") or now_iso()).strip(),
-                    }
-                )
-            elif str(item.get("status") or "") == "review" or str(item.get("claim_state") or "") == "review":
-                request_id = slugify(f"{task_id}_task_review")
-                saved = request_state.get(request_id, {}) if isinstance(request_state.get(request_id), dict) else {}
-                requests.append(
-                    {
-                        "id": request_id,
-                        "agent": claimant,
-                        "task_id": task_id,
-                        "request_type": "task_review",
-                        "status": str(item.get("status") or "review"),
-                        "title": f"{task_id} requests manager acceptance",
-                        "body": str(item.get("review_note") or f"{task_id} is ready for manager review").strip(),
-                        "resume_instruction": "Accept to unblock dependents, or reopen with a concrete correction.",
-                        "next_checkin": str(item.get("review_requested_at") or item.get("updated_at") or "").strip(),
-                        "response_state": str(saved.get("response_state") or "pending").strip() or "pending",
-                        "response_note": str(saved.get("response_note") or item.get("review_note") or "").strip(),
-                        "response_at": str(saved.get("response_at") or item.get("completed_at") or "").strip(),
-                        "created_at": str(saved.get("created_at") or item.get("review_requested_at") or now_iso()).strip(),
-                    }
-                )
-
-        for item in merge_queue:
-            agent = str(item.get("agent", "")).strip()
-            requested_unlocks = item.get("requested_unlocks") or []
-            blockers = item.get("blockers") or []
-            attention_summary = str(item.get("attention_summary", "")).strip()
-            status = str(item.get("status", "")).strip() or "not_started"
-            if not requested_unlocks and not blockers and not attention_summary:
-                continue
-
-            title = f"{agent} needs A0 review"
-            if requested_unlocks:
-                title = f"{agent} requests unlock"
-            elif status.startswith("launch_failed") or status == "stale":
-                title = f"{agent} needs intervention"
-
-            body_parts = []
-            if attention_summary:
-                body_parts.append(attention_summary)
-            if requested_unlocks:
-                body_parts.append(f"requested unlocks: {summarize_list(requested_unlocks)}")
-            if blockers:
-                body_parts.append(f"blockers: {summarize_list(blockers)}")
-            request_id = slugify(f"{agent}_{status}_{title}_{attention_summary or summarize_list(requested_unlocks) or summarize_list(blockers)}")
-            saved = request_state.get(request_id, {}) if isinstance(request_state.get(request_id), dict) else {}
-            response_state = str(saved.get("response_state", "pending")).strip() or "pending"
-            response_note = str(saved.get("response_note", "")).strip()
-            response_at = str(saved.get("response_at", "")).strip()
-            created_at = str(saved.get("created_at", "")).strip() or now_iso()
-
-            requests.append(
-                {
-                    "id": request_id,
-                    "agent": agent,
-                    "request_type": "worker_intervention",
-                    "status": status,
-                    "title": title,
-                    "body": "; ".join(body_parts) or title,
-                    "requested_unlocks": requested_unlocks,
-                    "blockers": blockers,
-                    "resume_instruction": str(item.get("resume_instruction", "")).strip(),
-                    "next_checkin": str(item.get("next_checkin", "")).strip(),
-                    "response_state": response_state,
-                    "response_note": response_note,
-                    "response_at": response_at,
-                    "created_at": created_at,
-                }
-            )
-
-        requests.sort(key=lambda item: (item["response_state"] != "pending", item["agent"], item["id"]))
-        pending_count = sum(1 for item in requests if item["response_state"] == "pending") + len(inbox)
-        return {
-            "requests": requests,
-            "messages": messages[-20:],
-            "inbox": inbox[-20:],
-            "pending_count": pending_count,
-            "last_updated": now_iso(),
-        }
+        return build_a0_request_catalog(
+            self.backlog_items(),
+            merge_queue,
+            mailbox_state.get("messages", []),
+            stored.get("requests", {}),
+            stored.get("messages", []),
+        )
