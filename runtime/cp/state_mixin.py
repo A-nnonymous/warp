@@ -5,7 +5,7 @@ import os
 import time
 from typing import Any
 
-from .contracts import ManagerConsoleState, ProcessSnapshot
+from .contracts import ManagerConsoleState, PoolUsageSummary, ProcessCommand, ProcessSnapshot, TelemetryUsage
 from .constants import (
     PROVIDER_STATS_PATH,
     MANAGER_CONSOLE_PATH,
@@ -23,6 +23,25 @@ def _short_path(path: str) -> str:
     """Collapse long absolute paths to just the last 2 segments."""
     parts = path.rstrip("/").rsplit("/", 2)
     return "/".join(parts[-2:]) if len(parts) > 2 else path
+
+
+def _normalize_usage(payload: Any) -> TelemetryUsage:
+    usage = {"input_tokens": 0, "output_tokens": 0, "total_tokens": 0}
+    if not isinstance(payload, dict):
+        return usage
+    for key in usage:
+        usage[key] = int(payload.get(key, 0) or 0)
+    return usage
+
+
+def _command_contract(command: list[str], wrapper_path: str) -> ProcessCommand:
+    argv = [str(part) for part in command]
+    return {
+        "argv": argv,
+        "binary": argv[0] if argv else "",
+        "display": " ".join(argv),
+        "uses_wrapper": bool(wrapper_path and argv and argv[0] == wrapper_path),
+    }
 
 
 def _extract_stream_json_lines(raw_lines: list[str]) -> list[str]:
@@ -181,25 +200,26 @@ class StateMixin:
     def worker_process_telemetry(self, worker) -> dict[str, Any]:
         return read_log_telemetry(worker.log_path)
 
-    def pool_usage_summary(self, pool_name: str) -> dict[str, Any]:
-        running_agents: list[dict[str, Any]] = []
-        usage = {"input_tokens": 0, "output_tokens": 0, "total_tokens": 0}
+    def pool_usage_summary(self, pool_name: str) -> PoolUsageSummary:
+        running_agents = []
+        usage: TelemetryUsage = {"input_tokens": 0, "output_tokens": 0, "total_tokens": 0}
         progress_values: list[int] = []
         last_activity_at = ""
         for agent, worker in self.processes.items():
             if worker.resource_pool != pool_name or worker.process.poll() is not None:
                 continue
             telemetry = self.worker_process_telemetry(worker)
+            telemetry_usage = _normalize_usage(telemetry.get("usage"))
             running_agents.append(
                 {
                     "agent": agent,
                     "progress_pct": telemetry.get("progress_pct"),
-                    "phase": telemetry.get("phase", ""),
-                    "total_tokens": telemetry.get("usage", {}).get("total_tokens", 0),
+                    "phase": str(telemetry.get("phase", "")),
+                    "usage": telemetry_usage,
                 }
             )
             for key in usage:
-                usage[key] += int(telemetry.get("usage", {}).get(key, 0) or 0)
+                usage[key] += telemetry_usage[key]
             progress_value = telemetry.get("progress_pct")
             if isinstance(progress_value, int):
                 progress_values.append(progress_value)
@@ -228,12 +248,12 @@ class StateMixin:
                 "recursion_guard": worker.recursion_guard,
                 "worktree_path": str(worker.worktree_path),
                 "log_path": str(worker.log_path),
-                "command": worker.command,
-                "phase": telemetry.get("phase", ""),
+                "command": _command_contract(worker.command, worker.wrapper_path),
+                "phase": str(telemetry.get("phase", "")),
                 "progress_pct": telemetry.get("progress_pct"),
-                "last_activity_at": telemetry.get("last_activity_at", ""),
-                "last_log_line": telemetry.get("last_line", ""),
-                "usage": telemetry.get("usage", {}),
+                "last_activity_at": str(telemetry.get("last_activity_at", "")),
+                "last_log_line": str(telemetry.get("last_line", "")),
+                "usage": _normalize_usage(telemetry.get("usage")),
             }
         return snapshot
 

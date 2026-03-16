@@ -13,8 +13,11 @@ from runtime.cp.contracts import (
     DashboardState,
     LaunchPolicyState,
     ManagerControlState,
+    ProcessCommand,
     ProcessSnapshot,
     ProviderQueueItem,
+    RunningAgentTelemetry,
+    TelemetryUsage,
     RuntimeWorkerEntry,
     TeamMailboxMessage,
     WorkerHandoffSummary,
@@ -50,8 +53,11 @@ class ControlPlaneArchitectureTest(unittest.TestCase):
         handoff: WorkerHandoffSummary = {"checkpoint_status": "checkpointed", "pending_work": ["merge patch"]}
         control: ManagerControlState = {"worker_count": 1, "active_agents": ["A1"]}
         launch_policy: LaunchPolicyState = {"default_strategy": "elastic", "available_strategies": ["elastic"]}
-        process_snapshot: ProcessSnapshot = {"provider": "ducc", "alive": True, "command": ["ducc"]}
-        provider_queue_item: ProviderQueueItem = {"resource_pool": "ducc_pool", "provider": "ducc", "launch_ready": True}
+        usage: TelemetryUsage = {"input_tokens": 12, "output_tokens": 4, "total_tokens": 16}
+        command: ProcessCommand = {"argv": ["ducc"], "binary": "ducc", "display": "ducc", "uses_wrapper": False}
+        running_agent: RunningAgentTelemetry = {"agent": "A1", "phase": "boot", "usage": usage}
+        process_snapshot: ProcessSnapshot = {"provider": "ducc", "alive": True, "command": command, "usage": usage}
+        provider_queue_item: ProviderQueueItem = {"resource_pool": "ducc_pool", "provider": "ducc", "launch_ready": True, "running_agents": [running_agent], "usage": usage}
         dashboard: DashboardState = {
             "updated_at": "2026-03-16T00:00:00Z",
             "last_event": "boot",
@@ -86,7 +92,9 @@ class ControlPlaneArchitectureTest(unittest.TestCase):
         self.assertEqual(a0_console["pending_count"], 0)
         self.assertEqual(launch_policy["default_strategy"], "elastic")
         self.assertEqual(process_snapshot["provider"], "ducc")
+        self.assertEqual(process_snapshot["command"]["binary"], "ducc")
         self.assertEqual(provider_queue_item["resource_pool"], "ducc_pool")
+        self.assertEqual(provider_queue_item["running_agents"][0]["usage"]["total_tokens"], 16)
         self.assertEqual(control["worker_count"], 1)
         self.assertEqual(dashboard["runtime"]["workers"][0]["agent"], "A1")
 

@@ -169,6 +169,33 @@ class HeartbeatState(TypedDict, total=False):
     agents: list[HeartbeatAgent]
 
 
+class TelemetryUsage(TypedDict, total=False):
+    input_tokens: int
+    output_tokens: int
+    total_tokens: int
+
+
+class ProcessCommand(TypedDict, total=False):
+    argv: list[str]
+    binary: str
+    display: str
+    uses_wrapper: bool
+
+
+class RunningAgentTelemetry(TypedDict, total=False):
+    agent: str
+    progress_pct: int | None
+    phase: str
+    usage: TelemetryUsage
+
+
+class PoolUsageSummary(TypedDict, total=False):
+    running_agents: list[RunningAgentTelemetry]
+    usage: TelemetryUsage
+    progress_pct: int | None
+    last_activity_at: str
+
+
 class ProcessSnapshot(TypedDict, total=False):
     resource_pool: str
     provider: str
@@ -180,12 +207,12 @@ class ProcessSnapshot(TypedDict, total=False):
     recursion_guard: str
     worktree_path: str
     log_path: str
-    command: list[str]
+    command: ProcessCommand
     phase: str
     progress_pct: int | None
     last_activity_at: str
     last_log_line: str
-    usage: dict[str, int]
+    usage: TelemetryUsage
 
 
 class ResolvedWorkerPlan(TypedDict, total=False):
@@ -225,8 +252,8 @@ class ProviderQueueItem(TypedDict, total=False):
     score: int
     latency_ms: int | None
     active_workers: int
-    running_agents: list[dict[str, Any]]
-    usage: dict[str, int]
+    running_agents: list[RunningAgentTelemetry]
+    usage: TelemetryUsage
     progress_pct: NotRequired[int | None]
     last_activity_at: NotRequired[str]
     last_failure: str

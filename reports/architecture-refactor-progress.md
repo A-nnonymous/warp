@@ -1,5 +1,21 @@
 # Architecture Refactor Progress
 
+- 时间：2026-03-16 09:3x CST
+- 当前阶段：继续沿 dashboard provider/process 子视图往内收，把 queue/snapshot 内层 telemetry、usage、command shape 收成明确 typed contract。
+- 本阶段代码成果：
+  - 在 `runtime/cp/contracts.py` 新增 `TelemetryUsage`、`ProcessCommand`、`RunningAgentTelemetry`、`PoolUsageSummary`，把 `provider_queue.running_agents` / `provider_queue.usage` / `process_snapshot.usage` / `process_snapshot.command` 从松散嵌套 dict/list 收成明确 contract。
+  - `state_mixin.py` 新增 usage/command 归一化 helper；`pool_usage_summary()` 改为返回 `PoolUsageSummary`，每个 running agent 现在携带完整 typed usage；`process_snapshot()` 也改为输出 typed command/usage，provider/process 两条 dashboard telemetry 视图共用一致 shape。
+  - 更新 `runtime/test_control_plane_architecture.py`、`runtime/test_control_plane_integration.py` 与 `runtime/cp/CODE_INDEX.md`，把新内层 contracts 纳入架构测试面，并回归 wrapper command / usage 聚合的 dashboard 集成断言。
+- 已验证：
+  - `uv run --no-project --with 'PyYAML>=6.0.2' python3 -m unittest runtime.test_control_plane_architecture runtime.test_control_plane_integration.ControlPlaneIntegrationTest.test_session_backed_provider_launches_without_api_key runtime.test_control_plane_integration.ControlPlaneIntegrationTest.test_ducc_prompt_file_flag_is_sanitized_for_stale_configs` ✅
+- 当前断点：
+  - provider/process 这条线的核心内层 telemetry 已 typed 化，但 `evaluate_resource_pool()` / `process_snapshot()` 里的 telemetry shaping 还留在 mixin 内；若下一阶段继续同主线，可把 usage/command/running-agent 归一化继续下沉成纯 helper/service，进一步削薄 mixin。
+  - `process_snapshot` 顶层仍保留 `wrapper_path` 与 `recursion_guard` 等平铺字段；若后续继续深挖，也可以考虑把 process launch/runtime metadata 再拆成更细 contract。
+- 下一步：
+  1. 继续沿 provider/process 主线，把 telemetry normalization（usage / command / running-agent shaping）抽成纯 service 或独立 helper 模块，减少 `state_mixin.py` 继续堆 view-model 细节。
+  2. 或在这条线再补一刀，把 process/provider 共用的 launch metadata 也 typed 化成更细子 contract。
+  3. 继续坚持“单阶段、单刀口、定向测试、单 commit”节奏。
+
 - 时间：2026-03-16 08:5x CST
 - 当前阶段：已把 dashboard 下钻子视图中最顺手的一刀收成明确 typed contract，provider/process/cleanup/launch-policy 这组返回面不再继续裸奔。
 - 本阶段代码成果：

@@ -886,9 +886,10 @@ class ControlPlaneIntegrationTest(unittest.TestCase):
         process_snapshot = state["processes"]["A1"]
         self.assertEqual(process_snapshot["recursion_guard"], "env+exec-wrapper")
         self.assertTrue(str(process_snapshot["wrapper_path"]).endswith("ducc_single_layer.sh"))
-        self.assertTrue(str(process_snapshot["command"][0]).endswith("ducc_single_layer.sh"))
-        self.assertNotIn("--prompt-file", process_snapshot["command"])
-        self.assertNotIn("--cwd", process_snapshot["command"])
+        self.assertTrue(str(process_snapshot["command"]["binary"]).endswith("ducc_single_layer.sh"))
+        self.assertTrue(process_snapshot["command"]["uses_wrapper"])
+        self.assertNotIn("--prompt-file", process_snapshot["command"]["argv"])
+        self.assertNotIn("--cwd", process_snapshot["command"]["argv"])
         self.assertEqual(process_snapshot["progress_pct"], 27)
         self.assertEqual(process_snapshot["usage"]["total_tokens"], 420)
         self.assertEqual(process_snapshot["phase"], "ducc boot")
@@ -896,6 +897,8 @@ class ControlPlaneIntegrationTest(unittest.TestCase):
         self.assertEqual(provider_queue["ducc_pool"]["active_workers"], 2)
         self.assertEqual(provider_queue["ducc_pool"]["usage"]["total_tokens"], 840)
         self.assertEqual(provider_queue["ducc_pool"]["progress_pct"], 27)
+        self.assertEqual(len(provider_queue["ducc_pool"]["running_agents"]), 2)
+        self.assertEqual(provider_queue["ducc_pool"]["running_agents"][0]["usage"]["total_tokens"], 420)
 
         self.stop_workers()
 
@@ -1002,8 +1005,8 @@ class ControlPlaneIntegrationTest(unittest.TestCase):
 
         state = self.wait_for_agent_state(expected_provider="ducc", expected_model="ducc-sonnet-it")
         process_snapshot = state["processes"]["A1"]
-        self.assertNotIn("--prompt-file", process_snapshot["command"])
-        self.assertNotIn("--cwd", process_snapshot["command"])
+        self.assertNotIn("--prompt-file", process_snapshot["command"]["argv"])
+        self.assertNotIn("--cwd", process_snapshot["command"]["argv"])
         self.stop_workers()
 
     def test_session_probe_failure_surfaces_actionable_error(self) -> None:
