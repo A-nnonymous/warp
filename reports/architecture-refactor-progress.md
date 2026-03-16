@@ -1,20 +1,23 @@
 # Architecture Refactor Progress
 
 - 时间：2026-03-16 11:xx CST
-- 当前阶段：进入单独的“测试增强”阶段，目标不是继续拆 service，而是补系统外沿高风险面：config / launch / CLI / API / bootstrap 长链路。
+- 当前阶段：单独的 A0 能力补洞阶段，目标是用最小 Dummy DAG 清掉 orchestration / mailbox / workflow 交界处剩余高价值盲区，重点补齐 A0 的取消 / 中断 / 改规划（replan）。
 - 本阶段代码成果：
-  - 新增 `runtime/test_control_plane_runtime_edges.py`，补 `config_mixin.py` / `launch_mixin.py` / `cli.py` / `network.py` 的高风险分支：stale provider/pool repair、workers section filtering、脏 worktree 阻断、sync failure 透传、bootstrap config resolve、命令参数净化、静态路径防穿越。
-  - 扩展 `runtime/test_control_plane_integration.py`，新增两条系统级 smoke：
-    - `test_cli_api_smoke_suite_covers_config_text_peek_and_stop_listener_alias`
-    - `test_bootstrap_cold_start_config_save_then_launch_smoke`
-  - 更新 `reports/architecture-refactor-coverage-audit.md`，把本轮系统外沿补测记录进 audit，明确哪些盲区已补、哪些仍未完全覆盖。
+  - 扩展 `runtime/test_control_plane_integration.py`，新增 3 条 Dummy DAG 集成测试：
+    - `test_dummy_dag_cancel_closes_root_request_and_keeps_dependent_blocked`
+    - `test_dummy_dag_unlock_and_intervention_requests_can_change_state_or_disappear`
+    - `test_dummy_dag_replan_resets_stale_a0_request_state_and_reassigns_owner`
+  - 新增轻量 test helper：直接在临时复制仓里写入最小 backlog / heartbeat / runtime / status / checkpoint 状态，避免启动重型 worker 编排去制造场景。
+  - 在 `runtime/cp/backlog_mixin.py` 增加极小支撑修补：workflow update 后失效对应 task 的旧 `plan_review` / `task_review` request state，防止 replan 继承旧 `resume` / 已处理状态。
+  - 更新 `reports/architecture-refactor-coverage-audit.md`，把 A0 cancel / interrupt / replan 的新增覆盖面记账。
 - 已验证：
-  - `uv run --no-project --with 'PyYAML>=6.0.2' python3 -m unittest runtime.test_control_plane_runtime_edges runtime.test_control_plane_architecture runtime.test_control_plane_integration` ✅（41 tests, OK）
+  - `uv run --with 'PyYAML>=6.0.2' python -m unittest runtime.test_control_plane_integration.ControlPlaneIntegrationTest.test_dummy_dag_cancel_closes_root_request_and_keeps_dependent_blocked runtime.test_control_plane_integration.ControlPlaneIntegrationTest.test_dummy_dag_unlock_and_intervention_requests_can_change_state_or_disappear runtime.test_control_plane_integration.ControlPlaneIntegrationTest.test_dummy_dag_replan_resets_stale_a0_request_state_and_reassigns_owner runtime.test_control_plane_integration.ControlPlaneIntegrationTest.test_workflow_update_allows_a0_replan runtime.test_workflow_patch_service runtime.test_dashboard_queue_service` ✅（14 tests, OK）
+  - `uv run --with 'PyYAML>=6.0.2' python -m unittest discover -s runtime -p 'test_*.py'` ✅（99 tests, OK）
 - 当前断点：
-  - 主干 coverage guard 仍维持 `contracts + services + stores` 的 97% 门槛；本轮主要增加的是系统级保障，不改变 guard 统计口径。
-  - config / launch / CLI / API 面已经补到一轮高价值 smoke，但完整 failure matrix（如 worktree branch 冲突、bind 失败恢复、更多 handler 组合）仍有余量。
+  - A0 的 cancel / interrupt / replan 主链路现在已有低成本集成覆盖，尤其 request catalog / mailbox / workflow update 的联动已被锁住。
+  - 仍未系统覆盖的余量主要在更宽的 failure matrix：多 worker 并发 cleanup blocker 组合、更多 CLI/API handler 交叉异常、真实 launch failure 与 workflow 交错后的长期状态修复。
 - 下一步：
-  1. 保持本阶段停在测试增强 + 文档 + 单独 commit。
+  1. 本阶段停在测试增强 + 文档 + 单独 commit。
   2. push 当前分支，不继续打开下一阶段。
 
 

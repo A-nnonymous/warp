@@ -408,6 +408,130 @@ class ControlPlaneIntegrationTest(unittest.TestCase):
         session_state_path = self.warp_root / "runtime" / f"session_state_{self.port}.json"
         return json.loads(session_state_path.read_text(encoding="utf-8"))
 
+    def write_state_payload(self, relative_path: str, payload: dict[str, object]) -> None:
+        path = self.warp_root / relative_path
+        path.write_text(json.dumps(payload, indent=2) + "\n", encoding="utf-8")
+
+    def write_worker_handoff(self, agent: str, *, status: str, blockers: list[str], requested_unlocks: list[str], next_checkin: str, checkpoint_status: str, pending_work: list[str], dependencies: list[str], resume_instruction: str) -> None:
+        status_lines = [
+            f"# {agent} Status",
+            "",
+            f"Status: {status}",
+            "",
+            "## Blockers",
+            *(f"- {item}" for item in (blockers or ["none"])),
+            "",
+            "## Requested Unlocks",
+            *(f"- {item}" for item in (requested_unlocks or ["none"])),
+            "",
+            "## Next Check-in Condition",
+            next_checkin,
+            "",
+        ]
+        checkpoint_lines = [
+            f"# {agent} Checkpoint",
+            "",
+            f"Status: {checkpoint_status}",
+            "",
+            "## Pending Work",
+            *(f"- {item}" for item in (pending_work or ["none"])),
+            "",
+            "## Dependencies",
+            *(f"- {item}" for item in (dependencies or ["none"])),
+            "",
+            "## Resume Instruction",
+            resume_instruction,
+            "",
+        ]
+        (self.warp_root / "status" / "agents" / f"{agent}.md").write_text("\n".join(status_lines), encoding="utf-8")
+        (self.warp_root / "checkpoints" / "agents" / f"{agent}.md").write_text("\n".join(checkpoint_lines), encoding="utf-8")
+
+    def install_dummy_dag(self) -> None:
+        self.write_state_payload(
+            "state/backlog.yaml",
+            {
+                "project": "dummy-a0-it",
+                "manager": "A0",
+                "phase": "dummy-a0",
+                "items": [
+                    {
+                        "id": "A1-001",
+                        "title": "Dummy root lane",
+                        "task_type": "dummy_root",
+                        "owner": "A1",
+                        "status": "pending",
+                        "claim_state": "unclaimed",
+                        "claimed_by": "",
+                        "plan_required": True,
+                        "plan_state": "none",
+                        "gate": "G0",
+                        "priority": "P0",
+                        "dependencies": [],
+                        "outputs": ["root.txt"],
+                        "done_when": ["root accepted or closed"],
+                    },
+                    {
+                        "id": "A2-001",
+                        "title": "Dummy dependent lane",
+                        "task_type": "dummy_child",
+                        "owner": "A2",
+                        "status": "pending",
+                        "claim_state": "unclaimed",
+                        "claimed_by": "",
+                        "plan_required": False,
+                        "plan_state": "none",
+                        "gate": "G1",
+                        "priority": "P0",
+                        "dependencies": ["A1-001"],
+                        "outputs": ["child.txt"],
+                        "done_when": ["child only runs after root"],
+                    },
+                ],
+            },
+        )
+
+    def seed_worker_runtime(self, agent: str, *, runtime_status: str, heartbeat_state: str, evidence: str, escalation: str = "none") -> None:
+        worker = self.worker_roots[agent]
+        self.write_state_payload(
+            "state/agent_runtime.yaml",
+            {
+                "workers": [
+                    {
+                        "agent": agent,
+                        "task_id": f"{agent}-001",
+                        "repository_name": "target-repo-it",
+                        "resource_pool": "ducc_pool",
+                        "provider": "ducc",
+                        "model": "claude-sonnet-4-5",
+                        "worktree_path": str(worker),
+                        "branch": f"integration-{agent.lower()}",
+                        "merge_target": "main",
+                        "environment_type": "none",
+                        "sync_command": "none",
+                        "test_command": "pytest -q",
+                        "submit_strategy": "patch_handoff",
+                        "status": runtime_status,
+                    }
+                ]
+            },
+        )
+        self.write_state_payload(
+            "state/heartbeats.yaml",
+            {
+                "agents": [
+                    {
+                        "agent": agent,
+                        "role": "worker",
+                        "state": heartbeat_state,
+                        "last_seen": "2026-03-16T03:00:00Z",
+                        "evidence": evidence,
+                        "expected_next_checkin": "manual",
+                        "escalation": escalation,
+                    }
+                ]
+            },
+        )
+
     def wait_for_agent_state(self, expected_provider: str, expected_model: str | None = None) -> dict[str, object]:
         final_state: dict[str, object] = {}
 
@@ -572,6 +696,195 @@ class ControlPlaneIntegrationTest(unittest.TestCase):
             any(
                 item.get("related_task_ids") == ["A1-001"] and item.get("to") in {"A2", "all"}
                 for item in state["team_mailbox"]["messages"]
+            )
+        )
+
+    def test_dummy_dag_cancel_closes_root_request_and_keeps_dependent_blocked(self) -> None:
+        self.install_dummy_dag()
+
+        plan_request = read_json(
+            f"{self.base_url}/api/tasks/action",
+            {"task_id": "A1-001", "action": "submit_plan", "agent": "A1", "note": "dummy root plan for cancellation"},
+        )
+        self.assertTrue(plan_request["ok"])
+
+        state_with_request = self.fetch_state()
+        requests = {item["task_id"]: item for item in state_with_request["a0_console"]["requests"] if item.get("task_id")}
+        self.assertEqual(requests["A1-001"]["request_type"], "plan_review")
+        self.assertIn("A1-001", state_with_request["cleanup"]["pending_plan_reviews"])
+        backlog_before_cancel = {item["id"]: item for item in state_with_request["backlog"]["items"]}
+        self.assertEqual(backlog_before_cancel["A2-001"]["status"], "pending")
+        self.assertEqual(backlog_before_cancel["A2-001"]["dependencies"], ["A1-001"])
+
+        cancelled = read_json(
+            f"{self.base_url}/api/workflow/update",
+            {
+                "task_id": "A1-001",
+                "agent": "A0",
+                "note": "Cancel this root lane; do not advance dependent work.",
+                "updates": {
+                    "status": "closed",
+                    "claim_state": "completed",
+                    "plan_state": "none",
+                    "review_note": "cancelled by A0",
+                },
+            },
+        )
+        self.assertTrue(cancelled["ok"])
+        self.assertEqual(cancelled["task"]["status"], "closed")
+        self.assertEqual(cancelled["task"]["plan_state"], "none")
+
+        refreshed = self.fetch_state()
+        self.assertFalse(any(item.get("task_id") == "A1-001" for item in refreshed["a0_console"]["requests"]))
+        self.assertNotIn("A1-001", refreshed["cleanup"]["pending_plan_reviews"])
+        backlog_after_cancel = {item["id"]: item for item in refreshed["backlog"]["items"]}
+        self.assertEqual(backlog_after_cancel["A1-001"]["status"], "closed")
+        self.assertEqual(backlog_after_cancel["A2-001"]["status"], "pending")
+        self.assertEqual(backlog_after_cancel["A2-001"]["dependencies"], ["A1-001"])
+        self.assertTrue(
+            any(
+                item.get("to") == "A1"
+                and item.get("related_task_ids") == ["A1-001"]
+                and "Cancel this root lane" in item.get("body", "")
+                for item in refreshed["team_mailbox"]["messages"]
+            )
+        )
+
+    def test_dummy_dag_unlock_and_intervention_requests_can_change_state_or_disappear(self) -> None:
+        self.install_dummy_dag()
+        self.write_worker_handoff(
+            "A2",
+            status="waiting",
+            blockers=["waiting for config handoff"],
+            requested_unlocks=["config.yaml"],
+            next_checkin="after manager unlock",
+            checkpoint_status="waiting",
+            pending_work=["apply config and continue"],
+            dependencies=["A1-001"],
+            resume_instruction="unlock config then resume the lane",
+        )
+        self.seed_worker_runtime(
+            "A2",
+            runtime_status="waiting",
+            heartbeat_state="healthy",
+            evidence="blocked on config",
+        )
+
+        state = self.fetch_state()
+        unlock_request = next(item for item in state["a0_console"]["requests"] if item["agent"] == "A2")
+        self.assertEqual(unlock_request["request_type"], "unlock")
+        self.assertEqual(unlock_request["response_state"], "pending")
+
+        resumed = read_json(
+            f"{self.base_url}/api/a0/respond",
+            {
+                "request_id": unlock_request["id"],
+                "message": "Unlock approved; resume after config sync.",
+                "action": "resume",
+            },
+        )
+        self.assertTrue(resumed["ok"])
+
+        resumed_state = self.fetch_state()
+        resumed_request = next(item for item in resumed_state["a0_console"]["requests"] if item["id"] == unlock_request["id"])
+        self.assertEqual(resumed_request["response_state"], "resume")
+
+        self.write_worker_handoff(
+            "A2",
+            status="stale",
+            blockers=["worker exited with 7"],
+            requested_unlocks=[],
+            next_checkin="manual intervention",
+            checkpoint_status="stalled",
+            pending_work=["recover worker and re-enter lane"],
+            dependencies=["A1-001"],
+            resume_instruction="inspect failure before relaunch",
+        )
+        self.seed_worker_runtime(
+            "A2",
+            runtime_status="stale",
+            heartbeat_state="stale",
+            evidence="process_exit",
+            escalation="worker exited with 7",
+        )
+
+        intervention_state = self.fetch_state()
+        self.assertFalse(any(item["id"] == unlock_request["id"] for item in intervention_state["a0_console"]["requests"]))
+        intervention_request = next(item for item in intervention_state["a0_console"]["requests"] if item["agent"] == "A2")
+        self.assertEqual(intervention_request["request_type"], "worker_intervention")
+        self.assertEqual(intervention_request["response_state"], "pending")
+
+        cancelled = read_json(
+            f"{self.base_url}/api/a0/respond",
+            {
+                "request_id": intervention_request["id"],
+                "message": "Cancel this intervention request; keep the lane parked.",
+                "action": "cancel",
+            },
+        )
+        self.assertTrue(cancelled["ok"])
+
+        final_state = self.fetch_state()
+        final_request = next(item for item in final_state["a0_console"]["requests"] if item["id"] == intervention_request["id"])
+        self.assertEqual(final_request["response_state"], "cancel")
+        self.assertIn("Cancel this intervention request", final_request["response_note"])
+
+    def test_dummy_dag_replan_resets_stale_a0_request_state_and_reassigns_owner(self) -> None:
+        self.install_dummy_dag()
+
+        plan_request = read_json(
+            f"{self.base_url}/api/tasks/action",
+            {"task_id": "A1-001", "action": "submit_plan", "agent": "A1", "note": "initial dummy plan"},
+        )
+        self.assertTrue(plan_request["ok"])
+
+        state = self.fetch_state()
+        original_request = next(item for item in state["a0_console"]["requests"] if item.get("task_id") == "A1-001")
+        self.assertEqual(original_request["response_state"], "pending")
+
+        responded = read_json(
+            f"{self.base_url}/api/a0/respond",
+            {
+                "request_id": original_request["id"],
+                "message": "Resume with the original draft while I review it.",
+                "action": "resume",
+            },
+        )
+        self.assertTrue(responded["ok"])
+
+        replanned = read_json(
+            f"{self.base_url}/api/workflow/update",
+            {
+                "task_id": "A1-001",
+                "agent": "A0",
+                "note": "Reassign this root lane to A2 and require a fresh plan.",
+                "updates": {
+                    "owner": "A2",
+                    "claimed_by": "A2",
+                    "status": "pending",
+                    "claim_state": "claimed",
+                    "dependencies": ["A2-001"],
+                    "plan_required": True,
+                    "plan_state": "pending_review",
+                    "plan_summary": "fresh plan after manager replan",
+                    "claim_note": "manager replanned the lane",
+                    "review_note": "old approval is stale",
+                },
+            },
+        )
+        self.assertTrue(replanned["ok"])
+        self.assertEqual(replanned["task"]["owner"], "A2")
+        self.assertEqual(replanned["task"]["claimed_by"], "A2")
+
+        refreshed = self.fetch_state()
+        replanned_request = next(item for item in refreshed["a0_console"]["requests"] if item.get("task_id") == "A1-001")
+        self.assertEqual(replanned_request["agent"], "A2")
+        self.assertEqual(replanned_request["response_state"], "pending")
+        self.assertEqual(replanned_request["body"], "fresh plan after manager replan")
+        self.assertTrue(
+            any(
+                item.get("related_task_ids") == ["A1-001"] and item.get("to") in {"A2", "all"}
+                for item in refreshed["team_mailbox"]["messages"]
             )
         )
 

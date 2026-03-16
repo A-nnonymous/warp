@@ -16,7 +16,7 @@ from .services import (
     workflow_patch_notifications,
 )
 from .stores import BacklogStore
-from .utils import now_iso, summarize_list, terminate_process_tree
+from .utils import now_iso, slugify, summarize_list, terminate_process_tree
 
 
 class BacklogMixin:
@@ -151,6 +151,21 @@ class BacklogMixin:
     def summarize_workflow_patch(self, before: dict[str, Any], after: dict[str, Any]) -> str:
         return summarize_workflow_patch(before, after)
 
+    def invalidate_task_request_state(self, task_id: str) -> None:
+        stored = self.load_manager_console_state()
+        requests = stored.setdefault("requests", {})
+        request_ids = {
+            slugify(f"{task_id}_plan_review"),
+            slugify(f"{task_id}_task_review"),
+        }
+        changed = False
+        for request_id in request_ids:
+            if request_id in requests:
+                requests.pop(request_id, None)
+                changed = True
+        if changed:
+            self.persist_manager_console_state(stored)
+
     def patch_workflow_item(self, task_id: str, updates: WorkflowPatch, actor: str = "A0", note: str = "") -> BacklogItem:
         manager = str(actor or "A0").strip() or "A0"
         if manager != "A0":
@@ -165,6 +180,7 @@ class BacklogMixin:
             return apply_workflow_patch(item, updates=updates, current_time=now_iso())
 
         updated = self.update_backlog_item(task_id, mutate)
+        self.invalidate_task_request_state(task_id)
         summary = self.summarize_workflow_patch(before, updated)
         for notification in workflow_patch_notifications(
             task_id=task_id,

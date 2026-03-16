@@ -1,7 +1,7 @@
 # Architecture Refactor Coverage Audit
 
-- 时间：2026-03-16 10:xx CST
-- 阶段目标：对 architecture refactor 主干补一轮 coverage / 全量测试盘点，把 coverage >90% 落成可执行、可失败、可回归的门槛。
+- 时间：2026-03-16 11:xx CST
+- 阶段目标：在上一轮 coverage / smoke 之后，继续清理 orchestration / A0 / mailbox / workflow 剩余测试盲区，重点补齐 A0 的取消 / 中断 / 改规划（replan）能力覆盖。
 
 ## 1. 结论
 
@@ -11,6 +11,16 @@
 - `launch_mixin.py`：补脏 worktree / sync failure 这类启动前阻断分支
 - `cli.py` / `api_mixin.py` / `network.py`：补 bootstrap cold-start、config_text + peek smoke、`stop-listener` alias、命令参数净化与静态路径防穿越
 - integration：新增 template/bootstrap -> 保存配置 -> 成功 launch 的长链路烟测
+
+这一阶段新增的关键补洞是：
+
+- `runtime/test_control_plane_integration.py`
+  - 新增一个极小 Dummy DAG fixture（`A1-001 -> A2-001`）
+  - 覆盖 A0 对 root lane 的取消：关闭 pending plan review，并验证下游依赖不被误推进
+  - 覆盖 manager-facing unlock -> intervention 状态切换，以及 A0 对 request 的 `resume` / `cancel` 响应
+  - 覆盖 replan 后 owner/claimed_by 迁移、team mailbox fanout，以及**旧 A0 request state 被失效**，避免旧 `resume` 把新 plan-review 请求错误标成已处理
+- `runtime/cp/backlog_mixin.py`
+  - 新增极小支撑修补：`patch_workflow_item()` 在 workflow update 后清掉对应 task 的 `plan_review` / `task_review` 持久化 request state，保证 replan 后 A0 看到的是新的 pending request，而不是继承旧回复状态
 
 主干 coverage 门槛本身仍然由下面这个守卫脚本负责：
 
@@ -30,8 +40,8 @@ uv run --no-project --with 'PyYAML>=6.0.2' --with 'coverage>=7.6.0' python3 runt
 本次实测结果：
 
 - 覆盖统计范围：`runtime/cp/contracts.py` + `runtime/cp/services/*.py` + `runtime/cp/stores/*.py`
-- 最终 coverage：**97%**（1423 statements / 39 missed）
-- 同次运行中，全量测试结果：**88 tests, OK**
+- 最终 coverage：**97%**（主干 guard 统计口径不变）
+- 同次运行中，全量测试结果：**99 tests, OK**
 
 额外核对：
 
