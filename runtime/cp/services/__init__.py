@@ -1,5 +1,6 @@
 from .backlog_notifications import mailbox_notification, task_action_notification, workflow_patch_notifications
 from .dashboard_queue import build_a0_request_catalog, build_merge_queue
+from .mailbox_views import build_team_mailbox_catalog, manager_inbox, pending_mailbox_messages
 from .dashboard_summary import compute_manager_control_state, summarize_worker_handoff
 from .pool_selection import (
     best_pool_for_provider,
@@ -41,9 +42,11 @@ __all__ = [
     "best_pool_for_worker",
     "build_a0_request_catalog",
     "build_merge_queue",
+    "build_team_mailbox_catalog",
     "command_contract",
     "build_task_profile",
     "mailbox_notification",
+    "manager_inbox",
     "compute_manager_control_state",
     "configured_api_key",
     "configured_pool_candidates",
@@ -52,6 +55,7 @@ __all__ = [
     "pool_rank_tuple",
     "process_launch_metadata",
     "process_runtime_metadata",
+    "pending_mailbox_messages",
     "process_snapshot_entry",
     "provider_auth_mode",
     "provider_auth_status",

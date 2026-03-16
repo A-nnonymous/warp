@@ -432,7 +432,7 @@ Last updated: {now_iso()}
         return build_a0_request_catalog(
             self.backlog_items(),
             merge_queue,
-            mailbox_state.get("messages", []),
+            mailbox_state,
             stored.get("requests", {}),
             stored.get("messages", []),
         )

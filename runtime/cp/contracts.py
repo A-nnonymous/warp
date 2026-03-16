@@ -356,6 +356,7 @@ class TeamMailboxState(TypedDict, total=False):
     messages: list[TeamMailboxMessage]
     pending_count: int
     a0_pending_count: int
+    a0_inbox: list[TeamMailboxMessage]
     last_updated: str
 
 

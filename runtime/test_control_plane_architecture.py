@@ -27,6 +27,7 @@ from runtime.cp.contracts import (
     WorkflowPatch,
 )
 from runtime.cp.services.backlog_notifications import task_action_notification, workflow_patch_notifications
+from runtime.cp.services.mailbox_views import build_team_mailbox_catalog
 from runtime.cp.services.provider_auth import configured_api_key, provider_auth_mode, provider_auth_status, provider_probe_timeout, provider_probe_values
 from runtime.cp.services.provider_queue import provider_queue_item
 from runtime.cp.services.telemetry_views import (
@@ -64,7 +65,8 @@ class ControlPlaneArchitectureTest(unittest.TestCase):
         cleanup_state: CleanupState = {"ready": False, "blockers": ["active workers"], "workers": [cleanup_worker]}
         workflow_patch: WorkflowPatch = {"status": "review", "dependencies": ["A0-001"]}
         mailbox_message: TeamMailboxMessage = {"from": "A1", "to": "A0", "topic": "status_note"}
-        a0_console: A0ConsoleState = {"requests": [], "messages": [], "inbox": [], "pending_count": 0}
+        mailbox_catalog = build_team_mailbox_catalog([mailbox_message])
+        a0_console: A0ConsoleState = {"requests": [], "messages": [], "inbox": mailbox_catalog["a0_inbox"], "pending_count": 0}
         handoff: WorkerHandoffSummary = {"checkpoint_status": "checkpointed", "pending_work": ["merge patch"]}
         control: ManagerControlState = {"worker_count": 1, "active_agents": ["A1"]}
         launch_policy: LaunchPolicyState = {"default_strategy": "elastic", "available_strategies": ["elastic"]}
@@ -161,7 +163,7 @@ class ControlPlaneArchitectureTest(unittest.TestCase):
             "resolved_workers": [],
             "merge_queue": [{"agent": "A1", "checkpoint_status": handoff["checkpoint_status"]}],
             "a0_console": a0_console,
-            "team_mailbox": {"messages": [mailbox_message], "pending_count": 1},
+            "team_mailbox": mailbox_catalog,
             "cleanup": cleanup_state,
             "config": {"project": {"repository_name": "warp"}},
             "config_text": "project: warp",

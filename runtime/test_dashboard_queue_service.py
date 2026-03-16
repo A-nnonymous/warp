@@ -2,7 +2,7 @@ from __future__ import annotations
 
 import unittest
 
-from runtime.cp.services import build_a0_request_catalog, build_merge_queue
+from runtime.cp.services import build_a0_request_catalog, build_merge_queue, build_team_mailbox_catalog
 from runtime.cp.utils import slugify
 
 
@@ -106,7 +106,8 @@ class DashboardQueueServiceTest(unittest.TestCase):
         }
         messages = [{"id": "old", "body": "kept"}]
 
-        catalog = build_a0_request_catalog(backlog_items, merge_queue, mailbox_messages, request_state, messages)
+        mailbox_catalog = build_team_mailbox_catalog(mailbox_messages)
+        catalog = build_a0_request_catalog(backlog_items, merge_queue, mailbox_catalog, request_state, messages)
 
         self.assertEqual(catalog["pending_count"], 4)
         self.assertEqual([item["agent"] for item in catalog["requests"]], ["A1", "A3", "A4", "A2"])

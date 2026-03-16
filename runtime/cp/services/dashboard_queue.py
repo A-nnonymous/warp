@@ -9,6 +9,7 @@ from ..contracts import (
     BacklogItem,
     MergeQueueItem,
     TeamMailboxMessage,
+    TeamMailboxState,
     WorkerHandoffSummary,
 )
 from ..utils import now_iso, slugify, summarize_list
@@ -81,31 +82,20 @@ def build_merge_queue(
     return queue
 
 
-def manager_inbox(messages: list[TeamMailboxMessage] | None) -> list[TeamMailboxMessage]:
-    normalized_messages = messages if isinstance(messages, list) else []
-    return [
-        item
-        for item in normalized_messages
-        if isinstance(item, dict)
-        and str(item.get("ack_state") or "") != "resolved"
-        and (
-            str(item.get("to") or "") in {"A0", "a0", "manager", "all"}
-            or str(item.get("scope") or "") in {"broadcast", "manager"}
-        )
-    ]
 
 
 def build_a0_request_catalog(
     backlog_items: list[BacklogItem],
     merge_queue: list[MergeQueueItem],
-    mailbox_messages: list[TeamMailboxMessage] | None,
+    mailbox_catalog: TeamMailboxState | None,
     request_state: dict[str, A0ConsoleRequest] | None = None,
     messages: list[A0ConsoleMessage] | None = None,
 ) -> A0ConsoleState:
     normalized_request_state = request_state if isinstance(request_state, dict) else {}
     normalized_messages = messages if isinstance(messages, list) else []
     requests: list[A0ConsoleRequest] = []
-    inbox = manager_inbox(mailbox_messages)
+    normalized_mailbox = mailbox_catalog if isinstance(mailbox_catalog, dict) else {}
+    inbox = normalized_mailbox.get("a0_inbox", []) if isinstance(normalized_mailbox.get("a0_inbox", []), list) else []
 
     for item in backlog_items:
         if not isinstance(item, dict):

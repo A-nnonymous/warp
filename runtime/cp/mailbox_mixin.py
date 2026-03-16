@@ -8,6 +8,7 @@ from .constants import (
     STATE_DIR,
     TEAM_MAILBOX_PATH,
 )
+from .services import build_team_mailbox_catalog
 from .stores import LockStore, MailboxStore
 from .utils import (
     now_iso,
@@ -87,19 +88,7 @@ class MailboxMixin:
 
     def team_mailbox_catalog(self) -> TeamMailboxState:
         state = self.load_team_mailbox_state()
-        messages = state.get("messages", [])
-        pending_messages = [item for item in messages if str(item.get("ack_state") or "") != "resolved"]
-        a0_messages = [
-            item
-            for item in pending_messages
-            if str(item.get("to") or "") in {"A0", "a0", "manager", "all"} or str(item.get("scope") or "") in {"broadcast", "manager"}
-        ]
-        return {
-            "messages": messages[-50:],
-            "pending_count": len(pending_messages),
-            "a0_pending_count": len(a0_messages),
-            "last_updated": now_iso(),
-        }
+        return build_team_mailbox_catalog(state.get("messages", []))
 
     def edit_lock_state(self) -> dict[str, Any]:
         return self.lock_store().load()

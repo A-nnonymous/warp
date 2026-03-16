@@ -1,5 +1,21 @@
 # Architecture Refactor Progress
 
+- 时间：2026-03-16 10:0x CST
+- 当前阶段：收 mailbox/mailbox_mixin 尾巴，把 mailbox catalog / A0 inbox filtering / pending 统计从 mixin/dashboard 消费面一起抽到独立 view service，优先压缩 backlog-mailbox 剩余面。
+- 本阶段代码成果：
+  - 新增 `runtime/cp/services/mailbox_views.py`，沉淀 `pending_mailbox_messages()`、`manager_inbox()`、`build_team_mailbox_catalog()`，统一承载 team mailbox catalog shaping、A0 inbox 过滤与 pending 计数。
+  - `mailbox_mixin.py` 的 `team_mailbox_catalog()` 改成薄委托；`dashboard_mixin.py` / `services/dashboard_queue.py` 不再各自重算 mailbox inbox，而是直接消费 `TeamMailboxState.a0_inbox`，让 mailbox payload shaping 与 A0 request 聚合对齐到同一来源。
+  - `runtime/cp/contracts.py` 为 `TeamMailboxState` 补上 `a0_inbox` typed shape；新增 `runtime/test_mailbox_view_service.py`，并更新 `runtime/test_dashboard_queue_service.py`、`runtime/test_control_plane_architecture.py`、`runtime/cp/services/__init__.py`、`runtime/cp/CODE_INDEX.md`，把 mailbox view service 纳入纯函数测试、架构测试面与索引。
+- 已验证：
+  - `uv run --no-project --with 'PyYAML>=6.0.2' python3 -m unittest runtime.test_mailbox_view_service runtime.test_dashboard_queue_service runtime.test_control_plane_architecture runtime.test_control_plane_integration.ControlPlaneIntegrationTest.test_team_mailbox_send_and_acknowledge_flow runtime.test_control_plane_integration.ControlPlaneIntegrationTest.test_a0_console_records_user_reply runtime.test_control_plane_integration.ControlPlaneIntegrationTest.test_task_actions_drive_plan_and_review_flow` ✅
+- 当前断点：
+  - mailbox catalog / A0 inbox filtering / pending 统计已从 mixin 与 dashboard 双侧散落逻辑收成单一 service，但 `build_a0_request_catalog()` 本体里 backlog plan-review / task-review / worker intervention request 生成仍是另一大块 manager-facing 聚合逻辑，尚未继续拆细 helper。
+  - `mailbox_mixin.py` 里 cleanup/status 与 record-a0-message 仍混在同一 mixin；若继续追求彻底收尾，后面可再评估是否把 cleanup blockers 视图或 manager-console message shaping 再切开。
+- 下一步：
+  1. 优先继续 mailbox/dashboard 收尾时，可把 `build_a0_request_catalog()` 内部的 backlog review request / intervention request 生成拆成更明确 helper，进一步压缩 dashboard/mailbox 消费面残留。
+  2. 若 mailbox/dashboard 这条线已够薄，则回头只做真正剩余的大块——`cleanup_status()` 的 blockers/worker-row shaping，而不是再碰 provider/process 边角。
+  3. 继续坚持“单阶段、单刀口、定向测试、单 commit”节奏。
+
 - 时间：2026-03-16 09:54 CST
 - 当前阶段：转切 backlog 支线，把 `backlog_mixin.py` 里的 mailbox fanout / notification routing 从 manager orchestration 中抽到纯 service，优先缩短 backlog/mailbox 残留尾巴。
 - 本阶段代码成果：
