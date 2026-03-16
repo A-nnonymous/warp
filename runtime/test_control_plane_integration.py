@@ -713,6 +713,69 @@ class ControlPlaneIntegrationTest(unittest.TestCase):
             )
         )
 
+    def test_task_action_handler_recovers_from_malformed_requests(self) -> None:
+        status_code, invalid_json = request_bytes_allow_error(f"{self.base_url}/api/tasks/action", b"{broken")
+        self.assertEqual(status_code, 400)
+        self.assertFalse(invalid_json["ok"])
+        self.assertIn("invalid json", invalid_json["error"])
+
+        status_code, unsupported_action = request_json_allow_error(
+            f"{self.base_url}/api/tasks/action",
+            {"task_id": "A1-001", "action": "warp-drive", "agent": "A1"},
+        )
+        self.assertEqual(status_code, 400)
+        self.assertFalse(unsupported_action["ok"])
+        self.assertIn("unsupported task action warp-drive", unsupported_action["error"])
+
+        claimed = read_json(
+            f"{self.base_url}/api/tasks/action",
+            {"task_id": "A1-001", "action": "claim", "agent": "A1", "note": "recover after malformed action"},
+        )
+        self.assertTrue(claimed["ok"])
+        self.assertEqual(claimed["task"]["claimed_by"], "A1")
+        self.assertEqual(claimed["task"]["claim_state"], "claimed")
+
+    def test_workflow_update_handler_recovers_from_malformed_requests(self) -> None:
+        status_code, invalid_json = request_bytes_allow_error(f"{self.base_url}/api/workflow/update", b"{broken")
+        self.assertEqual(status_code, 400)
+        self.assertFalse(invalid_json["ok"])
+        self.assertIn("invalid json", invalid_json["error"])
+
+        status_code, bad_patch = request_json_allow_error(
+            f"{self.base_url}/api/workflow/update",
+            {
+                "task_id": "A1-001",
+                "agent": "A0",
+                "updates": {"dependencies": 7},
+            },
+        )
+        self.assertEqual(status_code, 400)
+        self.assertFalse(bad_patch["ok"])
+        self.assertEqual(bad_patch["error"], "workflow field dependencies must be a list or comma-separated string")
+
+        updated = read_json(
+            f"{self.base_url}/api/workflow/update",
+            {
+                "task_id": "A1-001",
+                "agent": "A0",
+                "note": "recover after malformed patch",
+                "updates": {
+                    "owner": "A2",
+                    "claimed_by": "A2",
+                    "status": "pending",
+                    "claim_state": "claimed",
+                    "dependencies": ["A2-001"],
+                    "plan_required": True,
+                    "plan_state": "pending_review",
+                    "plan_summary": "fresh plan after malformed patch recovery",
+                },
+            },
+        )
+        self.assertTrue(updated["ok"])
+        self.assertEqual(updated["task"]["owner"], "A2")
+        self.assertEqual(updated["task"]["dependencies"], ["A2-001"])
+        self.assertEqual(updated["task"]["plan_state"], "pending_review")
+
     def test_dummy_dag_cancel_closes_root_request_and_keeps_dependent_blocked(self) -> None:
         self.install_dummy_dag()
 
@@ -936,6 +999,38 @@ class ControlPlaneIntegrationTest(unittest.TestCase):
         refreshed = self.fetch_state()
         self.assertFalse(any(item["id"] == message_id for item in refreshed["a0_console"]["inbox"]))
 
+    def test_team_mail_handler_recovers_from_malformed_requests(self) -> None:
+        status_code, invalid_json = request_bytes_allow_error(f"{self.base_url}/api/team-mail/send", b"{broken")
+        self.assertEqual(status_code, 400)
+        self.assertFalse(invalid_json["ok"])
+        self.assertIn("invalid json", invalid_json["error"])
+
+        status_code, missing_body = request_json_allow_error(
+            f"{self.base_url}/api/team-mail/send",
+            {"from": "A2", "to": "A0", "topic": "blocker"},
+        )
+        self.assertEqual(status_code, 400)
+        self.assertFalse(missing_body["ok"])
+        self.assertEqual(missing_body["error"], "body is required")
+
+        sent = read_json(
+            f"{self.base_url}/api/team-mail/send",
+            {
+                "from": "A2",
+                "to": "A0",
+                "topic": "blocker",
+                "body": "Recovered from malformed request and need a decision.",
+                "scope": "manager",
+                "related_task_ids": ["A2-001", "A2-001"],
+            },
+        )
+        self.assertTrue(sent["ok"])
+        self.assertEqual(sent["message"]["ack_state"], "pending")
+        self.assertEqual(sent["message"]["related_task_ids"], ["A2-001"])
+
+        refreshed = self.fetch_state()
+        self.assertTrue(any(item["id"] == sent["message"]["id"] for item in refreshed["a0_console"]["inbox"]))
+
     def test_single_worker_shutdown_updates_cleanup_state(self) -> None:
         launch_result = read_json(f"{self.base_url}/api/launch", {"restart": False})
         self.assertTrue(launch_result["ok"])
@@ -1025,6 +1120,79 @@ class ControlPlaneIntegrationTest(unittest.TestCase):
 
         wait_for(lambda: not port_is_listening(self.port), timeout=15, interval=0.5)
         wait_for(lambda: not self.session_state()["server"]["listener_active"], timeout=15, interval=0.5)
+
+    def test_cleanup_blocks_on_mixed_file_locks_then_recovers(self) -> None:
+        self.stop_workers()
+        self.write_state_payload(
+            "state/edit_locks.yaml",
+            {
+                "locks": [
+                    {"path": "state/backlog.yaml", "owner": "A1", "state": "held"},
+                    {"path": "state/agent_runtime.yaml", "owner": "", "state": "claimed"},
+                ]
+            },
+        )
+
+        status_code, blocked = request_json_allow_error(
+            f"{self.base_url}/api/team-cleanup",
+            {"note": "should block on mixed worker/global file locks"},
+        )
+        self.assertEqual(status_code, 400)
+        self.assertFalse(blocked["ok"])
+        self.assertIn("outstanding single-writer locks", blocked["error"])
+        self.assertIn("state/backlog.yaml (A1)", blocked["error"])
+        self.assertIn("state/agent_runtime.yaml (unassigned)", blocked["error"])
+
+        cleanup_state = self.fetch_state()["cleanup"]
+        workers_by_agent = {item["agent"]: item for item in cleanup_state["workers"]}
+        self.assertIn("locks still held: state/backlog.yaml", workers_by_agent["A1"]["blockers"])
+        self.assertEqual(cleanup_state["locked_files"][1]["owner"], "unassigned")
+
+        self.write_state_payload("state/edit_locks.yaml", {"locks": []})
+        recovered = read_json(
+            f"{self.base_url}/api/team-cleanup",
+            {"note": "locks cleared; cleanup can now release listener", "release_listener": True},
+        )
+        self.assertTrue(recovered["ok"])
+        self.assertTrue(recovered["cleanup"]["ready"])
+        self.assertTrue(recovered["listener_release_requested"])
+        wait_for(lambda: not port_is_listening(self.port), timeout=15, interval=0.5)
+
+    def test_stop_commands_are_idempotent_and_workers_can_relaunch(self) -> None:
+        launch_result = read_json(f"{self.base_url}/api/launch", {"restart": False})
+        self.assertTrue(launch_result["ok"])
+        self.wait_for_agent_state(expected_provider="ducc", expected_model="claude-sonnet-4-5")
+
+        first_stop = self.run_cli_command("stop-agents")
+        first_payload = json.loads(first_stop.stdout)
+        self.assertTrue(first_payload["ok"])
+        self.assertEqual(sorted(first_payload["stopped"]), ["A1", "A2"])
+
+        second_stop = self.run_cli_command("stop-agents")
+        second_payload = json.loads(second_stop.stdout)
+        self.assertTrue(second_payload["ok"])
+        self.assertEqual(second_payload["stopped"], [])
+
+        relaunch = read_json(f"{self.base_url}/api/launch", {"restart": False})
+        self.assertTrue(relaunch["ok"])
+        self.wait_for_agent_state(expected_provider="ducc", expected_model="claude-sonnet-4-5")
+
+        stop_listener = self.run_cli_command("stop-listener")
+        stop_listener_payload = json.loads(stop_listener.stdout)
+        self.assertTrue(stop_listener_payload["ok"])
+        self.assertTrue(stop_listener_payload["listener_released"])
+        wait_for(lambda: not port_is_listening(self.port), timeout=10, interval=0.5)
+
+        stop_listener_again = self.run_cli_command("stop-listener")
+        stop_listener_again_payload = json.loads(stop_listener_again.stdout)
+        self.assertTrue(stop_listener_again_payload["ok"])
+        self.assertTrue(stop_listener_again_payload["listener_released"])
+
+        stop_all = self.run_cli_command("stop-all")
+        stop_all_payload = json.loads(stop_all.stdout)
+        self.assertTrue(stop_all_payload["ok"])
+        self.assertTrue(stop_all_payload["listener_released"])
+        wait_for(lambda: self.server.poll() is not None, timeout=10, interval=0.5)
 
     def test_unknown_api_routes_return_json_errors(self) -> None:
         request = urllib.request.Request(f"{self.base_url}/api/does-not-exist", data=b"{}")
@@ -1255,6 +1423,52 @@ class ControlPlaneIntegrationTest(unittest.TestCase):
         self.assertEqual(result.returncode, 1)
         self.assertIn(f"port {self.port} is already in use", result.stderr)
         self.assertIn("stop the existing listener", result.stderr)
+
+    def test_detached_serve_can_recover_after_port_busy_once_listener_is_released(self) -> None:
+        busy = subprocess.run(
+            _server_launch_cmd(self.runtime_script, [
+                "serve",
+                "--config",
+                str(self.config_path),
+                "--host",
+                "127.0.0.1",
+                "--port",
+                str(self.port),
+            ]),
+            cwd=self.root,
+            env=self.env,
+            stdout=subprocess.PIPE,
+            stderr=subprocess.PIPE,
+            text=True,
+            check=False,
+        )
+        self.assertEqual(busy.returncode, 1)
+        self.assertIn(f"port {self.port} is already in use", busy.stderr)
+
+        stop_listener = self.run_cli_command("stop-listener")
+        stop_listener_payload = json.loads(stop_listener.stdout)
+        self.assertTrue(stop_listener_payload["ok"])
+        self.assertTrue(stop_listener_payload["listener_released"])
+        wait_for(lambda: not port_is_listening(self.port), timeout=10, interval=0.5)
+
+        recovered = self.run_cli_command(
+            "serve",
+            "--config",
+            str(self.config_path),
+            "--host",
+            "127.0.0.1",
+        )
+        self.assertIn("control plane started in background", recovered.stdout)
+        wait_for(lambda: port_is_listening(self.port), timeout=15, interval=0.5)
+
+        state = self.wait_for_state_available()
+        self.assertEqual(state["project"]["repository_name"], "target-repo-it")
+
+        stop_all = self.run_cli_command("stop-all")
+        stop_all_payload = json.loads(stop_all.stdout)
+        self.assertTrue(stop_all_payload["ok"])
+        self.assertTrue(stop_all_payload["listener_released"])
+        wait_for(lambda: not port_is_listening(self.port), timeout=10, interval=0.5)
 
     def test_launch_failure_surfaces_missing_provider_credentials(self) -> None:
         current_state = self.fetch_state()
@@ -1620,6 +1834,55 @@ class ControlPlaneIntegrationTest(unittest.TestCase):
         self.assertFalse(provider_queue["ducc_pool"]["auth_ready"])
         self.assertFalse(provider_queue["ducc_pool"]["launch_ready"])
         self.assertIn("ducc session unavailable", provider_queue["ducc_pool"]["auth_detail"])
+
+    def test_auth_failure_repair_relaunch_clears_stale_requests_and_attention(self) -> None:
+        self.install_dummy_dag()
+        broken_config = deepcopy(self.fetch_state()["config"])
+        broken_config["providers"]["ducc"]["session_probe_command"] = ["ducc", "session-fail"]
+        broken_config["worker_defaults"]["resource_pool_queue"] = ["ducc_pool"]
+        self.assertTrue(read_json(f"{self.base_url}/api/config", {"config": broken_config})["ok"])
+
+        status_code, failed_launch = request_json_allow_error(
+            f"{self.base_url}/api/launch",
+            {"restart": False, "strategy": "selected_model", "provider": "ducc", "model": "ducc-sonnet-it"},
+        )
+        self.assertEqual(status_code, 400)
+        self.assertFalse(failed_launch["ok"])
+
+        failed_state = self.fetch_state()
+        failed_requests = [
+            item
+            for item in failed_state["a0_console"]["requests"]
+            if item.get("agent") in {"A1", "A2"} and "ducc session unavailable" in item.get("body", "")
+        ]
+        self.assertTrue(any(item["request_type"] == "worker_intervention" for item in failed_requests))
+        self.assertTrue(any(item["agent"] == "A1" for item in failed_requests))
+
+        repaired_config = deepcopy(failed_state["config"])
+        repaired_config["providers"]["ducc"]["session_probe_command"] = ["ducc", "session-ok"]
+        self.assertTrue(read_json(f"{self.base_url}/api/config", {"config": repaired_config})["ok"])
+
+        relaunched = read_json(
+            f"{self.base_url}/api/launch",
+            {"restart": False, "strategy": "selected_model", "provider": "ducc", "model": "ducc-sonnet-it"},
+        )
+        self.assertTrue(relaunched["ok"])
+        recovered = self.wait_for_agent_state(expected_provider="ducc", expected_model="ducc-sonnet-it")
+
+        self.assertFalse(
+            any(
+                item.get("agent") in {"A1", "A2"} and "ducc session unavailable" in item.get("body", "")
+                for item in recovered["a0_console"]["requests"]
+            )
+        )
+        merge_queue = {item["agent"]: item for item in recovered["merge_queue"]}
+        self.assertNotIn("ducc session unavailable", merge_queue["A1"]["attention_summary"])
+        self.assertNotIn("ducc session unavailable", merge_queue["A2"]["attention_summary"])
+        provider_queue = {item["resource_pool"]: item for item in recovered["provider_queue"]}
+        self.assertTrue(provider_queue["ducc_pool"]["auth_ready"])
+        self.assertTrue(provider_queue["ducc_pool"]["launch_ready"])
+
+        self.stop_workers()
 
     def test_initial_launch_provider_falls_back_to_configured_ducc(self) -> None:
         current_state = self.fetch_state()

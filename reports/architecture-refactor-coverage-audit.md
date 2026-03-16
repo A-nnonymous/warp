@@ -1,7 +1,36 @@
 # Architecture Refactor Coverage Audit
 
-- 时间：2026-03-16 11:xx CST
-- 阶段目标：在上一轮 coverage / smoke 之后，继续清理 orchestration / A0 / mailbox / workflow 剩余测试盲区，重点补齐 A0 的取消 / 中断 / 改规划（replan）能力覆盖。
+- 时间：2026-03-16 12:xx CST
+- 阶段目标：验收收尾；不再扩大战线，只确认上一阶段补上的高价值现实路径测试已经连同全量 runtime 回归与 coverage guard 一起通过，并把最终状态记账。
+
+## 收尾验收结论（本阶段）
+
+- 当前工作树中的收尾测试改动集中在：`runtime/test_control_plane_integration.py`
+- 本轮最终验收覆盖的 7 条高价值现实路径：
+  - `test_task_action_handler_recovers_from_malformed_requests`
+  - `test_workflow_update_handler_recovers_from_malformed_requests`
+  - `test_team_mail_handler_recovers_from_malformed_requests`
+  - `test_cleanup_blocks_on_mixed_file_locks_then_recovers`
+  - `test_stop_commands_are_idempotent_and_workers_can_relaunch`
+  - `test_detached_serve_can_recover_after_port_busy_once_listener_is_released`
+  - `test_auth_failure_repair_relaunch_clears_stale_requests_and_attention`
+- 这些用例分别锁住了：
+  1. task/workflow/team-mail handler 的 malformed JSON / bad payload -> recovery 语义
+  2. mixed worker/global file locks 阻断 cleanup 后再恢复的真实路径
+  3. stop-agents / stop-listener / stop-all 的幂等行为与 relaunch 链路
+  4. detached serve 在 port busy 后、listener 释放后的恢复启动
+  5. provider auth failure 触发 stale/intervention 后，经配置修复再次 launch 时清掉旧请求残留与 attention summary 污染
+
+### 本阶段验证结果
+
+- 定向新增收尾回归：`runtime.test_control_plane_integration` 上述 7 条用例 ✅（7 tests, OK）
+- 全量 runtime 测试：`uv run --no-project --with 'PyYAML>=6.0.2' python3 -m unittest discover -s runtime -p 'test_*.py'` ✅（109 tests, OK）
+- coverage guard：`uv run --no-project --with 'PyYAML>=6.0.2' --with 'coverage>=7.6.0' python3 runtime/check_cp_refactor_coverage.py` ✅（主干 coverage 97%，同次完整套件 109 tests, OK）
+
+### 是否暴露真实实现问题
+
+- 没有。
+- 本阶段没有发现新的真实实现缺陷，也不需要补业务代码；收尾阶段只完成回归、coverage 守卫与文档记账。
 
 ---
 

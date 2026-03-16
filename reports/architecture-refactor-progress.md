@@ -1,7 +1,27 @@
 # Architecture Refactor Progress
 
-- 时间：2026-03-16 11:xx CST
-- 当前阶段：单独的 A0 能力补洞阶段，目标是用最小 Dummy DAG 清掉 orchestration / mailbox / workflow 交界处剩余高价值盲区，重点补齐 A0 的取消 / 中断 / 改规划（replan）。
+- 时间：2026-03-16 12:xx CST
+- 当前阶段：验收收尾阶段；不再新增设计战线，只对上一阶段落下的高价值现实路径测试做最终回归、coverage guard、文档记账、commit + push。
+- 本阶段代码成果：
+  - 保留并验收 `runtime/test_control_plane_integration.py` 中上一阶段留下的 7 条高价值收尾用例：
+    - `test_task_action_handler_recovers_from_malformed_requests`
+    - `test_workflow_update_handler_recovers_from_malformed_requests`
+    - `test_team_mail_handler_recovers_from_malformed_requests`
+    - `test_cleanup_blocks_on_mixed_file_locks_then_recovers`
+    - `test_stop_commands_are_idempotent_and_workers_can_relaunch`
+    - `test_detached_serve_can_recover_after_port_busy_once_listener_is_released`
+    - `test_auth_failure_repair_relaunch_clears_stale_requests_and_attention`
+  - 无需新增业务实现修补；这轮只完成验收、更新 coverage audit / progress 文档并准备单独提交。
+- 已验证：
+  - `uv run --no-project --with 'PyYAML>=6.0.2' python3 -m unittest` 定向跑上述 7 条 integration 收尾用例 ✅（7 tests, OK）
+  - `uv run --no-project --with 'PyYAML>=6.0.2' python3 -m unittest discover -s runtime -p 'test_*.py'` ✅（109 tests, OK）
+  - `uv run --no-project --with 'PyYAML>=6.0.2' --with 'coverage>=7.6.0' python3 runtime/check_cp_refactor_coverage.py` ✅（主干 coverage guard 97%，同次跑完整 `runtime` 套件 109 tests, OK）
+- 当前结论：
+  - 这轮“高价值现实路径测试补齐”已经完成收尾验收；新增 handler malformed-json recovery、cleanup lock recovery、stop/listener idempotency、port-busy recover、provider auth failure repair 这些现实路径均已进入集成回归并通过。
+  - 本阶段未暴露新的真实实现缺陷，因此没有额外代码修补，只做文档记账与落地提交。
+- 下一步：
+  1. 保持本阶段唯一 commit，提交并 push 当前分支。
+  2. 到此停住，不继续打开下一阶段。
 
 ---
 
