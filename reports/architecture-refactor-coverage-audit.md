@@ -5,7 +5,14 @@
 
 ## 1. 结论
 
-本阶段把 coverage 门槛落成了一个可直接运行的守卫脚本：
+在 coverage guard 落地之后，本轮又补了一阶段**系统级测试增强**，重点不再是提高主干 service/store 的统计数字，而是补此前 audit 已点名的外沿高风险面：
+
+- `config_mixin.py`：补 stale provider/pool repair、section-scope validation filtering 等高风险配置分支
+- `launch_mixin.py`：补脏 worktree / sync failure 这类启动前阻断分支
+- `cli.py` / `api_mixin.py` / `network.py`：补 bootstrap cold-start、config_text + peek smoke、`stop-listener` alias、命令参数净化与静态路径防穿越
+- integration：新增 template/bootstrap -> 保存配置 -> 成功 launch 的长链路烟测
+
+主干 coverage 门槛本身仍然由下面这个守卫脚本负责：
 
 ```bash
 uv run --no-project --with 'PyYAML>=6.0.2' --with 'coverage>=7.6.0' python3 runtime/check_cp_refactor_coverage.py
@@ -129,6 +136,13 @@ uv run --no-project --with 'PyYAML>=6.0.2' python3 -m unittest discover -s runti
 
 - `runtime/test_store_normalization.py`
   - 覆盖 backlog/mailbox/runtime store 的 normalize/load/persist 容错与字段归一化
+- `runtime/test_control_plane_runtime_edges.py`
+  - 覆盖 `repair_config_resource_pool_references()` 的 stale provider/pool 清理
+  - 覆盖 `validate_config_section("workers")` 的 section-scope 过滤，避免 project/dashboard 噪音串进 workers 校验
+  - 覆盖 `ensure_worktree()` 的脏目录阻断分支
+  - 覆盖 `ensure_environment()` 的 sync failure stderr 透传
+  - 覆盖 `resolve_runtime_config()` 的 bootstrap/template 解析分支
+  - 覆盖 `strip_command_args()` 与 `safe_relative_web_path()` 的 network/CLI 基础 smoke
 
 ### 扩展
 
@@ -141,17 +155,21 @@ uv run --no-project --with 'PyYAML>=6.0.2' python3 -m unittest discover -s runti
   - 补 default pool fallback、无资源池、无 launch-ready preferred provider、异常分支
 - `runtime/test_dashboard_service.py`
   - 补 stale / dependency-blocked 分类、handoff attention fallback 链路
+- `runtime/test_control_plane_integration.py`
+  - 新增 `test_cli_api_smoke_suite_covers_config_text_peek_and_stop_listener_alias`
+  - 新增 `test_bootstrap_cold_start_config_save_then_launch_smoke`
+  - 把 config_text 保存、peek API、`stop-listener` CLI alias、bootstrap cold-start -> save -> launch 长链路纳入集成烟测
 
 ## 5. 未覆盖风险点
 
 下面这些风险点本阶段没有被纳入 90% coverage 门槛，仍然值得明确记账：
 
 1. **`config_mixin.py` 大量配置校验/修复分支**
-   - 目前整体 coverage 很低，且条件组合多
+   - 本轮已补 stale provider/pool repair 与 workers section filtering，但完整 validation matrix 仍远未穷尽
 2. **`launch_mixin.py` 的 worktree / environment / worker lifecycle**
-   - 真正高风险点在文件系统、git、子进程、provider launch 行为
+   - 本轮已补脏 worktree / sync failure 阻断；真正高风险点仍在 git worktree 冲突、wrapper/子进程失败、端口占用等组合行为
 3. **`api_mixin.py` / `cli.py` / `network.py` 的 HTTP/CLI/server 面**
-   - 需要更偏集成/端到端的测试，不适合靠纯 service 单测凑 coverage
+   - 本轮已补 config_text / peek / `stop-listener` / bootstrap cold-start smoke；但更多 handler 组合、bind 失败与异常恢复仍需更偏集成的测试
 4. **`dashboard_mixin.py` / `provider_mixin.py` / `state_mixin.py` / `mailbox_mixin.py` 的 orchestration 薄委托链路**
    - 现在主要靠定向 integration 守，没有形成系统级 coverage 门槛
 5. **`telemetry.py` / `markdown.py` 等工具层边缘解析输入**

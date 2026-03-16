@@ -711,6 +711,91 @@ class ControlPlaneIntegrationTest(unittest.TestCase):
         self.assertFalse(payload["ok"])
         self.assertIn("unknown api route", payload["error"])
 
+    def test_cli_api_smoke_suite_covers_config_text_peek_and_stop_listener_alias(self) -> None:
+        config_payload = read_json(f"{self.base_url}/api/config")
+        self.assertIn("config_text", config_payload)
+        self.assertEqual(config_payload["config"]["project"]["repository_name"], "target-repo-it")
+
+        peek_append = read_json(
+            f"{self.base_url}/api/peek",
+            {"agent": "A1", "lines": ["smoke line 1", "smoke line 2"]},
+        )
+        self.assertTrue(peek_append["ok"])
+        self.assertEqual(peek_append["buffered"], 2)
+
+        peek_state = read_json(f"{self.base_url}/api/peek")
+        self.assertTrue(peek_state["ok"])
+        self.assertIn("A1", peek_state["peek"])
+        self.assertTrue(any("smoke line 1" in line for line in peek_state["peek"]["A1"]))
+
+        config_text = json.dumps(json.loads(self.render_config()), indent=2) + "\n"
+        config_save = read_json(f"{self.base_url}/api/config", {"config_text": config_text})
+        self.assertTrue(config_save["ok"])
+        self.assertEqual(config_save["validation_issues"], [])
+
+        stop_listener = self.run_cli_command("stop-listener")
+        stop_listener_payload = json.loads(stop_listener.stdout)
+        self.assertTrue(stop_listener_payload["ok"])
+        self.assertTrue(stop_listener_payload["listener_released"])
+        wait_for(lambda: not port_is_listening(self.port), timeout=10, interval=0.5)
+
+        session_state = self.session_state()
+        self.assertFalse(session_state["server"]["listener_active"])
+
+        stop_all = self.run_cli_command("stop-all")
+        stop_all_payload = json.loads(stop_all.stdout)
+        self.assertTrue(stop_all_payload["ok"])
+        self.assertTrue(stop_all_payload["listener_released"])
+        wait_for(lambda: self.server.poll() is not None, timeout=10, interval=0.5)
+
+    def test_bootstrap_cold_start_config_save_then_launch_smoke(self) -> None:
+        initial_stop = read_json(f"{self.base_url}/api/stop-all", {})
+        self.assertTrue(initial_stop["ok"])
+        wait_for(lambda: self.server.poll() is not None, timeout=15, interval=0.5)
+        wait_for(lambda: not port_is_listening(self.port), timeout=10, interval=0.5)
+        if self.server.stdout is not None:
+            self.server.stdout.close()
+
+        bootstrap_config_path = self.root / "bootstrap_local_config.yaml"
+        self.server = subprocess.Popen(
+            _server_launch_cmd(
+                self.runtime_script,
+                [
+                    "up",
+                    "--config",
+                    str(bootstrap_config_path),
+                    "--foreground",
+                    "--host",
+                    "127.0.0.1",
+                    "--port",
+                    str(self.port),
+                    "--bootstrap",
+                ],
+            ),
+            cwd=self.root,
+            env=self.env,
+            stdout=subprocess.PIPE,
+            stderr=subprocess.STDOUT,
+            text=True,
+        )
+        wait_for(self.server_ready)
+
+        state = self.fetch_state()
+        self.assertTrue(state["mode"]["cold_start"])
+        self.assertTrue(state["launch_blockers"])
+        self.assertFalse(bootstrap_config_path.exists())
+
+        bootstrap_config = json.loads(self.render_config())
+        bootstrap_save = read_json(f"{self.base_url}/api/config", {"config": bootstrap_config})
+        self.assertTrue(bootstrap_save["ok"])
+        self.assertFalse(bootstrap_save["cold_start"])
+        self.assertTrue(bootstrap_config_path.exists())
+
+        launch_result = read_json(f"{self.base_url}/api/launch", {"restart": False})
+        self.assertTrue(launch_result["ok"])
+        self.wait_for_agent_state(expected_provider="ducc", expected_model="claude-sonnet-4-5")
+        self.stop_workers()
+
     def test_stop_agents_cli_stops_workers_and_keeps_listener(self) -> None:
         launch_result = read_json(f"{self.base_url}/api/launch", {"restart": False})
         self.assertTrue(launch_result["ok"])
