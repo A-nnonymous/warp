@@ -196,6 +196,20 @@ class PoolUsageSummary(TypedDict, total=False):
     last_activity_at: str
 
 
+class ProcessLaunchMetadata(TypedDict, total=False):
+    wrapper_path: str
+    recursion_guard: str
+    command: ProcessCommand
+
+
+class ProcessRuntimeMetadata(TypedDict, total=False):
+    pid: int
+    alive: bool
+    returncode: int | None
+    worktree_path: str
+    log_path: str
+
+
 class ProcessSnapshot(TypedDict, total=False):
     resource_pool: str
     provider: str
@@ -208,6 +222,8 @@ class ProcessSnapshot(TypedDict, total=False):
     worktree_path: str
     log_path: str
     command: ProcessCommand
+    launch: ProcessLaunchMetadata
+    runtime: ProcessRuntimeMetadata
     phase: str
     progress_pct: int | None
     last_activity_at: str

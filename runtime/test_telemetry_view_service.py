@@ -5,6 +5,8 @@ import unittest
 from runtime.cp.services.telemetry_views import (
     command_contract,
     normalize_usage,
+    process_launch_metadata,
+    process_runtime_metadata,
     process_snapshot_entry,
     running_agent_telemetry,
     summarize_pool_usage,
@@ -36,6 +38,24 @@ class TelemetryViewServiceTest(unittest.TestCase):
         self.assertEqual(summary["running_agents"][0]["usage"]["total_tokens"], 420)
         self.assertEqual(summary["last_activity_at"], "2026-03-16T09:40:00")
 
+    def test_process_launch_and_runtime_metadata_shape_nested_contracts(self) -> None:
+        launch = process_launch_metadata(
+            "/tmp/ducc_wrapper.sh",
+            "env+exec-wrapper",
+            ["/tmp/ducc_wrapper.sh", "ducc", "--model", "x"],
+        )
+        runtime = process_runtime_metadata(
+            pid=123,
+            alive=True,
+            returncode=None,
+            worktree_path="/tmp/worktree",
+            log_path="/tmp/worker.log",
+        )
+        self.assertEqual(launch["wrapper_path"], "/tmp/ducc_wrapper.sh")
+        self.assertEqual(launch["command"]["binary"], "/tmp/ducc_wrapper.sh")
+        self.assertEqual(runtime["pid"], 123)
+        self.assertTrue(runtime["alive"])
+
     def test_process_snapshot_entry_shapes_command_and_usage(self) -> None:
         snapshot = process_snapshot_entry(
             resource_pool="ducc_pool",
@@ -59,6 +79,10 @@ class TelemetryViewServiceTest(unittest.TestCase):
         )
         self.assertEqual(snapshot["command"]["binary"], "/tmp/ducc_wrapper.sh")
         self.assertTrue(snapshot["command"]["uses_wrapper"])
+        self.assertEqual(snapshot["launch"]["wrapper_path"], "/tmp/ducc_wrapper.sh")
+        self.assertEqual(snapshot["launch"]["recursion_guard"], "env+exec-wrapper")
+        self.assertEqual(snapshot["runtime"]["pid"], 123)
+        self.assertEqual(snapshot["runtime"]["worktree_path"], "/tmp/worktree")
         self.assertEqual(snapshot["usage"]["total_tokens"], 420)
         self.assertEqual(snapshot["phase"], "ducc boot")
 

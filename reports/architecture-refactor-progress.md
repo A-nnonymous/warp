@@ -1,5 +1,21 @@
 # Architecture Refactor Progress
 
+- 时间：2026-03-16 09:4x CST
+- 当前阶段：沿 provider/process 主线继续收 `process_snapshot` 顶层 launch/runtime metadata，把 `wrapper_path` / `recursion_guard` 一类平铺字段补成更内聚的子 contract + helper，优先收掉 process 视图尾巴。
+- 本阶段代码成果：
+  - 在 `runtime/cp/contracts.py` 新增 `ProcessLaunchMetadata` 与 `ProcessRuntimeMetadata`，把 `process_snapshot` 的 launch/runtime 元数据固定成明确 typed 子 shape，同时保留既有顶层字段兼容 dashboard/web 消费面。
+  - `runtime/cp/services/telemetry_views.py` 新增 `process_launch_metadata()`、`process_runtime_metadata()`，并让 `process_snapshot_entry()` 统一组装嵌套 launch/runtime contract；`state_mixin.py` 继续只做 telemetry 采集与薄委托。
+  - 更新 `runtime/test_telemetry_view_service.py`、`runtime/test_control_plane_architecture.py`、`runtime/test_control_plane_integration.py`、`runtime/cp/services/__init__.py`、`runtime/cp/CODE_INDEX.md`，把新子 contract / helper 纳入纯函数测试、架构测试面、定向集成断言与索引。
+- 已验证：
+  - `uv run --no-project --with 'PyYAML>=6.0.2' python3 -m unittest runtime.test_telemetry_view_service runtime.test_control_plane_architecture runtime.test_control_plane_integration.ControlPlaneIntegrationTest.test_session_backed_provider_launches_without_api_key runtime.test_control_plane_integration.ControlPlaneIntegrationTest.test_ducc_prompt_file_flag_is_sanitized_for_stale_configs` ✅
+- 当前断点：
+  - `process_snapshot` 的 launch/runtime metadata 已有内聚子 contract，但 dashboard/web 仍主要消费兼容保留的平铺字段；若要彻底收口，可视情况让前端/下游逐步转读 `launch` / `runtime`。
+  - provider/process 主线剩余尾巴已明显变短，接下来更像是补兼容消费面或转切另一条支线，而不是继续大拆。
+- 下一步：
+  1. 若继续收 provider/process 主线，优先把 dashboard/runtime/web 对 `process_snapshot` 的消费面切到 `launch` / `runtime` 子 shape，顺手评估是否可删除重复平铺字段。
+  2. 若主线已足够验收，则转切 `backlog_mixin.py` 的 mailbox fanout / notification routing，清理剩余 manager-side 支线。
+  3. 继续坚持“单阶段、单刀口、定向测试、单 commit”节奏。
+
 - 时间：2026-03-16 09:5x CST
 - 当前阶段：收尾优先，沿 provider/process 主线把 `provider_auth_status()` 的 session probe / api-key readiness / auth detail shaping 从 `provider_mixin.py` 抽到纯 service，优先减少同主线剩余尾巴。
 - 本阶段代码成果：

@@ -2,7 +2,15 @@ from __future__ import annotations
 
 from typing import Any
 
-from ..contracts import PoolUsageSummary, ProcessCommand, ProcessSnapshot, RunningAgentTelemetry, TelemetryUsage
+from ..contracts import (
+    PoolUsageSummary,
+    ProcessCommand,
+    ProcessLaunchMetadata,
+    ProcessRuntimeMetadata,
+    ProcessSnapshot,
+    RunningAgentTelemetry,
+    TelemetryUsage,
+)
 
 
 def normalize_usage(payload: Any) -> TelemetryUsage:
@@ -31,6 +39,31 @@ def running_agent_telemetry(agent: str, telemetry: dict[str, Any]) -> RunningAge
         "progress_pct": progress_value if isinstance(progress_value, int) else None,
         "phase": str(telemetry.get("phase", "")),
         "usage": normalize_usage(telemetry.get("usage")),
+    }
+
+
+def process_launch_metadata(wrapper_path: str, recursion_guard: str, command: list[str]) -> ProcessLaunchMetadata:
+    return {
+        "wrapper_path": wrapper_path,
+        "recursion_guard": recursion_guard,
+        "command": command_contract(command, wrapper_path),
+    }
+
+
+def process_runtime_metadata(
+    *,
+    pid: int,
+    alive: bool,
+    returncode: int | None,
+    worktree_path: str,
+    log_path: str,
+) -> ProcessRuntimeMetadata:
+    return {
+        "pid": pid,
+        "alive": alive,
+        "returncode": returncode,
+        "worktree_path": worktree_path,
+        "log_path": log_path,
     }
 
 
@@ -68,18 +101,28 @@ def process_snapshot_entry(
     telemetry: dict[str, Any],
 ) -> ProcessSnapshot:
     progress_value = telemetry.get("progress_pct")
+    launch = process_launch_metadata(wrapper_path, recursion_guard, command)
+    runtime = process_runtime_metadata(
+        pid=pid,
+        alive=alive,
+        returncode=returncode,
+        worktree_path=worktree_path,
+        log_path=log_path,
+    )
     return {
         "resource_pool": resource_pool,
         "provider": provider,
         "model": model,
-        "pid": pid,
-        "alive": alive,
-        "returncode": returncode,
-        "wrapper_path": wrapper_path,
-        "recursion_guard": recursion_guard,
-        "worktree_path": worktree_path,
-        "log_path": log_path,
-        "command": command_contract(command, wrapper_path),
+        "pid": runtime["pid"],
+        "alive": runtime["alive"],
+        "returncode": runtime["returncode"],
+        "wrapper_path": launch["wrapper_path"],
+        "recursion_guard": launch["recursion_guard"],
+        "worktree_path": runtime["worktree_path"],
+        "log_path": runtime["log_path"],
+        "command": launch["command"],
+        "launch": launch,
+        "runtime": runtime,
         "phase": str(telemetry.get("phase", "")),
         "progress_pct": progress_value if isinstance(progress_value, int) else None,
         "last_activity_at": str(telemetry.get("last_activity_at", "")),

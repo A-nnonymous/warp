@@ -11,7 +11,15 @@ from .pool_selection import (
 )
 from .provider_auth import configured_api_key, provider_auth_mode, provider_auth_status, provider_probe_timeout, provider_probe_values
 from .provider_queue import provider_connection_quality, provider_failure_detail, provider_queue_item
-from .telemetry_views import command_contract, normalize_usage, process_snapshot_entry, running_agent_telemetry, summarize_pool_usage
+from .telemetry_views import (
+    command_contract,
+    normalize_usage,
+    process_launch_metadata,
+    process_runtime_metadata,
+    process_snapshot_entry,
+    running_agent_telemetry,
+    summarize_pool_usage,
+)
 from .task_routing import (
     build_task_profile,
     initial_provider_name,
@@ -40,6 +48,8 @@ __all__ = [
     "initial_provider_name",
     "normalize_usage",
     "pool_rank_tuple",
+    "process_launch_metadata",
+    "process_runtime_metadata",
     "process_snapshot_entry",
     "provider_auth_mode",
     "provider_auth_status",

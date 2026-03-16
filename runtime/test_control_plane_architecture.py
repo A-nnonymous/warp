@@ -15,6 +15,8 @@ from runtime.cp.contracts import (
     LaunchPolicyState,
     ManagerControlState,
     ProcessCommand,
+    ProcessLaunchMetadata,
+    ProcessRuntimeMetadata,
     ProcessSnapshot,
     ProviderQueueItem,
     RunningAgentTelemetry,
@@ -26,7 +28,15 @@ from runtime.cp.contracts import (
 )
 from runtime.cp.services.provider_auth import configured_api_key, provider_auth_mode, provider_auth_status, provider_probe_timeout, provider_probe_values
 from runtime.cp.services.provider_queue import provider_queue_item
-from runtime.cp.services.telemetry_views import command_contract, normalize_usage, process_snapshot_entry, running_agent_telemetry, summarize_pool_usage
+from runtime.cp.services.telemetry_views import (
+    command_contract,
+    normalize_usage,
+    process_launch_metadata,
+    process_runtime_metadata,
+    process_snapshot_entry,
+    running_agent_telemetry,
+    summarize_pool_usage,
+)
 from runtime.cp.stores import (
     BacklogStore,
     HeartbeatStore,
@@ -77,6 +87,14 @@ class ControlPlaneArchitectureTest(unittest.TestCase):
         self.assertEqual(auth_status, ("session", True, "ready", False))
         usage: TelemetryUsage = normalize_usage({"input_tokens": 12, "output_tokens": 4, "total_tokens": 16})
         command: ProcessCommand = command_contract(["ducc"], "")
+        launch: ProcessLaunchMetadata = process_launch_metadata("", "env-only", ["ducc"])
+        runtime_meta: ProcessRuntimeMetadata = process_runtime_metadata(
+            pid=123,
+            alive=True,
+            returncode=None,
+            worktree_path="/tmp/worktree",
+            log_path="/tmp/worker.log",
+        )
         running_agent: RunningAgentTelemetry = running_agent_telemetry("A1", {"phase": "boot", "usage": usage})
         process_snapshot: ProcessSnapshot = process_snapshot_entry(
             resource_pool="ducc_pool",
@@ -145,7 +163,12 @@ class ControlPlaneArchitectureTest(unittest.TestCase):
         self.assertEqual(a0_console["pending_count"], 0)
         self.assertEqual(launch_policy["default_strategy"], "elastic")
         self.assertEqual(process_snapshot["provider"], "ducc")
+        self.assertEqual(command["binary"], "ducc")
+        self.assertEqual(launch["recursion_guard"], "env-only")
+        self.assertEqual(runtime_meta["worktree_path"], "/tmp/worktree")
         self.assertEqual(process_snapshot["command"]["binary"], "ducc")
+        self.assertEqual(process_snapshot["launch"]["recursion_guard"], "env-only")
+        self.assertEqual(process_snapshot["runtime"]["pid"], 123)
         self.assertEqual(provider_queue_item_view["resource_pool"], "ducc_pool")
         self.assertEqual(provider_queue_item_view["running_agents"][0]["usage"]["total_tokens"], 16)
         self.assertEqual(control["worker_count"], 1)
