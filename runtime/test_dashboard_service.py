@@ -52,6 +52,20 @@ class DashboardSummaryServiceTest(unittest.TestCase):
         self.assertEqual(control["attention_agents"], ["A3"])
         self.assertEqual(control["blocked_agents"], ["A4"])
 
+    def test_compute_manager_control_state_marks_stale_and_dependency_blocked_workers(self) -> None:
+        control = compute_manager_control_state(
+            workers=[{"agent": "A5", "task_id": "A5-001"}, {"agent": "A6", "task_id": "A6-001"}],
+            runtime_state=None,
+            heartbeat_state={"agents": [{"agent": "A5", "state": "stale"}, {"agent": "A6", "state": "healthy"}]},
+            backlog_items=[{"id": "A0-010", "status": "done"}, {"id": "A6-001", "status": "pending", "dependencies": ["A0-999"]}],
+            task_record_for_worker=lambda worker: {
+                "A5": {"id": "A5-001", "status": "pending"},
+                "A6": {"id": "A6-001", "status": "pending", "dependencies": ["A0-999"]},
+            }.get(worker["agent"], {}),
+        )
+        self.assertEqual(control["attention_agents"], ["A5"])
+        self.assertEqual(control["blocked_agents"], ["A6"])
+
     def test_summarize_worker_handoff_prefers_runtime_failure_then_sections(self) -> None:
         summary = summarize_worker_handoff(
             runtime_entry={"status": "launch_failed: provider missing"},
@@ -85,6 +99,55 @@ class DashboardSummaryServiceTest(unittest.TestCase):
         self.assertEqual(summary["dependencies"], ["A0-100"])
         self.assertEqual(summary["resume_instruction"], "rerun launch once provider is ready")
         self.assertEqual(summary["next_checkin"], "after auth is restored")
+
+    def test_summarize_worker_handoff_covers_process_exit_blockers_pending_and_fallbacks(self) -> None:
+        parse_list = lambda text: [line.removeprefix("- ").strip() for line in text.splitlines() if line.strip()]
+        parse_paragraph = lambda text: str(text).strip()
+
+        exited = summarize_worker_handoff(
+            runtime_entry={"status": "stopped"},
+            heartbeat={"state": "error", "evidence": "process_exit", "escalation": "manual restart", "expected_next_checkin": "soon"},
+            parse_list=parse_list,
+            parse_paragraph=parse_paragraph,
+        )
+        self.assertEqual(exited["attention_summary"], "manual restart")
+        self.assertEqual(exited["checkpoint_status"], "error")
+        self.assertEqual(exited["next_checkin"], "soon")
+
+        blocked = summarize_worker_handoff(
+            runtime_entry={"status": "stopped"},
+            heartbeat={"state": "healthy", "evidence": "no runtime heartbeat yet", "expected_next_checkin": "later"},
+            status_sections={"blockers": "- waiting on config\n"},
+            parse_list=parse_list,
+            parse_paragraph=parse_paragraph,
+        )
+        self.assertEqual(blocked["attention_summary"], "waiting on config")
+
+        pending = summarize_worker_handoff(
+            runtime_entry={"status": "stopped"},
+            heartbeat={"state": "healthy", "evidence": "", "expected_next_checkin": "later"},
+            checkpoint_sections={"pending work": "- rerun tests\n"},
+            parse_list=parse_list,
+            parse_paragraph=parse_paragraph,
+        )
+        self.assertEqual(pending["attention_summary"], "rerun tests")
+
+        fallback = summarize_worker_handoff(
+            runtime_entry={"status": "stopped"},
+            heartbeat={"state": "stale", "evidence": "heartbeat lag", "escalation": "", "expected_next_checkin": "later"},
+            parse_list=parse_list,
+            parse_paragraph=parse_paragraph,
+        )
+        self.assertEqual(fallback["attention_summary"], "heartbeat lag")
+
+        quiet = summarize_worker_handoff(
+            runtime_entry={"status": "stopped"},
+            heartbeat={"state": "", "evidence": "no runtime heartbeat yet", "expected_next_checkin": "manual"},
+            parse_list=parse_list,
+            parse_paragraph=parse_paragraph,
+        )
+        self.assertEqual(quiet["attention_summary"], "")
+        self.assertEqual(quiet["checkpoint_status"], "unknown")
 
 
 if __name__ == "__main__":

@@ -1,5 +1,22 @@
 # Architecture Refactor Progress
 
+- 时间：2026-03-16 10:4x CST
+- 当前阶段：coverage / 全量测试盘点收口完成。本阶段不再继续拆新 service，而是把 architecture refactor 主干的 coverage 门槛、缺口补测、盘点文档一次性落地，并以单独 commit 收口。
+- 本阶段代码成果：
+  - 新增 `runtime/check_cp_refactor_coverage.py`，把 `runtime/cp/contracts.py` + `runtime/cp/services/*.py` + `runtime/cp/stores/*.py` 的 coverage >90% 落成可执行守卫；守卫运行时仍会先跑完整 `runtime/test_*.py`，再用 `coverage report --fail-under=90` 对 refactor 主干范围判定通过/失败。
+  - 新增 `runtime/test_store_normalization.py`，补上 backlog/mailbox/runtime store 的 normalize/load/persist 容错测试；扩展 `runtime/test_workflow_patch_service.py`、`runtime/test_task_routing_service.py`、`runtime/test_pool_selection_service.py`、`runtime/test_dashboard_service.py`，补齐 workflow/task-routing/pool-selection/dashboard-summary 的关键分支。
+  - 新增 `reports/architecture-refactor-coverage-audit.md`，盘点已覆盖功能、未覆盖风险点、建议补的关键用例、coverage 统计口径、运行命令与选取统计范围的原因。
+- 已验证：
+  - `uv run --no-project --with 'PyYAML>=6.0.2' python3 -m unittest discover -s runtime -p 'test_*.py'` ✅
+  - `uv run --no-project --with 'PyYAML>=6.0.2' --with 'coverage>=7.6.0' python3 runtime/check_cp_refactor_coverage.py` ✅（当前统计范围 coverage 97%，门槛 90%）
+- 当前断点：
+  - architecture refactor 主干（contracts/services/stores）已有可失败的 coverage 守卫，但整个 `runtime/cp` 包仍只有约 39% coverage；低覆盖区主要在 CLI / API / config / launch / orchestration mixin 面。
+  - 这些区域已在 coverage audit 文档中记为后续风险与建议用例，本阶段不继续扩大战线。
+- 下一步：
+  1. 保持本阶段停在 coverage gate + 补测 + 文档 + 单独 commit。
+  2. push 当前分支，不继续打开下一阶段。
+
+
 - 时间：2026-03-16 10:2x CST
 - 当前阶段：主线已收官，转入全局 polish + 经验沉淀。本阶段不再打开新的架构支线，只做 service 导出面/索引一致性打磨，并补 architecture refactor 复盘文档。
 - 本阶段代码成果：

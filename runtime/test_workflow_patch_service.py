@@ -46,6 +46,97 @@ class WorkflowPatchServiceTest(unittest.TestCase):
                 current_time="2026-03-16T02:03:00Z",
             )
 
+    def test_apply_task_action_release_reject_complete_and_reopen_paths(self) -> None:
+        with self.assertRaisesRegex(ValueError, "already claimed by A2"):
+            apply_task_action(
+                {"id": "A1-001", "claimed_by": "A2", "claim_state": "review"},
+                task_id="A1-001",
+                action="claim",
+                actor="A1",
+                note="take over",
+                current_time="2026-03-16T02:03:00Z",
+            )
+
+        with self.assertRaisesRegex(ValueError, "is claimed by A2"):
+            apply_task_action(
+                {"id": "A1-001", "claimed_by": "A2", "status": "active"},
+                task_id="A1-001",
+                action="release",
+                actor="A3",
+                note="not mine",
+                current_time="2026-03-16T02:03:30Z",
+            )
+
+        released = apply_task_action(
+            {"id": "A1-001", "claimed_by": "A2", "status": "review", "claim_state": "review"},
+            task_id="A1-001",
+            action="release",
+            actor="A0",
+            note="manager reset",
+            current_time="2026-03-16T02:04:00Z",
+        )
+        self.assertEqual(released["claimed_by"], "")
+        self.assertEqual(released["status"], "pending")
+        self.assertEqual(released["claim_state"], "unclaimed")
+
+        started = apply_task_action(
+            {"id": "A1-001", "status": "blocked", "claim_note": "keep note"},
+            task_id="A1-001",
+            action="start",
+            actor="A1",
+            note="",
+            current_time="2026-03-16T02:05:00Z",
+        )
+        self.assertEqual(started["status"], "active")
+        self.assertEqual(started["claim_state"], "in_progress")
+        self.assertEqual(started["claim_note"], "keep note")
+
+        approved = apply_task_action(
+            {"id": "A1-001", "plan_state": "pending_review"},
+            task_id="A1-001",
+            action="approve_plan",
+            actor="A0",
+            note="looks good",
+            current_time="2026-03-16T02:06:00Z",
+        )
+        self.assertEqual(approved["plan_state"], "approved")
+        self.assertEqual(approved["plan_reviewed_at"], "2026-03-16T02:06:00Z")
+
+        rejected = apply_task_action(
+            {"id": "A1-001", "plan_state": "pending_review", "claimed_by": ""},
+            task_id="A1-001",
+            action="reject_plan",
+            actor="A0",
+            note="needs rewrite",
+            current_time="2026-03-16T02:07:00Z",
+        )
+        self.assertEqual(rejected["plan_state"], "rejected")
+        self.assertEqual(rejected["claimed_by"], "A0")
+
+        completed = apply_task_action(
+            {"id": "A1-001", "plan_required": True, "plan_state": "approved", "review_note": ""},
+            task_id="A1-001",
+            action="complete",
+            actor="A0",
+            note="",
+            current_time="2026-03-16T02:08:00Z",
+        )
+        self.assertEqual(completed["status"], "completed")
+        self.assertEqual(completed["review_note"], "manager accepted task")
+
+        reopened = apply_task_action(
+            {"id": "A1-001", "status": "completed", "claimed_by": "A1", "completed_at": "done", "completed_by": "A0"},
+            task_id="A1-001",
+            action="reopen",
+            actor="A0",
+            note="follow-up required",
+            current_time="2026-03-16T02:09:00Z",
+        )
+        self.assertEqual(reopened["status"], "pending")
+        self.assertEqual(reopened["claim_state"], "claimed")
+        self.assertEqual(reopened["completed_at"], "")
+        self.assertEqual(reopened["review_note"], "follow-up required")
+
     def test_apply_workflow_patch_shapes_lists_and_timestamps(self) -> None:
         updated = apply_workflow_patch(
             {
@@ -80,7 +171,53 @@ class WorkflowPatchServiceTest(unittest.TestCase):
         self.assertEqual(updated["completed_by"], "")
         self.assertEqual(updated["plan_reviewed_at"], "")
 
-    def test_validate_workflow_updates_rejects_unknown_fields(self) -> None:
+    def test_apply_workflow_patch_validates_lists_booleans_and_review_timestamps(self) -> None:
+        updated = apply_workflow_patch(
+            {
+                "id": "A1-001",
+                "status": "review",
+                "claim_state": "review",
+                "review_requested_at": "",
+                "plan_state": "none",
+                "plan_review_note": "stale",
+            },
+            updates={
+                "dependencies": ["A0-001", "A0-001", "A0-002"],
+                "outputs": [" report.md ", ""],
+                "done_when": [" tests green ", "tests green"],
+                "plan_required": True,
+                "plan_state": "approved",
+            },
+            current_time="2026-03-16T02:10:00Z",
+        )
+        self.assertEqual(updated["dependencies"], ["A0-001", "A0-002"])
+        self.assertEqual(updated["outputs"], ["report.md"])
+        self.assertEqual(updated["done_when"], ["tests green"])
+        self.assertTrue(updated["plan_required"])
+        self.assertEqual(updated["review_requested_at"], "2026-03-16T02:10:00Z")
+        self.assertEqual(updated["plan_reviewed_at"], "2026-03-16T02:10:00Z")
+
+        reset = apply_workflow_patch(
+            {"id": "A1-001", "claimed_by": "", "claimed_at": "old", "plan_state": "approved", "plan_review_note": "ok"},
+            updates={"status": "pending", "plan_state": "none"},
+            current_time="2026-03-16T02:11:00Z",
+        )
+        self.assertEqual(reset["claimed_at"], "")
+        self.assertEqual(reset["plan_reviewed_at"], "")
+        self.assertEqual(reset["plan_review_note"], "")
+
+        with self.assertRaisesRegex(ValueError, "must be a list or comma-separated string"):
+            apply_workflow_patch(
+                {"id": "A1-001"},
+                updates={"dependencies": 123},
+                current_time="2026-03-16T02:12:00Z",
+            )
+
+    def test_validate_workflow_updates_rejects_unknown_fields_and_missing_payload(self) -> None:
+        with self.assertRaisesRegex(ValueError, "updates are required"):
+            validate_workflow_updates({})
+        with self.assertRaisesRegex(ValueError, "updates are required"):
+            validate_workflow_updates([])  # type: ignore[arg-type]
         with self.assertRaisesRegex(ValueError, "unsupported workflow update fields"):
             validate_workflow_updates({"bogus": True})
 
@@ -92,6 +229,9 @@ class WorkflowPatchServiceTest(unittest.TestCase):
         self.assertIn("owner: A1 -> A2", summary)
         self.assertIn("dependencies:", summary)
         self.assertIn("plan summary updated", summary)
+
+    def test_summarize_workflow_patch_returns_default_when_nothing_changed(self) -> None:
+        self.assertEqual(summarize_workflow_patch({"owner": "A1"}, {"owner": "A1"}), "workflow updated")
 
 
 if __name__ == "__main__":
