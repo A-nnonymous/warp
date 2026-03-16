@@ -1,5 +1,23 @@
 # Architecture Refactor Progress
 
+- 时间：2026-03-16 10:3x CST
+- 当前整体状态：本轮 architecture refactor 主线已完成，可按“验收通过”看待。routing / pool selection / dashboard summary / dashboard queue / mailbox views / cleanup views / backlog notifications / workflow patch / telemetry / provider auth / provider queue 已全部沉到 `runtime/cp/services/`，manager/provider/process/backlog/mailbox 关键视图与状态转换已从 mixin 里的大段规则分支收成可测试纯函数。
+- 本阶段（最终收尾）代码成果：
+  - 新增 `runtime/cp/services/cleanup_views.py`，把 `cleanup_status()` 中最后残留的 cleanup review 汇总、锁文件归并、全局 blocker 聚合、worker row shaping 抽成纯 helper/service：`cleanup_review_maps()`、`cleanup_locked_files()`、`cleanup_worker_row()`、`cleanup_status_view()`。
+  - `runtime/cp/mailbox_mixin.py` 的 `cleanup_status()` 现在只保留 runtime/heartbeat/process 状态采集与薄委托，不再内嵌 cleanup blocker / pending review / worker row 组装细节，最后一块 manager-facing cleanup 视图残留已经收掉。
+  - 新增 `runtime/test_cleanup_view_service.py`，并更新 `runtime/test_control_plane_architecture.py`、`runtime/cp/services/__init__.py`、`runtime/cp/CODE_INDEX.md`，把 cleanup view service 纳入纯函数测试、架构测试面与索引；同时修正 CODE_INDEX 中 `cleanup_status()` 的归属说明。
+- 已完成主线：
+  1. routing / pool selection：任务策略、provider/pool 选择规则已 service 化。
+  2. dashboard / manager-facing views：summary、merge queue、A0 request catalog、mailbox catalog、cleanup status 已拆成纯 view service。
+  3. backlog / workflow：task action、workflow patch、mailbox notification routing 已 service 化。
+  4. provider / process：telemetry normalization、launch/runtime metadata、auth readiness、provider queue row shaping 已 service 化并接入 typed contracts。
+  5. contracts / stores / architecture tests：核心 manager-facing 与 runtime-facing payload 已统一到 `contracts.py`，stores 与 architecture tests 已覆盖新结构。
+- 剩余风险 / 后续可选优化（非阻塞）：
+  - `record_a0_user_message()` 仍属于 manager-console 写入编排，当前体量已小且职责明确；若未来继续细化，可再评估是否拆成单独 console-write helper。
+  - `dashboard_queue.py` 仍同时承载 merge queue 与 A0 request 聚合；当前已足够验收，如后续继续瘦身，可再考虑按 read/write or queue/request 语义拆模块。
+  - CODE_INDEX 的行数统计未来若继续波动，可在后续非功能改动时顺手刷新；本轮以职责与索引一致性为准。
+- 下一步：执行最终定向测试 + 更广回归；若全绿，直接创建本阶段唯一 commit 并 push 当前分支。
+
 - 时间：2026-03-16 10:1x CST
 - 当前阶段：收 `dashboard_queue.py` 的 A0 request catalog 尾巴，把 backlog review request 与 merge-queue intervention/unlock request 生成从大函数内联分支拆成明确 helper，优先一刀收掉 manager-facing request shaping 残留。
 - 本阶段代码成果：

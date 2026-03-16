@@ -2,19 +2,15 @@ from __future__ import annotations
 
 from typing import Any
 
-from .contracts import A0ConsoleState, CleanupState, CleanupWorkerState, HeartbeatState, RuntimeState, TeamMailboxMessage, TeamMailboxState
+from .contracts import A0ConsoleState, CleanupState, HeartbeatState, RuntimeState, TeamMailboxMessage, TeamMailboxState
 from .constants import (
     MAILBOX_ACK_STATES,
     STATE_DIR,
     TEAM_MAILBOX_PATH,
 )
-from .services import build_team_mailbox_catalog
+from .services import build_team_mailbox_catalog, cleanup_status_view
 from .stores import LockStore, MailboxStore
-from .utils import (
-    now_iso,
-    slugify,
-    summarize_list,
-)
+from .utils import now_iso, slugify
 
 
 class MailboxMixin:
@@ -100,103 +96,16 @@ class MailboxMixin:
     ) -> CleanupState:
         runtime_state = runtime_state or self.dashboard_runtime_state()
         heartbeat_state = heartbeat_state or self.dashboard_heartbeats_state(runtime_state=runtime_state)
-        runtime_workers = {
-            str(item.get("agent") or "").strip(): item
-            for item in runtime_state.get("workers", [])
-            if isinstance(item, dict)
-        }
-        heartbeat_workers = {
-            str(item.get("agent") or "").strip(): item
-            for item in heartbeat_state.get("agents", [])
-            if isinstance(item, dict)
-        }
-        locks_state = self.edit_lock_state()
-        plan_reviews_by_agent: dict[str, list[str]] = {}
-        task_reviews_by_agent: dict[str, list[str]] = {}
-        pending_plan_reviews: list[str] = []
-        pending_task_reviews: list[str] = []
-        for item in self.backlog_items():
-            task_id = str(item.get("id") or "").strip()
-            responsible_agent = str(item.get("claimed_by") or item.get("owner") or "").strip()
-            if str(item.get("plan_state") or "") == "pending_review":
-                pending_plan_reviews.append(task_id)
-                if responsible_agent:
-                    plan_reviews_by_agent.setdefault(responsible_agent, []).append(task_id)
-            if str(item.get("status") or "") == "review" or str(item.get("claim_state") or "") == "review":
-                pending_task_reviews.append(task_id)
-                if responsible_agent:
-                    task_reviews_by_agent.setdefault(responsible_agent, []).append(task_id)
-
-        active_workers = sorted(
-            agent for agent, worker in self.processes.items() if worker.process.poll() is None
+        active_workers = sorted(agent for agent, worker in self.processes.items() if worker.process.poll() is None)
+        return cleanup_status_view(
+            self.workers,
+            runtime_state,
+            heartbeat_state,
+            self.backlog_items(),
+            self.edit_lock_state(),
+            active_workers,
+            self.listener_active,
         )
-
-        locked_files: list[dict[str, str]] = []
-        locked_files_by_owner: dict[str, list[str]] = {}
-        for item in locks_state.get("locks", []):
-            state = str(item.get("state") or "free").strip() or "free"
-            if state == "free":
-                continue
-            path = str(item.get("path") or "").strip()
-            owner = str(item.get("owner") or "").strip() or "unassigned"
-            locked_files.append({"path": path, "owner": owner, "state": state})
-            locked_files_by_owner.setdefault(owner, []).append(path)
-
-        worker_rows: list[CleanupWorkerState] = []
-        for worker in self.workers:
-            agent = str(worker.get("agent") or "").strip()
-            runtime_entry = runtime_workers.get(agent, {})
-            heartbeat_entry = heartbeat_workers.get(agent, {})
-            worker_plan_reviews = plan_reviews_by_agent.get(agent, [])
-            worker_task_reviews = task_reviews_by_agent.get(agent, [])
-            worker_locked_files = locked_files_by_owner.get(agent, [])
-            blockers: list[str] = []
-            if agent in active_workers:
-                blockers.append("process is still alive")
-            if worker_plan_reviews:
-                blockers.append(f"pending plan approvals: {summarize_list(worker_plan_reviews)}")
-            if worker_task_reviews:
-                blockers.append(f"pending task reviews: {summarize_list(worker_task_reviews)}")
-            if worker_locked_files:
-                blockers.append(f"locks still held: {summarize_list(worker_locked_files)}")
-            worker_rows.append(
-                {
-                    "agent": agent,
-                    "ready": len(blockers) == 0,
-                    "active": agent in active_workers,
-                    "runtime_status": str(runtime_entry.get("status") or "").strip(),
-                    "heartbeat_state": str(heartbeat_entry.get("state") or "").strip(),
-                    "pending_plan_reviews": worker_plan_reviews,
-                    "pending_task_reviews": worker_task_reviews,
-                    "locked_files": worker_locked_files,
-                    "blockers": blockers,
-                }
-            )
-
-        blockers: list[str] = []
-        if active_workers:
-            blockers.append(f"active workers must be stopped: {', '.join(active_workers)}")
-        if pending_plan_reviews:
-            blockers.append(f"pending plan approvals: {summarize_list(pending_plan_reviews)}")
-        if pending_task_reviews:
-            blockers.append(f"pending task reviews: {summarize_list(pending_task_reviews)}")
-        if locked_files:
-            blocker_summary = summarize_list(
-                [f"{item['path']} ({item['owner']})" for item in locked_files]
-            )
-            blockers.append(f"outstanding single-writer locks: {blocker_summary}")
-
-        return {
-            "ready": len(blockers) == 0,
-            "blockers": blockers,
-            "listener_active": bool(self.listener_active),
-            "active_workers": active_workers,
-            "pending_plan_reviews": pending_plan_reviews,
-            "pending_task_reviews": pending_task_reviews,
-            "locked_files": locked_files,
-            "workers": worker_rows,
-            "last_updated": now_iso(),
-        }
 
     def record_a0_user_message(self, message: str, request_id: str = "", action: str = "note") -> A0ConsoleState:
         with self.lock:

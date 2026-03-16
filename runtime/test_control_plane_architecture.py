@@ -27,6 +27,7 @@ from runtime.cp.contracts import (
     WorkflowPatch,
 )
 from runtime.cp.services.backlog_notifications import task_action_notification, workflow_patch_notifications
+from runtime.cp.services.cleanup_views import cleanup_status_view
 from runtime.cp.services.mailbox_views import build_team_mailbox_catalog
 from runtime.cp.services.provider_auth import configured_api_key, provider_auth_mode, provider_auth_status, provider_probe_timeout, provider_probe_values
 from runtime.cp.services.provider_queue import provider_queue_item
@@ -66,6 +67,15 @@ class ControlPlaneArchitectureTest(unittest.TestCase):
         workflow_patch: WorkflowPatch = {"status": "review", "dependencies": ["A0-001"]}
         mailbox_message: TeamMailboxMessage = {"from": "A1", "to": "A0", "topic": "status_note"}
         mailbox_catalog = build_team_mailbox_catalog([mailbox_message])
+        cleanup_view = cleanup_status_view(
+            workers=[{"agent": "A1"}],
+            runtime_state={"workers": [runtime_worker]},
+            heartbeat_state={"agents": [{"agent": "A1", "state": "healthy"}]},
+            backlog_items=[backlog_item],
+            locks_state={"locks": []},
+            active_workers=[],
+            listener_active=True,
+        )
         a0_console: A0ConsoleState = {"requests": [], "messages": [], "inbox": mailbox_catalog["a0_inbox"], "pending_count": 0}
         handoff: WorkerHandoffSummary = {"checkpoint_status": "checkpointed", "pending_work": ["merge patch"]}
         control: ManagerControlState = {"worker_count": 1, "active_agents": ["A1"]}
@@ -178,6 +188,8 @@ class ControlPlaneArchitectureTest(unittest.TestCase):
         self.assertEqual(workflow_patch["status"], "review")
         self.assertEqual(mailbox_message["from"], "A1")
         self.assertEqual(a0_console["pending_count"], 0)
+        self.assertEqual(cleanup_view["workers"][0]["agent"], "A1")
+        self.assertTrue(cleanup_view["listener_active"])
         self.assertEqual(launch_policy["default_strategy"], "elastic")
         self.assertEqual(action_notification["recipient"], "A0")
         self.assertEqual(action_notification["scope"], "manager")

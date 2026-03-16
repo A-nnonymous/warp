@@ -1,6 +1,7 @@
 from .backlog_notifications import mailbox_notification, task_action_notification, workflow_patch_notifications
 from .dashboard_queue import build_a0_request_catalog, build_merge_queue
 from .mailbox_views import build_team_mailbox_catalog, manager_inbox, pending_mailbox_messages
+from .cleanup_views import cleanup_locked_files, cleanup_review_maps, cleanup_status_view, cleanup_worker_row
 from .dashboard_summary import compute_manager_control_state, summarize_worker_handoff
 from .pool_selection import (
     best_pool_for_provider,
@@ -43,6 +44,10 @@ __all__ = [
     "build_a0_request_catalog",
     "build_merge_queue",
     "build_team_mailbox_catalog",
+    "cleanup_locked_files",
+    "cleanup_review_maps",
+    "cleanup_status_view",
+    "cleanup_worker_row",
     "command_contract",
     "build_task_profile",
     "mailbox_notification",
