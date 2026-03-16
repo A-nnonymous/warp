@@ -2,6 +2,26 @@
 
 - 时间：2026-03-16 11:xx CST
 - 当前阶段：单独的 A0 能力补洞阶段，目标是用最小 Dummy DAG 清掉 orchestration / mailbox / workflow 交界处剩余高价值盲区，重点补齐 A0 的取消 / 中断 / 改规划（replan）。
+
+---
+
+- 时间：2026-03-16 11:xx CST
+- 当前阶段：remaining blindspots 收口阶段；不再开新架构支线，只用少数高价值测试覆盖 3 组剩余现实场景：多 worker cleanup blocker 组合、CLI/API handler 交叉异常、真实 launch failure + workflow 长期修复链。
+- 本阶段代码成果：
+  - 扩展 `runtime/test_cleanup_view_service.py`，新增 `test_cleanup_status_view_handles_multi_worker_blocker_combinations`：用 3 worker 极小 fixture 同时覆盖 active process、pending plan review、pending task review、worker-specific lock 与 unassigned/global lock 的聚合。
+  - 扩展 `runtime/test_control_plane_integration.py`，新增 `test_handler_error_recovery_keeps_peek_config_launch_and_stop_listener_semantics`：把 malformed JSON / malformed `config_text` / missing payload / bad launch request 串成一个真实恢复链，并验证失败后 `peek` / `config` / `stop-listener` 语义仍一致。
+  - 扩展 `runtime/test_control_plane_integration.py`，新增 `test_launch_failure_can_be_replanned_into_a_clean_new_review_chain`：用真实 `opencode` 子进程 exit 7 制造 launch failure，再用 manager replan + 最小 handoff/runtime 修补验证旧 intervention request 消失、新 `plan_review` request 接管、cleanup/mailbox 同步更新。
+  - 无业务逻辑改动；本阶段只增测试与文档记账。
+- 已验证：
+  - `uv run --no-project --with 'PyYAML>=6.0.2' python3 -m unittest runtime.test_cleanup_view_service runtime.test_control_plane_integration.ControlPlaneIntegrationTest.test_handler_error_recovery_keeps_peek_config_launch_and_stop_listener_semantics runtime.test_control_plane_integration.ControlPlaneIntegrationTest.test_launch_failure_can_be_replanned_into_a_clean_new_review_chain runtime.test_control_plane_integration.ControlPlaneIntegrationTest.test_cli_api_smoke_suite_covers_config_text_peek_and_stop_listener_alias` ✅（8 tests, OK）
+  - `uv run --no-project --with 'PyYAML>=6.0.2' python3 -m unittest discover -s runtime -p 'test_*.py'` ✅（102 tests, OK）
+  - `uv run --no-project --with 'PyYAML>=6.0.2' --with 'coverage>=7.6.0' python3 runtime/check_cp_refactor_coverage.py` ✅（97% coverage guard 继续通过）
+- 当前断点：
+  - 这 3 组指定盲区已经都有明确测试锚点，且仍保持“小而美、低资源”的策略。
+  - 剩余未系统覆盖的主要是更宽的 failure matrix，而不是这三类场景本身是否完全缺测试。
+- 下一步：
+  1. 本阶段停在测试增强 + 文档 + 单独 commit。
+  2. push 当前分支，不继续打开下一阶段。
 - 本阶段代码成果：
   - 扩展 `runtime/test_control_plane_integration.py`，新增 3 条 Dummy DAG 集成测试：
     - `test_dummy_dag_cancel_closes_root_request_and_keeps_dependent_blocked`

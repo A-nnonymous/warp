@@ -102,6 +102,63 @@ class CleanupViewServiceTest(unittest.TestCase):
         self.assertEqual(workers_by_agent["A1"]["blockers"][:2], ["process is still alive", "pending plan approvals: A1-001"])
         self.assertEqual(workers_by_agent["A2"]["blockers"], ["pending task reviews: A2-001", "locks still held: state/backlog.yaml"])
 
+    def test_cleanup_status_view_handles_multi_worker_blocker_combinations(self) -> None:
+        cleanup = cleanup_status_view(
+            workers=[{"agent": "A1"}, {"agent": "A2"}, {"agent": "A3"}],
+            runtime_state={
+                "workers": [
+                    {"agent": "A1", "status": "active"},
+                    {"agent": "A2", "status": "waiting"},
+                    {"agent": "A3", "status": "stopped"},
+                ]
+            },
+            heartbeat_state={
+                "agents": [
+                    {"agent": "A1", "state": "healthy"},
+                    {"agent": "A2", "state": "stale"},
+                    {"agent": "A3", "state": "offline"},
+                ]
+            },
+            backlog_items=[
+                {"id": "A1-001", "claimed_by": "A1", "plan_state": "pending_review"},
+                {"id": "A2-001", "claimed_by": "A2", "status": "review"},
+            ],
+            locks_state={
+                "locks": [
+                    {"path": "state/backlog.yaml", "owner": "A2", "state": "held"},
+                    {"path": "state/runtime.yaml", "owner": "", "state": "claimed"},
+                ]
+            },
+            active_workers=["A1", "A2"],
+            listener_active=True,
+        )
+
+        self.assertFalse(cleanup["ready"])
+        self.assertEqual(cleanup["active_workers"], ["A1", "A2"])
+        self.assertEqual(cleanup["pending_plan_reviews"], ["A1-001"])
+        self.assertEqual(cleanup["pending_task_reviews"], ["A2-001"])
+        self.assertEqual(
+            cleanup["blockers"],
+            [
+                "active workers must be stopped: A1, A2",
+                "pending plan approvals: A1-001",
+                "pending task reviews: A2-001",
+                "outstanding single-writer locks: state/backlog.yaml (A2); state/runtime.yaml (unassigned)",
+            ],
+        )
+
+        workers_by_agent = {item["agent"]: item for item in cleanup["workers"]}
+        self.assertEqual(
+            workers_by_agent["A1"]["blockers"],
+            ["process is still alive", "pending plan approvals: A1-001"],
+        )
+        self.assertEqual(
+            workers_by_agent["A2"]["blockers"],
+            ["process is still alive", "pending task reviews: A2-001", "locks still held: state/backlog.yaml"],
+        )
+        self.assertEqual(workers_by_agent["A3"]["blockers"], [])
+        self.assertEqual(cleanup["locked_files"][1]["owner"], "unassigned")
+
 
 if __name__ == "__main__":
     unittest.main()

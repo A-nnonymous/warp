@@ -3,6 +3,48 @@
 - 时间：2026-03-16 11:xx CST
 - 阶段目标：在上一轮 coverage / smoke 之后，继续清理 orchestration / A0 / mailbox / workflow 剩余测试盲区，重点补齐 A0 的取消 / 中断 / 改规划（replan）能力覆盖。
 
+---
+
+## 增量更新（本阶段：remaining blindspots 3 组场景）
+
+- 时间：2026-03-16 11:xx CST
+- 本阶段目标：继续用最小 fixture / 最小状态文件补齐 3 组剩余盲区：
+  1. 多 worker 并发 cleanup blocker 组合
+  2. CLI/API handler 交叉异常与恢复语义
+  3. 真实 launch failure 与 workflow 长期修复链
+
+### 本阶段新增覆盖
+
+- `runtime/test_cleanup_view_service.py`
+  - 新增 `test_cleanup_status_view_handles_multi_worker_blocker_combinations`
+  - 用 3 worker 极小状态同时覆盖：active process + pending review + worker-held lock + unassigned/global lock
+  - 断言 manager-facing cleanup summary、worker row、global blocker 聚合保持一致
+- `runtime/test_control_plane_integration.py`
+  - 新增 `test_handler_error_recovery_keeps_peek_config_launch_and_stop_listener_semantics`
+    - 覆盖 malformed JSON、bad `config_text`、`/api/peek` missing payload、`/api/launch` bad request
+    - 同时验证失败后 `peek` / `config` 仍可恢复，`stop-listener` alias 语义不漂移
+  - 新增 `test_launch_failure_can_be_replanned_into_a_clean_new_review_chain`
+    - 用真实 `opencode` launch failure（exit 7）制造 A1/A2 stale/intervention
+    - 再用最小 workflow replan + handoff/runtime state 修补，验证旧 failure request 被清掉，新 owner 的 `plan_review` request 取而代之，cleanup / mailbox 同步到修复后状态
+
+### 本阶段验证结果
+
+- 定向新增测试回归：`runtime.test_cleanup_view_service` + 3 条新增 integration ✅（8 tests, OK）
+- 全量 unittest：`uv run --no-project --with 'PyYAML>=6.0.2' python3 -m unittest discover -s runtime -p 'test_*.py'` ✅（102 tests, OK）
+- coverage guard：`uv run --no-project --with 'PyYAML>=6.0.2' --with 'coverage>=7.6.0' python3 runtime/check_cp_refactor_coverage.py` ✅（主干 coverage 97%）
+
+### 这 3 组场景当前覆盖到的程度
+
+1. **多 worker cleanup blocker 组合**
+   - 已覆盖 active worker、plan review、task review、worker lock、global/unassigned lock 的同屏聚合
+   - 仍未枚举更重的真实文件锁竞争/多 listener 生命周期组合（刻意不做重资源）
+2. **CLI/API handler 交叉异常**
+   - 已覆盖 config/peek/launch/stop-listener 之间最现实的 bad request -> recovery 路径
+   - 仍未展开更宽的 HTTP handler matrix（如 team-mail / task-action / workflow-update 的 malformed-json 全排列）
+3. **真实 launch failure + workflow 长期修复**
+   - 已覆盖真实子进程 exit -> stale/intervention request -> manager replan -> old failure residue disappear -> new review chain 接管
+   - 仍未覆盖更复杂的 provider auth failure / port busy / multi-hop replan 叠加修复链
+
 ## 1. 结论
 
 在 coverage guard 落地之后，本轮又补了一阶段**系统级测试增强**，重点不再是提高主干 service/store 的统计数字，而是补此前 audit 已点名的外沿高风险面：

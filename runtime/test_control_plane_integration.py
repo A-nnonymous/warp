@@ -96,6 +96,20 @@ def request_json_allow_error(
         return int(exc.code), body
 
 
+def request_bytes_allow_error(
+    url: str, payload: bytes, *, content_type: str = "application/json", timeout: float = 5.0
+) -> tuple[int, dict[str, object]]:
+    request = urllib.request.Request(url, data=payload)
+    request.add_header("Content-Type", content_type)
+    try:
+        with urllib.request.urlopen(request, timeout=timeout) as response:
+            return int(response.status), json.loads(response.read().decode("utf-8"))
+    except urllib.error.HTTPError as exc:
+        body = json.loads(exc.read().decode("utf-8", errors="replace"))
+        exc.close()
+        return int(exc.code), body
+
+
 _COPYTREE_SKIP = {"worktrees", "node_modules", "__pycache__", ".git", "logs"}
 
 
@@ -1024,6 +1038,63 @@ class ControlPlaneIntegrationTest(unittest.TestCase):
         self.assertFalse(payload["ok"])
         self.assertIn("unknown api route", payload["error"])
 
+    def test_handler_error_recovery_keeps_peek_config_launch_and_stop_listener_semantics(self) -> None:
+        status_code, invalid_json = request_bytes_allow_error(f"{self.base_url}/api/config", b"{broken")
+        self.assertEqual(status_code, 400)
+        self.assertFalse(invalid_json["ok"])
+        self.assertIn("invalid json", invalid_json["error"])
+
+        status_code, malformed_config = request_json_allow_error(
+            f"{self.base_url}/api/config",
+            {"config_text": "- not\n- a mapping\n"},
+        )
+        self.assertEqual(status_code, 400)
+        self.assertFalse(malformed_config["ok"])
+        self.assertEqual(malformed_config["error"], "top-level config must be a YAML mapping")
+
+        status_code, peek_missing_lines = request_json_allow_error(f"{self.base_url}/api/peek", {"agent": "A1"})
+        self.assertEqual(status_code, 400)
+        self.assertFalse(peek_missing_lines["ok"])
+        self.assertEqual(peek_missing_lines["error"], "lines list is required")
+
+        status_code, bad_launch = request_json_allow_error(
+            f"{self.base_url}/api/launch",
+            {"restart": False, "strategy": "selected_model", "provider": "ducc"},
+        )
+        self.assertEqual(status_code, 400)
+        self.assertFalse(bad_launch["ok"])
+        self.assertIn("model", bad_launch["error"])
+
+        peek_append = read_json(
+            f"{self.base_url}/api/peek",
+            {"agent": "A1", "lines": ["recovery line 1", "recovery line 2"]},
+        )
+        self.assertTrue(peek_append["ok"])
+
+        config_text = json.dumps(json.loads(self.render_config()), indent=2) + "\n"
+        config_save = read_json(f"{self.base_url}/api/config", {"config_text": config_text})
+        self.assertTrue(config_save["ok"])
+        self.assertEqual(config_save["validation_issues"], [])
+
+        peek_state = read_json(f"{self.base_url}/api/peek")
+        self.assertIn("A1", peek_state["peek"])
+        self.assertTrue(any("recovery line 1" in line for line in peek_state["peek"]["A1"]))
+
+        stop_listener = self.run_cli_command("stop-listener")
+        stop_listener_payload = json.loads(stop_listener.stdout)
+        self.assertTrue(stop_listener_payload["ok"])
+        self.assertTrue(stop_listener_payload["listener_released"])
+        wait_for(lambda: not port_is_listening(self.port), timeout=10, interval=0.5)
+
+        session_state = self.session_state()
+        self.assertFalse(session_state["server"]["listener_active"])
+
+        stop_all = self.run_cli_command("stop-all")
+        stop_all_payload = json.loads(stop_all.stdout)
+        self.assertTrue(stop_all_payload["ok"])
+        self.assertTrue(stop_all_payload["listener_released"])
+        wait_for(lambda: self.server.poll() is not None, timeout=10, interval=0.5)
+
     def test_cli_api_smoke_suite_covers_config_text_peek_and_stop_listener_alias(self) -> None:
         config_payload = read_json(f"{self.base_url}/api/config")
         self.assertIn("config_text", config_payload)
@@ -1379,6 +1450,120 @@ class ControlPlaneIntegrationTest(unittest.TestCase):
         merge_queue = {item["agent"]: item for item in state["merge_queue"]}
         self.assertNotEqual(merge_queue["A1"]["attention_summary"], "process_exit")
         self.assertIn("worker exited with 7", merge_queue["A1"]["attention_summary"])
+
+    def test_launch_failure_can_be_replanned_into_a_clean_new_review_chain(self) -> None:
+        self.install_dummy_dag()
+        failing_binary = self.bin_dir / "opencode"
+        failing_binary.write_text("#!/bin/sh\nexit 7\n", encoding="utf-8")
+        failing_binary.chmod(0o755)
+
+        launch_result = read_json(
+            f"{self.base_url}/api/launch",
+            {"restart": False, "strategy": "selected_model", "provider": "opencode", "model": "o4-mini"},
+        )
+        self.assertTrue(launch_result["ok"])
+
+        wait_for(
+            lambda: any(
+                item.get("agent") == "A1"
+                and item.get("status") == "stale"
+                and "worker exited with 7" in item.get("attention_summary", "")
+                for item in self.fetch_state()["merge_queue"]
+            ),
+            timeout=15,
+            interval=0.5,
+        )
+
+        failed_state = self.fetch_state()
+        failed_request = next(item for item in failed_state["a0_console"]["requests"] if item["agent"] == "A1")
+        self.assertEqual(failed_request["request_type"], "worker_intervention")
+        self.assertIn("worker exited with 7", failed_request["body"])
+
+        replanned = read_json(
+            f"{self.base_url}/api/workflow/update",
+            {
+                "task_id": "A1-001",
+                "agent": "A0",
+                "note": "Long-term fix: move the failed root lane to A2 with a fresh review gate.",
+                "updates": {
+                    "owner": "A2",
+                    "claimed_by": "A2",
+                    "status": "pending",
+                    "claim_state": "claimed",
+                    "dependencies": ["A2-001"],
+                    "plan_required": True,
+                    "plan_state": "pending_review",
+                    "plan_summary": "fresh launch fix plan owned by A2",
+                    "claim_note": "replanned after A1 launch failure",
+                    "review_note": "A1 failure is superseded by the new repair lane",
+                },
+            },
+        )
+        self.assertTrue(replanned["ok"])
+
+        self.write_worker_handoff(
+            "A1",
+            status="parked",
+            blockers=[],
+            requested_unlocks=[],
+            next_checkin="await reassignment",
+            checkpoint_status="parked",
+            pending_work=["capture failure notes only"],
+            dependencies=[],
+            resume_instruction="do not resume this failed launch lane",
+        )
+        self.write_worker_handoff(
+            "A2",
+            status="ready",
+            blockers=[],
+            requested_unlocks=[],
+            next_checkin="after plan approval",
+            checkpoint_status="claimed",
+            pending_work=["implement the new repair plan after approval"],
+            dependencies=["A2-001"],
+            resume_instruction="wait for manager approval on the fresh repair plan",
+        )
+
+        runtime_after_fix = deepcopy(failed_state["runtime"])
+        for item in runtime_after_fix["workers"]:
+            if item.get("agent") == "A1":
+                item["status"] = "stopped"
+            elif item.get("agent") == "A2":
+                item["status"] = "healthy"
+        self.write_state_payload("state/agent_runtime.yaml", runtime_after_fix)
+
+        heartbeats_after_fix = deepcopy(failed_state["heartbeats"])
+        for item in heartbeats_after_fix["agents"]:
+            if item.get("agent") == "A1":
+                item["state"] = "offline"
+                item["evidence"] = "lane parked after manager replan"
+                item["escalation"] = "none"
+            elif item.get("agent") == "A2":
+                item["state"] = "healthy"
+                item["evidence"] = "repair lane claimed"
+                item["escalation"] = "none"
+        self.write_state_payload("state/heartbeats.yaml", heartbeats_after_fix)
+
+        refreshed = self.fetch_state()
+        requests = refreshed["a0_console"]["requests"]
+        self.assertFalse(any(item["id"] == failed_request["id"] for item in requests))
+        replanned_request = next(item for item in requests if item.get("task_id") == "A1-001")
+        self.assertEqual(replanned_request["agent"], "A2")
+        self.assertEqual(replanned_request["request_type"], "plan_review")
+        self.assertEqual(replanned_request["response_state"], "pending")
+        self.assertEqual(replanned_request["body"], "fresh launch fix plan owned by A2")
+
+        merge_queue = {item["agent"]: item for item in refreshed["merge_queue"]}
+        self.assertNotIn("worker exited with 7", merge_queue["A1"]["attention_summary"])
+        self.assertNotIn("worker exited with 7", merge_queue["A2"]["attention_summary"])
+        self.assertEqual(merge_queue["A2"]["attention_summary"], "implement the new repair plan after approval")
+        self.assertIn("A1-001", refreshed["cleanup"]["pending_plan_reviews"])
+        self.assertTrue(
+            any(
+                item.get("related_task_ids") == ["A1-001"] and item.get("to") in {"A2", "all"}
+                for item in refreshed["team_mailbox"]["messages"]
+            )
+        )
 
     def test_ducc_prompt_file_flag_is_sanitized_for_stale_configs(self) -> None:
         current_state = self.fetch_state()
