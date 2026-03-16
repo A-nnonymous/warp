@@ -22,7 +22,7 @@ from .constants import (
 )
 from .contracts import LaunchPolicyState, ProviderQueueItem
 from .network import LaunchPolicy
-from .services import best_pool_for_provider, best_pool_for_worker, queue_pool_candidates
+from .services import best_pool_for_provider, best_pool_for_worker, provider_queue_item, queue_pool_candidates
 from .utils import format_command, load_yaml, run_command, slugify
 
 
@@ -228,52 +228,27 @@ class ProviderMixin:
         stats["last_probe_ok"] = launch_ready
 
         pool_usage = self.pool_usage_summary(pool_name)
-        active_workers = len(pool_usage["running_agents"])
-        work_quality = self.score_work_quality(stats, active_workers)
+        work_quality = self.score_work_quality(stats, len(pool_usage["running_agents"]))
         stats["last_work_quality"] = work_quality
 
-        connection_quality = 1.0 if launch_ready else 0.0
-        if launch_ready and latency_ms < 25:
-            connection_quality = 1.0
-        elif launch_ready and latency_ms < 100:
-            connection_quality = 0.9
-        elif launch_ready:
-            connection_quality = 0.8
-
-        base_priority = int(pool.get("priority", 100))
-        score = round(base_priority * 100 + connection_quality * 30 + work_quality * 70, 3)
-
-        failure_detail = stats.get("last_failure", "")
-        if not binary_path:
-            failure_detail = f"provider binary missing for pool {pool_name}: {binary or 'unassigned'}"
-        elif not auth_ready:
-            failure_detail = auth_detail
-
-        return {
-            "resource_pool": pool_name,
-            "provider": provider_name,
-            "model": pool.get("model", "unassigned"),
-            "priority": base_priority,
-            "binary": binary or "unassigned",
-            "binary_found": bool(binary_path),
-            "recursion_guard": recursion_guard,
-            "launch_wrapper": launch_wrapper,
-            "auth_mode": auth_mode,
-            "auth_ready": auth_ready,
-            "auth_detail": auth_detail,
-            "api_key_present": has_api_key,
-            "launch_ready": launch_ready,
-            "connection_quality": connection_quality,
-            "work_quality": work_quality,
-            "score": score,
-            "latency_ms": latency_ms,
-            "active_workers": active_workers,
-            "running_agents": pool_usage["running_agents"],
-            "usage": pool_usage["usage"],
-            "progress_pct": pool_usage["progress_pct"],
-            "last_activity_at": pool_usage["last_activity_at"],
-            "last_failure": failure_detail,
-        }
+        return provider_queue_item(
+            pool_name=pool_name,
+            provider_name=provider_name,
+            model=str(pool.get("model", "unassigned")),
+            priority=int(pool.get("priority", 100)),
+            binary=str(binary or "unassigned"),
+            binary_found=bool(binary_path),
+            recursion_guard=recursion_guard,
+            launch_wrapper=launch_wrapper,
+            auth_mode=auth_mode,
+            auth_ready=auth_ready,
+            auth_detail=auth_detail,
+            api_key_present=has_api_key,
+            latency_ms=latency_ms,
+            work_quality=work_quality,
+            pool_usage=pool_usage,
+            last_failure=str(stats.get("last_failure", "")),
+        )
 
     def provider_queue(self) -> list[ProviderQueueItem]:
         evaluations: list[ProviderQueueItem] = [self.evaluate_resource_pool(pool_name) for pool_name in self.resource_pools]

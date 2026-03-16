@@ -1,5 +1,21 @@
 # Architecture Refactor Progress
 
+- 时间：2026-03-16 09:5x CST
+- 当前阶段：继续沿 provider/process 主线削薄 `provider_mixin.py`，把 provider queue item 的 score / failure-detail / view-model shaping 下沉到纯 service。
+- 本阶段代码成果：
+  - 新增 `runtime/cp/services/provider_queue.py`，沉淀 `provider_connection_quality()`、`provider_failure_detail()`、`provider_queue_item()`，统一承载 provider queue 的连接质量、失败详情与最终 typed view-model 组装。
+  - `provider_mixin.py` 的 `evaluate_resource_pool()` 改成薄委托：mixin 只保留 binary/auth 探测、stats 读取与 usage 汇总，queue item 评分与字段拼装下沉到 service，`ProviderQueueItem` contract 保持不变。
+  - 新增 `runtime/test_provider_queue_service.py`，并更新 `runtime/test_control_plane_architecture.py`、`runtime/cp/services/__init__.py`、`runtime/cp/CODE_INDEX.md`，把 provider queue service 纳入纯函数测试、架构测试面与索引。
+- 已验证：
+  - `uv run --no-project --with 'PyYAML>=6.0.2' python3 -m unittest runtime.test_provider_queue_service runtime.test_telemetry_view_service runtime.test_control_plane_architecture runtime.test_control_plane_integration.ControlPlaneIntegrationTest.test_session_backed_provider_launches_without_api_key runtime.test_control_plane_integration.ControlPlaneIntegrationTest.test_ducc_prompt_file_flag_is_sanitized_for_stale_configs runtime.test_control_plane_integration.ControlPlaneIntegrationTest.test_session_probe_failure_surfaces_actionable_error` ✅
+- 当前断点：
+  - provider/process 这条线里，`provider_auth_status()` 本身的 session/api-key readiness 分支仍留在 `provider_mixin.py`；若继续同主线，下一刀可把 auth readiness/result contract 也抽成独立纯 service。
+  - `process_snapshot` 顶层 launch/runtime metadata 仍是平铺 typed 字段；若想继续内聚，也可把 launch metadata 再拆成更细子 contract。
+- 下一步：
+  1. 继续沿 provider/process 主线，把 provider auth/session probe result shaping 抽成纯 service，进一步削薄 `provider_mixin.py`。
+  2. 或在 process/provider 共线补 launch metadata 子 contract，收掉 `wrapper_path` / `recursion_guard` 一类平铺字段。
+  3. 继续坚持“单阶段、单刀口、定向测试、单 commit”节奏。
+
 - 时间：2026-03-16 09:4x CST
 - 当前阶段：沿 provider/process 主线把 telemetry normalization 从 `state_mixin.py` 抽到纯 service，继续削薄 mixin 内的 view-model shaping。
 - 本阶段代码成果：

@@ -23,6 +23,7 @@ from runtime.cp.contracts import (
     WorkerHandoffSummary,
     WorkflowPatch,
 )
+from runtime.cp.services.provider_queue import provider_queue_item
 from runtime.cp.services.telemetry_views import command_contract, normalize_usage, process_snapshot_entry, running_agent_telemetry, summarize_pool_usage
 from runtime.cp.stores import (
     BacklogStore,
@@ -72,7 +73,24 @@ class ControlPlaneArchitectureTest(unittest.TestCase):
             telemetry={"phase": "boot", "usage": usage},
         )
         pool_usage = summarize_pool_usage([running_agent])
-        provider_queue_item: ProviderQueueItem = {"resource_pool": "ducc_pool", "provider": "ducc", "launch_ready": True, "running_agents": pool_usage["running_agents"], "usage": pool_usage["usage"]}
+        provider_queue_item_view: ProviderQueueItem = provider_queue_item(
+            pool_name="ducc_pool",
+            provider_name="ducc",
+            model="claude",
+            priority=50,
+            binary="ducc",
+            binary_found=True,
+            recursion_guard="env-only",
+            launch_wrapper="",
+            auth_mode="api_key",
+            auth_ready=True,
+            auth_detail="api key configured",
+            api_key_present=True,
+            latency_ms=12.0,
+            work_quality=0.9,
+            pool_usage=pool_usage,
+            last_failure="",
+        )
         dashboard: DashboardState = {
             "updated_at": "2026-03-16T00:00:00Z",
             "last_event": "boot",
@@ -86,7 +104,7 @@ class ControlPlaneArchitectureTest(unittest.TestCase):
             "backlog": {"items": [backlog_item]},
             "gates": {"gates": [{"id": "G1", "status": "open"}]},
             "processes": {"A1": process_snapshot},
-            "provider_queue": [provider_queue_item],
+            "provider_queue": [provider_queue_item_view],
             "resolved_workers": [],
             "merge_queue": [{"agent": "A1", "checkpoint_status": handoff["checkpoint_status"]}],
             "a0_console": a0_console,
@@ -108,8 +126,8 @@ class ControlPlaneArchitectureTest(unittest.TestCase):
         self.assertEqual(launch_policy["default_strategy"], "elastic")
         self.assertEqual(process_snapshot["provider"], "ducc")
         self.assertEqual(process_snapshot["command"]["binary"], "ducc")
-        self.assertEqual(provider_queue_item["resource_pool"], "ducc_pool")
-        self.assertEqual(provider_queue_item["running_agents"][0]["usage"]["total_tokens"], 16)
+        self.assertEqual(provider_queue_item_view["resource_pool"], "ducc_pool")
+        self.assertEqual(provider_queue_item_view["running_agents"][0]["usage"]["total_tokens"], 16)
         self.assertEqual(control["worker_count"], 1)
         self.assertEqual(dashboard["runtime"]["workers"][0]["agent"], "A1")
 

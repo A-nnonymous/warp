@@ -9,6 +9,7 @@ from .pool_selection import (
     rank_pool_candidates,
     recommended_pool_plan,
 )
+from .provider_queue import provider_connection_quality, provider_failure_detail, provider_queue_item
 from .telemetry_views import command_contract, normalize_usage, process_snapshot_entry, running_agent_telemetry, summarize_pool_usage
 from .task_routing import (
     build_task_profile,
@@ -38,7 +39,10 @@ __all__ = [
     "normalize_usage",
     "pool_rank_tuple",
     "process_snapshot_entry",
+    "provider_connection_quality",
+    "provider_failure_detail",
     "provider_preference_default",
+    "provider_queue_item",
     "queue_pool_candidates",
     "rank_pool_candidates",
     "recommended_pool_plan",
