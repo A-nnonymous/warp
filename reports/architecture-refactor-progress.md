@@ -1,5 +1,21 @@
 # Architecture Refactor Progress
 
+- 时间：2026-03-16 09:4x CST
+- 当前阶段：沿 provider/process 主线把 telemetry normalization 从 `state_mixin.py` 抽到纯 service，继续削薄 mixin 内的 view-model shaping。
+- 本阶段代码成果：
+  - 新增 `runtime/cp/services/telemetry_views.py`，沉淀 `normalize_usage()`、`command_contract()`、`running_agent_telemetry()`、`summarize_pool_usage()`、`process_snapshot_entry()`，统一承载 usage / command / running-agent / process snapshot 的纯 shaping 逻辑。
+  - `state_mixin.py` 的 `pool_usage_summary()` 与 `process_snapshot()` 改成薄委托：mixin 只负责遍历进程与读取 telemetry，具体 view-model 归一化下沉到 service，typed contract 保持不变。
+  - 更新 `runtime/cp/services/__init__.py`、`runtime/cp/CODE_INDEX.md`、`runtime/test_control_plane_architecture.py`，并新增 `runtime/test_telemetry_view_service.py`，把 telemetry view service 纳入索引、架构测试面与纯函数单测。
+- 已验证：
+  - `uv run --no-project --with 'PyYAML>=6.0.2' python -m unittest runtime.test_telemetry_view_service runtime.test_control_plane_architecture runtime.test_control_plane_integration.ControlPlaneIntegrationTest.test_session_backed_provider_launches_without_api_key runtime.test_control_plane_integration.ControlPlaneIntegrationTest.test_ducc_prompt_file_flag_is_sanitized_for_stale_configs` ✅
+- 当前断点：
+  - `evaluate_resource_pool()` 里 provider queue 的 provider/auth/score/failure detail shaping 仍在 `provider_mixin.py`，若继续同主线，下一刀可把 provider queue item assembler 也下沉成纯 service。
+  - `process_snapshot` 顶层的 launch/runtime metadata（如 `wrapper_path`、`recursion_guard`）虽然已稳定 typed，但仍是平铺字段；后续若要继续细化，可再拆 launch metadata 子 contract。
+- 下一步：
+  1. 继续沿 provider/process 主线，把 `evaluate_resource_pool()` 返回的 provider queue item shaping 抽到纯 service，进一步削薄 `provider_mixin.py`。
+  2. 或在同一主线补 process/provider 共用 launch metadata 子 contract，把 `wrapper_path` / `recursion_guard` 等字段再收成更细 typed shape。
+  3. 继续坚持“单阶段、单刀口、定向测试、单 commit”节奏。
+
 - 时间：2026-03-16 09:3x CST
 - 当前阶段：继续沿 dashboard provider/process 子视图往内收，把 queue/snapshot 内层 telemetry、usage、command shape 收成明确 typed contract。
 - 本阶段代码成果：

@@ -23,6 +23,7 @@ from runtime.cp.contracts import (
     WorkerHandoffSummary,
     WorkflowPatch,
 )
+from runtime.cp.services.telemetry_views import command_contract, normalize_usage, process_snapshot_entry, running_agent_telemetry, summarize_pool_usage
 from runtime.cp.stores import (
     BacklogStore,
     HeartbeatStore,
@@ -53,11 +54,25 @@ class ControlPlaneArchitectureTest(unittest.TestCase):
         handoff: WorkerHandoffSummary = {"checkpoint_status": "checkpointed", "pending_work": ["merge patch"]}
         control: ManagerControlState = {"worker_count": 1, "active_agents": ["A1"]}
         launch_policy: LaunchPolicyState = {"default_strategy": "elastic", "available_strategies": ["elastic"]}
-        usage: TelemetryUsage = {"input_tokens": 12, "output_tokens": 4, "total_tokens": 16}
-        command: ProcessCommand = {"argv": ["ducc"], "binary": "ducc", "display": "ducc", "uses_wrapper": False}
-        running_agent: RunningAgentTelemetry = {"agent": "A1", "phase": "boot", "usage": usage}
-        process_snapshot: ProcessSnapshot = {"provider": "ducc", "alive": True, "command": command, "usage": usage}
-        provider_queue_item: ProviderQueueItem = {"resource_pool": "ducc_pool", "provider": "ducc", "launch_ready": True, "running_agents": [running_agent], "usage": usage}
+        usage: TelemetryUsage = normalize_usage({"input_tokens": 12, "output_tokens": 4, "total_tokens": 16})
+        command: ProcessCommand = command_contract(["ducc"], "")
+        running_agent: RunningAgentTelemetry = running_agent_telemetry("A1", {"phase": "boot", "usage": usage})
+        process_snapshot: ProcessSnapshot = process_snapshot_entry(
+            resource_pool="ducc_pool",
+            provider="ducc",
+            model="claude",
+            pid=123,
+            alive=True,
+            returncode=None,
+            wrapper_path="",
+            recursion_guard="env-only",
+            worktree_path="/tmp/worktree",
+            log_path="/tmp/worker.log",
+            command=["ducc"],
+            telemetry={"phase": "boot", "usage": usage},
+        )
+        pool_usage = summarize_pool_usage([running_agent])
+        provider_queue_item: ProviderQueueItem = {"resource_pool": "ducc_pool", "provider": "ducc", "launch_ready": True, "running_agents": pool_usage["running_agents"], "usage": pool_usage["usage"]}
         dashboard: DashboardState = {
             "updated_at": "2026-03-16T00:00:00Z",
             "last_event": "boot",
