@@ -26,6 +26,7 @@ from runtime.cp.contracts import (
     WorkerHandoffSummary,
     WorkflowPatch,
 )
+from runtime.cp.services.backlog_notifications import task_action_notification, workflow_patch_notifications
 from runtime.cp.services.provider_auth import configured_api_key, provider_auth_mode, provider_auth_status, provider_probe_timeout, provider_probe_values
 from runtime.cp.services.provider_queue import provider_queue_item
 from runtime.cp.services.telemetry_views import (
@@ -85,6 +86,20 @@ class ControlPlaneArchitectureTest(unittest.TestCase):
             run_command_fn=lambda command, timeout: SimpleNamespace(returncode=0, stdout="ready", stderr=""),
         )
         self.assertEqual(auth_status, ("session", True, "ready", False))
+        action_notification = task_action_notification(
+            task_id="A1-001",
+            action="submit_plan",
+            actor="A1",
+            note="freeze the API contract before coding",
+            updated={"id": "A1-001", "claimed_by": "A1", "owner": "A1"},
+        )
+        workflow_notifications = workflow_patch_notifications(
+            task_id="A1-001",
+            before={"owner": "A0", "claimed_by": ""},
+            updated={"owner": "A2", "claimed_by": "A2", "plan_state": "rejected"},
+            summary="owner: A0 -> A2",
+            note="needs a revised plan",
+        )
         usage: TelemetryUsage = normalize_usage({"input_tokens": 12, "output_tokens": 4, "total_tokens": 16})
         command: ProcessCommand = command_contract(["ducc"], "")
         launch: ProcessLaunchMetadata = process_launch_metadata("", "env-only", ["ducc"])
@@ -162,6 +177,10 @@ class ControlPlaneArchitectureTest(unittest.TestCase):
         self.assertEqual(mailbox_message["from"], "A1")
         self.assertEqual(a0_console["pending_count"], 0)
         self.assertEqual(launch_policy["default_strategy"], "elastic")
+        self.assertEqual(action_notification["recipient"], "A0")
+        self.assertEqual(action_notification["scope"], "manager")
+        self.assertEqual(workflow_notifications[0]["recipient"], "A2")
+        self.assertEqual(workflow_notifications[0]["topic"], "design_question")
         self.assertEqual(process_snapshot["provider"], "ducc")
         self.assertEqual(command["binary"], "ducc")
         self.assertEqual(launch["recursion_guard"], "env-only")

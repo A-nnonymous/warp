@@ -7,9 +7,16 @@ from typing import Any
 
 from .constants import STATE_DIR
 from .contracts import BacklogItem, WorkflowPatch
-from .services import apply_task_action, apply_workflow_patch, summarize_workflow_patch, validate_workflow_updates
+from .services import (
+    apply_task_action,
+    apply_workflow_patch,
+    summarize_workflow_patch,
+    task_action_notification,
+    validate_workflow_updates,
+    workflow_patch_notifications,
+)
 from .stores import BacklogStore
-from .utils import dedupe_strings, now_iso, summarize_list, terminate_process_tree
+from .utils import now_iso, summarize_list, terminate_process_tree
 
 
 class BacklogMixin:
@@ -65,18 +72,22 @@ class BacklogMixin:
             )
 
         updated = self.update_backlog_item(task_id, mutate)
-        topic_map = {
-            "submit_plan": ("A0", "review_request", "manager"),
-            "request_review": ("A0", "handoff", "manager"),
-            "approve_plan": (updated.get("claimed_by") or updated.get("owner") or "A1", "status_note", "direct"),
-            "reject_plan": (updated.get("claimed_by") or updated.get("owner") or "A1", "design_question", "direct"),
-            "complete": (updated.get("claimed_by") or updated.get("owner") or "A1", "status_note", "direct"),
-            "reopen": (updated.get("claimed_by") or updated.get("owner") or "A1", "blocker", "direct"),
-        }
-        if action_name in topic_map and note:
-            recipient, topic, scope = topic_map[action_name]
-            sender = actor if action_name not in {"approve_plan", "reject_plan", "complete", "reopen"} else "A0"
-            self.append_team_mailbox_message(sender, str(recipient), topic, note, [task_id], scope)
+        notification = task_action_notification(
+            task_id=task_id,
+            action=action_name,
+            actor=actor,
+            note=note,
+            updated=updated,
+        )
+        if notification:
+            self.append_team_mailbox_message(
+                notification["sender"],
+                notification["recipient"],
+                notification["topic"],
+                notification["body"],
+                notification["related_task_ids"],
+                notification["scope"],
+            )
         self.last_event = f"task:{action_name}:{task_id}"
         return updated
 
@@ -155,35 +166,21 @@ class BacklogMixin:
 
         updated = self.update_backlog_item(task_id, mutate)
         summary = self.summarize_workflow_patch(before, updated)
-        recipients = dedupe_strings(
-            [
-                str(before.get("owner") or "").strip(),
-                str(before.get("claimed_by") or "").strip(),
-                str(updated.get("owner") or "").strip(),
-                str(updated.get("claimed_by") or "").strip(),
-            ]
-        )
-        recipients = [recipient for recipient in recipients if recipient and recipient != "A0"]
-        if recipients:
-            topic = "design_question" if str(updated.get("plan_state") or "") == "rejected" else "status_note"
-            if len(recipients) == 1:
-                self.append_team_mailbox_message(
-                    "A0",
-                    recipients[0],
-                    topic,
-                    note or f"A0 updated {task_id}: {summary}",
-                    [task_id],
-                    "direct",
-                )
-            else:
-                self.append_team_mailbox_message(
-                    "A0",
-                    "all",
-                    topic,
-                    note or f"A0 updated {task_id}: {summary}",
-                    [task_id],
-                    "broadcast",
-                )
+        for notification in workflow_patch_notifications(
+            task_id=task_id,
+            before=before,
+            updated=updated,
+            summary=summary,
+            note=note,
+        ):
+            self.append_team_mailbox_message(
+                notification["sender"],
+                notification["recipient"],
+                notification["topic"],
+                notification["body"],
+                notification["related_task_ids"],
+                notification["scope"],
+            )
         self.last_event = f"workflow:update:{task_id}"
         return updated
 

@@ -1,5 +1,21 @@
 # Architecture Refactor Progress
 
+- 时间：2026-03-16 09:54 CST
+- 当前阶段：转切 backlog 支线，把 `backlog_mixin.py` 里的 mailbox fanout / notification routing 从 manager orchestration 中抽到纯 service，优先缩短 backlog/mailbox 残留尾巴。
+- 本阶段代码成果：
+  - 新增 `runtime/cp/services/backlog_notifications.py`，沉淀 `task_action_notification()`、`workflow_patch_notifications()`、`mailbox_notification()`，统一承载 task action 的 manager/direct 路由、workflow patch 的 recipient fanout，以及 outbound mailbox payload shaping。
+  - `backlog_mixin.py` 的 `perform_task_action()` / `patch_workflow_item()` 改成薄委托：mixin 只保留 backlog 持久化与实际 mailbox append，recipient/topic/scope/body 决策不再内嵌在 manager-side orchestration。
+  - 新增 `runtime/test_backlog_notification_service.py`，并更新 `runtime/test_control_plane_architecture.py`、`runtime/cp/services/__init__.py`、`runtime/cp/CODE_INDEX.md`，把 backlog notification service 纳入纯函数测试、架构测试面与索引。
+- 已验证：
+  - `uv run --no-project --with 'PyYAML>=6.0.2' python3 -m unittest runtime.test_backlog_notification_service runtime.test_workflow_patch_service runtime.test_control_plane_architecture runtime.test_control_plane_integration.ControlPlaneIntegrationTest.test_task_actions_drive_plan_and_review_flow runtime.test_control_plane_integration.ControlPlaneIntegrationTest.test_workflow_update_allows_a0_replan runtime.test_control_plane_integration.ControlPlaneIntegrationTest.test_team_mailbox_send_and_acknowledge_flow` ✅
+- 当前断点：
+  - backlog 支线里，task/workflow 触发的 mailbox routing 已脱离 `backlog_mixin.py`，但 worker stop / cleanup 这类非 backlog 的 mailbox append 仍在 mixin 侧，暂未统一到同一通知 service。
+  - A0 request 生成仍主要由 dashboard/mailbox 汇总层消费 mailbox 状态；如果还要继续收 backlog/mailbox 尾巴，下一刀更可能落在 mailbox catalog / inbox filtering，而不是回到 workflow 状态转换。
+- 下一步：
+  1. 继续 backlog/mailbox 支线时，优先评估把 `mailbox_mixin.py` 的 A0 inbox / pending 过滤与 catalog shaping 抽成纯 service，进一步收掉 manager-facing mailbox 组装尾巴。
+  2. 若 backlog/mailbox 已足够验收，再看是否回头做 provider/process 消费面收口，而不是继续深挖同一支线。
+  3. 继续坚持“单阶段、单刀口、定向测试、单 commit”节奏。
+
 - 时间：2026-03-16 09:4x CST
 - 当前阶段：沿 provider/process 主线继续收 `process_snapshot` 顶层 launch/runtime metadata，把 `wrapper_path` / `recursion_guard` 一类平铺字段补成更内聚的子 contract + helper，优先收掉 process 视图尾巴。
 - 本阶段代码成果：

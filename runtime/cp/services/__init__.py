@@ -1,3 +1,4 @@
+from .backlog_notifications import mailbox_notification, task_action_notification, workflow_patch_notifications
 from .dashboard_queue import build_a0_request_catalog, build_merge_queue
 from .dashboard_summary import compute_manager_control_state, summarize_worker_handoff
 from .pool_selection import (
@@ -42,6 +43,7 @@ __all__ = [
     "build_merge_queue",
     "command_contract",
     "build_task_profile",
+    "mailbox_notification",
     "compute_manager_control_state",
     "configured_api_key",
     "configured_pool_candidates",
@@ -63,6 +65,7 @@ __all__ = [
     "rank_pool_candidates",
     "recommended_pool_plan",
     "running_agent_telemetry",
+    "task_action_notification",
     "select_task_record_for_worker",
     "summarize_pool_usage",
     "summarize_worker_handoff",
@@ -77,4 +80,5 @@ __all__ = [
     "apply_workflow_patch",
     "summarize_workflow_patch",
     "validate_workflow_updates",
+    "workflow_patch_notifications",
 ]
