@@ -3,6 +3,7 @@ from __future__ import annotations
 import tempfile
 import unittest
 from pathlib import Path
+from types import SimpleNamespace
 
 from runtime.cp.constants import PROVIDER_STATS_PATH
 from runtime.cp.contracts import (
@@ -23,6 +24,7 @@ from runtime.cp.contracts import (
     WorkerHandoffSummary,
     WorkflowPatch,
 )
+from runtime.cp.services.provider_auth import configured_api_key, provider_auth_mode, provider_auth_status, provider_probe_timeout, provider_probe_values
 from runtime.cp.services.provider_queue import provider_queue_item
 from runtime.cp.services.telemetry_views import command_contract, normalize_usage, process_snapshot_entry, running_agent_telemetry, summarize_pool_usage
 from runtime.cp.stores import (
@@ -55,6 +57,24 @@ class ControlPlaneArchitectureTest(unittest.TestCase):
         handoff: WorkerHandoffSummary = {"checkpoint_status": "checkpointed", "pending_work": ["merge patch"]}
         control: ManagerControlState = {"worker_count": 1, "active_agents": ["A1"]}
         launch_policy: LaunchPolicyState = {"default_strategy": "elastic", "available_strategies": ["elastic"]}
+        self.assertEqual(configured_api_key({"api_key_env_name": "OPENAI_API_KEY"}, {"api_key": "pool-secret"}, env={}), "pool-secret")
+        self.assertEqual(provider_auth_mode({"session_auth": True}), "session")
+        self.assertEqual(provider_probe_timeout({}, {}), 3.0)
+        self.assertEqual(
+            provider_probe_values("ducc_pool", "ducc", {"model": "claude"}, "ducc", "/usr/bin/ducc")["resource_pool"],
+            "ducc_pool",
+        )
+        auth_status = provider_auth_status(
+            pool_name="ducc_pool",
+            provider_name="ducc",
+            provider={"auth_mode": "session", "session_probe_command": ["ducc", "status"]},
+            pool={},
+            binary="ducc",
+            binary_path="/usr/bin/ducc",
+            format_command_fn=lambda command, values: ["ducc", "status"],
+            run_command_fn=lambda command, timeout: SimpleNamespace(returncode=0, stdout="ready", stderr=""),
+        )
+        self.assertEqual(auth_status, ("session", True, "ready", False))
         usage: TelemetryUsage = normalize_usage({"input_tokens": 12, "output_tokens": 4, "total_tokens": 16})
         command: ProcessCommand = command_contract(["ducc"], "")
         running_agent: RunningAgentTelemetry = running_agent_telemetry("A1", {"phase": "boot", "usage": usage})

@@ -1,6 +1,22 @@
 # Architecture Refactor Progress
 
 - 时间：2026-03-16 09:5x CST
+- 当前阶段：收尾优先，沿 provider/process 主线把 `provider_auth_status()` 的 session probe / api-key readiness / auth detail shaping 从 `provider_mixin.py` 抽到纯 service，优先减少同主线剩余尾巴。
+- 本阶段代码成果：
+  - 新增 `runtime/cp/services/provider_auth.py`，沉淀 `configured_api_key()`、`provider_auth_mode()`、`provider_probe_timeout()`、`provider_probe_values()`、`provider_auth_status()`，统一承载 provider auth-mode 归一化、session probe 执行、api-key readiness 判定与 detail shaping。
+  - `provider_mixin.py` 的 `configured_api_key()` / `provider_auth_mode()` / `provider_probe_timeout()` / `provider_probe_values()` / `provider_auth_status()` 改成薄委托；mixin 继续保留 wrapper/launch-policy/pool evaluation 编排，但不再内嵌 auth readiness 细节。
+  - 新增 `runtime/test_provider_auth_service.py`，并更新 `runtime/test_control_plane_architecture.py`、`runtime/cp/services/__init__.py`、`runtime/cp/CODE_INDEX.md`，把 provider auth service 纳入纯函数测试、架构测试面与索引。
+- 已验证：
+  - `uv run --no-project --with 'PyYAML>=6.0.2' python3 -m unittest runtime.test_provider_auth_service runtime.test_provider_queue_service runtime.test_control_plane_architecture runtime.test_control_plane_integration.ControlPlaneIntegrationTest.test_session_backed_provider_launches_without_api_key runtime.test_control_plane_integration.ControlPlaneIntegrationTest.test_session_probe_failure_surfaces_actionable_error runtime.test_control_plane_integration.ControlPlaneIntegrationTest.test_ducc_prompt_file_flag_is_sanitized_for_stale_configs` ✅
+- 当前断点：
+  - provider/process 主线里，`provider_queue` 的 auth shaping 已抽离，但 `process_snapshot` 顶层 launch/runtime metadata（如 `wrapper_path` / `recursion_guard`）仍是平铺 typed 字段，若要彻底收尾可考虑补成更内聚的 launch metadata 子 contract。
+  - backlog 的 mailbox fanout / notification routing 仍是另一条未收口支线；不过 provider 主线的 auth 尾巴已经明显缩短。
+- 下一步：
+  1. 优先评估是否直接把 `process_snapshot` 的 launch/runtime metadata 收成子 contract，完成 provider/process 主线最后一段可验收收口。
+  2. 若主线已足够稳定，则转切 `backlog_mixin.py` 的 mailbox fanout / notification routing，清理剩余 manager-side 支线。
+  3. 继续坚持“单阶段、单刀口、定向测试、单 commit”节奏。
+
+- 时间：2026-03-16 09:5x CST
 - 当前阶段：继续沿 provider/process 主线削薄 `provider_mixin.py`，把 provider queue item 的 score / failure-detail / view-model shaping 下沉到纯 service。
 - 本阶段代码成果：
   - 新增 `runtime/cp/services/provider_queue.py`，沉淀 `provider_connection_quality()`、`provider_failure_detail()`、`provider_queue_item()`，统一承载 provider queue 的连接质量、失败详情与最终 typed view-model 组装。
