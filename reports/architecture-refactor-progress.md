@@ -1,5 +1,19 @@
 # Architecture Refactor Progress
 
+- 时间：2026-03-16 10:2x CST
+- 当前阶段：主线已收官，转入全局 polish + 经验沉淀。本阶段不再打开新的架构支线，只做 service 导出面/索引一致性打磨，并补 architecture refactor 复盘文档。
+- 本阶段代码成果：
+  - 整理 `runtime/cp/services/__init__.py`，补上 barrel module docstring，并把纯 service 导出面收成显式、稳定、按字母序可扫描的 API surface，降低后续维护者在 service 层入口处的认知负担。
+  - 更新 `runtime/test_control_plane_architecture.py`，新增对 `runtime.cp.services` barrel export 的守卫测试，确保核心 helper 继续通过统一入口可导入，同时保持 `__all__` 有序、可审阅。
+  - 更新 `runtime/cp/CODE_INDEX.md`，明确 `services/__init__.py` 是 curated barrel export；新增 `reports/architecture-refactor-retrospective.md`，沉淀本轮 refactor 的阶段纪律、切分原则、typed contract vs service 抽离判断法、测试/验收策略与后续建议。
+- 已验证：
+  - `uv run --no-project --with 'PyYAML>=6.0.2' python3 -m unittest runtime.test_control_plane_architecture runtime.test_dashboard_queue_service runtime.test_cleanup_view_service runtime.test_provider_auth_service runtime.test_provider_queue_service runtime.test_telemetry_view_service runtime.test_mailbox_view_service runtime.test_backlog_notification_service runtime.test_workflow_patch_service runtime.test_task_routing_service runtime.test_pool_selection_service` ✅
+- 当前断点：
+  - architecture refactor 主线维持“已完成”判断；本阶段只做收官后的可维护性打磨与经验沉淀，不继续扩散到 gateway/web 或新的 service 拆分。
+- 下一步：
+  1. 保持本阶段唯一 commit 停在 checkpoint，不 push。
+  2. 后续若再继续演进，应另开新 session、另选单一刀口。
+
 - 时间：2026-03-16 10:3x CST
 - 当前整体状态：本轮 architecture refactor 主线已完成，可按“验收通过”看待。routing / pool selection / dashboard summary / dashboard queue / mailbox views / cleanup views / backlog notifications / workflow patch / telemetry / provider auth / provider queue 已全部沉到 `runtime/cp/services/`，manager/provider/process/backlog/mailbox 关键视图与状态转换已从 mixin 里的大段规则分支收成可测试纯函数。
 - 本阶段（最终收尾）代码成果：

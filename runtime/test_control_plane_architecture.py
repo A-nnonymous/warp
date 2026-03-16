@@ -5,6 +5,7 @@ import unittest
 from pathlib import Path
 from types import SimpleNamespace
 
+from runtime.cp import services
 from runtime.cp.constants import PROVIDER_STATS_PATH
 from runtime.cp.contracts import (
     A0ConsoleState,
@@ -206,6 +207,28 @@ class ControlPlaneArchitectureTest(unittest.TestCase):
         self.assertEqual(provider_queue_item_view["running_agents"][0]["usage"]["total_tokens"], 16)
         self.assertEqual(control["worker_count"], 1)
         self.assertEqual(dashboard["runtime"]["workers"][0]["agent"], "A1")
+
+    def test_services_barrel_exports_curated_helpers(self) -> None:
+        expected_exports = {
+            "apply_task_action",
+            "apply_workflow_patch",
+            "build_a0_request_catalog",
+            "build_merge_queue",
+            "build_team_mailbox_catalog",
+            "cleanup_status_view",
+            "compute_manager_control_state",
+            "mailbox_notification",
+            "provider_auth_status",
+            "provider_queue_item",
+            "recommended_pool_plan",
+            "summarize_worker_handoff",
+            "workflow_patch_notifications",
+        }
+
+        self.assertEqual(services.__all__, sorted(services.__all__))
+        self.assertTrue(expected_exports.issubset(set(services.__all__)))
+        for name in expected_exports:
+            self.assertTrue(callable(getattr(services, name)), name)
 
     def test_backlog_store_normalizes_claim_and_status(self) -> None:
         store = BacklogStore(self.root / "backlog.yaml")
