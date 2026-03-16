@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from typing import Any, NotRequired, TypedDict
+from typing import Any, TypedDict
 
 
 class GitIdentity(TypedDict, total=False):
@@ -270,8 +270,8 @@ class ProviderQueueItem(TypedDict, total=False):
     active_workers: int
     running_agents: list[RunningAgentTelemetry]
     usage: TelemetryUsage
-    progress_pct: NotRequired[int | None]
-    last_activity_at: NotRequired[str]
+    progress_pct: int | None
+    last_activity_at: str
     last_failure: str
 
 
@@ -337,7 +337,7 @@ TeamMailboxMessage = TypedDict(
     "TeamMailboxMessage",
     {
         "id": str,
-        "from": NotRequired[str],
+        "from": str,
         "to": str,
         "scope": str,
         "topic": str,

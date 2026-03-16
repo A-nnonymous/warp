@@ -1,39 +1,39 @@
-# Manager Report
+# 管理者报告
 
-Last updated: 2026-03-13T18:15:05
+最后更新时间: 2026-03-16T15:33:54
 
-## Production View
+## 运行视图
 
-- Stage: live manager polling
-- Delivery mode: listener active
-- Current gate: G0 Protocol Freeze
-- Current manager: A0
-- Poll loop: every 5 seconds
+- 阶段: 管理者实时轮询中
+- 交付模式: 监听器运行中
+- 当前 Gate: G0 Protocol Freeze
+- 当前管理者: A0
+- 轮询周期: 每 5 秒
 
-## Real Liveness
+## 存活情况
 
 - A0: healthy
-- A1: offline
-- A2: offline
-- A3: offline
-- A4: offline
-- A5: offline
-- A6: offline
-- A7: offline
+- A1: stale
+- A2: stale
+- A3: stale
+- A4: stale
+- A5: stale
+- A6: stale
+- A7: stale
 
-## Control Snapshot
+## 控制面快照
 
-- Active agents: none
-- Attention agents: none
-- Runnable agents: A1, A6
-- Blocked agents: A2, A3, A4, A5, A7
+- 活跃 Agent: 无
+- 需关注 Agent: A1, A2, A3, A4, A5, A6, A7
+- 可启动 Agent: 无
+- 被阻塞 Agent: 无
 
-## Active Blockers
+## 当前阻塞
 
-- blocked by dependency or gate: A2, A3, A4, A5, A7
+- 需优先处理：A1, A2, A3, A4, A5, A6, A7
 
-## Immediate Action
+## 立即动作
 
-1. Review attention agents first and clear launch or runtime faults.
-2. Launch the next runnable set when provider readiness is green.
-3. Keep gate ordering aligned with backlog dependencies before widening scope.
+1. 先处理需关注的 Agent，清理启动或运行时故障。
+2. 当 Provider 就绪后，启动下一批可运行 Agent。
+3. 在扩大范围前，保持 Gate 顺序与 backlog 依赖一致。

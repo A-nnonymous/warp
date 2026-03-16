@@ -41,42 +41,42 @@ class LaunchMixin:
         inline_state_context = self.render_inline_state_context(worker, profile)
         reference_input_text = "\n".join(f"- {item}" for item in reference_inputs) or "- none configured"
         context_file_text = "\n".join(f"- {item}" for item in prompt_context_files) if prompt_context_files else "- none"
-        text = f"""# {worker['agent']} Worker Prompt
+        text = f"""# {worker['agent']} Worker 提示词
 
-Repository name: {self.project.get('repository_name', 'target-repo')}
-Local workspace root: {self.project.get('local_repo_root', str(REPO_ROOT))}
-Reference workspace: {reference_workspace_root}
+仓库名称: {self.project.get('repository_name', 'target-repo')}
+本地工作区根目录: {self.project.get('local_repo_root', str(REPO_ROOT))}
+参考工作区: {reference_workspace_root}
 Agent: {worker['agent']}
-Task: {task_id} - {task_title}
-Task type: {profile.get('task_type', 'default')}
+任务: {task_id} - {task_title}
+任务类型: {profile.get('task_type', 'default')}
 Provider: {provider_name}
-Model: {model}
+模型: {model}
 Worktree: {worker['worktree_path']}
-Branch: {worker['branch']}
-Commit identity: {git_identity_text}
-Manager merge target: {self.integration_branch()}
+分支: {worker['branch']}
+提交身份: {git_identity_text}
+管理者合并目标: {self.integration_branch()}
 
-Reference inputs:
+参考输入:
 
 {reference_input_text}
 
-Mandatory rules:
+强制规则:
 
-1. Work only inside the assigned worktree.
-2. Do not start nested control-plane sessions or launch additional agent CLI processes such as `control_plane.py up`, `control_plane.py serve`, `claude-code`, `ducc`, `copilot`, or `opencode` from inside this worker session.
-3. Update your status file in `status/agents/` and your checkpoint in `checkpoints/agents/`.
-4. Treat configured reference inputs as guidance, not as the final host implementation.
-5. Report blockers before widening scope.
-6. Do not edit shared control-plane files unless the manager explicitly asks and the lock is held.
-7. Commit only on your assigned branch; A0 owns final merge or cherry-pick into `{self.integration_branch()}`.
+1. 只在分配给你的 worktree 内工作。
+2. 不得在当前 worker 会话中启动嵌套 control-plane 会话，也不得额外启动 `control_plane.py up`、`control_plane.py serve`、`claude-code`、`ducc`、`copilot`、`opencode` 等 agent CLI 进程。
+3. 你在 `status/agents/` 中的状态汇报、在 `checkpoints/agents/` 中的检查点、以及任何面对管理者或人类的汇报，必须全部使用中文。
+4. 配置的 reference inputs 只是参考，不是最终宿主实现。
+5. 发现阻塞时，先用中文汇报阻塞，再决定是否扩展范围。
+6. 除非管理者明确要求且已经持锁，否则不要编辑共享 control-plane 文件。
+7. 只能在分配给你的分支上提交；最终合并或 cherry-pick 到 `{self.integration_branch()}` 由 A0 负责。
 
 {inline_state_context}
 
-First files to read:
+优先阅读的文件:
 
 {context_file_text}
 
-Primary test command:
+主测试命令:
 
 {worker.get('test_command', 'unassigned')}
 """
@@ -370,27 +370,27 @@ Primary test command:
         prompt_path = PROMPT_DIR / f"{worker['agent']}_checkpoint.md"
         task_id = worker.get("task_id", "unassigned")
         task_title = self.task_title(task_id)
-        text = f"""# {worker['agent']} Checkpoint Session
+        text = f"""# {worker['agent']} 检查点会话
 
-Repository name: {self.project.get('repository_name', 'target-repo')}
+仓库名称: {self.project.get('repository_name', 'target-repo')}
 Agent: {worker['agent']}
-Task: {task_id} - {task_title}
+任务: {task_id} - {task_title}
 Worktree: {worker['worktree_path']}
-Branch: {worker['branch']}
+分支: {worker['branch']}
 
-You are being asked to save a checkpoint before session ends.
+当前会话结束前，请先保存检查点。
 
-Instructions:
+要求:
 
-1. Write a checkpoint file at `checkpoints/agents/{worker['agent']}_checkpoint.md` summarizing:
-   - What you have accomplished so far on this task
-   - Key files you created or modified
-   - What remains to be done
-   - Any blockers or important discoveries
-   - Current test status
-2. Focus only on the work itself, not on the control-plane or session mechanics.
-3. Be concise but thorough — this checkpoint is for the next session to resume your work.
-4. Commit the checkpoint file on your branch with message "checkpoint: {task_id} session pause".
+1. 在 `checkpoints/agents/{worker['agent']}.md` 写入检查点，内容请用中文概括：
+   - 当前任务已经完成了什么
+   - 你创建或修改过哪些关键文件
+   - 还剩下哪些工作
+   - 目前的阻塞点或重要发现
+   - 当前测试状态
+2. 只聚焦于工作本身，不要展开 control-plane 或会话机制。
+3. 内容保持简洁但信息完整，方便下一个会话低成本续接。
+4. 在你的分支上提交该检查点文件，提交信息使用 "checkpoint: {task_id} session pause"。
 """
         prompt_path.write_text(text, encoding="utf-8")
         return prompt_path

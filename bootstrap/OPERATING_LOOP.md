@@ -3,17 +3,33 @@
 ## Default Development Loop
 
 1. Read the bootstrap files first.
-2. Inspect only the task-relevant runtime, frontend, config, or doc files.
-3. Implement the smallest coherent change.
-4. Rebuild compiled assets if frontend source changed.
-5. Run compile checks and workflow tests.
-6. Update docs in the same change when operator behavior changed.
+2. Do a quick bootstrap-maintenance pass: note confusion, fix the small issues now.
+3. Inspect only the task-relevant runtime, frontend, config, or doc files.
+4. Implement the smallest coherent change.
+5. Rebuild compiled assets if frontend source changed.
+6. Run compile checks and workflow tests.
+7. Update docs in the same change when operator behavior changed.
+
+## Human-First Operating Surfaces
+
+Use the most humane surface that still preserves durable state:
+
+- remember that A0 is the default workflow operator; the human mainly observes and intervenes on exceptions
+- use the control plane for approvals, unblock instructions, workflow changes, and other canonical execution facts that need human involvement
+- use external Copilot sessions for dense implementation, debugging, and design iteration
+- before ending an external session, write the durable result back into workflow state, mailbox, or checkpoints
+
+Default write-back rule:
+
+- workflow update for task-state changes
+- mailbox for durable coordination context
+- checkpoint for resumability, handoff, or interruption safety
 
 ## Validation Commands
 
-- Python syntax: `python3 -m py_compile runtime/control_plane.py runtime/test_control_plane_integration.py`
+- Python syntax: `python3 -m py_compile runtime/control_plane.py tests/runtime/test_control_plane_integration.py`
 - Frontend build: `cd runtime/web && npm run build`
-- Integration suite: `python3 -m unittest runtime.test_control_plane_integration -v`
+- Integration suite: `python3 -m unittest tests.runtime.test_control_plane_integration -v`
 
 ## When Extra Validation Is Required
 
@@ -47,8 +63,10 @@ When touching these areas, cross-check the related concerns together:
 
 - `runtime/control_plane.py`: config validation, launch blockers, and worktree/bootstrap behavior
 - `runtime/web/src/App.tsx`: settings hydration, section save behavior, and launch behavior
-- `README.md`: operator instructions must match runtime behavior in the same patch
+- `README.md` / `README_CN.md`: operator instructions must match runtime behavior in the same patch
 
 ## Handoff Rules
 
 If you settle a new workflow invariant, update this bootstrap folder so the next agent does not have to rediscover it.
+
+If you notice a bootstrap inefficiency but do not fix it immediately, leave behind a concrete proposal instead of a vague note.

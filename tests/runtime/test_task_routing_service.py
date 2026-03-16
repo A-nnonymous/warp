@@ -107,7 +107,7 @@ class TaskRoutingServiceTest(unittest.TestCase):
                 "types": {
                     "dashboard": {
                         "preferred_providers": ["openai", "ducc"],
-                        "suggested_test_command": "pytest runtime/test_task_routing_service.py -q",
+                        "suggested_test_command": "pytest tests/runtime/test_task_routing_service.py -q",
                     }
                 },
                 "rules": [
@@ -135,7 +135,7 @@ class TaskRoutingServiceTest(unittest.TestCase):
         self.assertEqual(profile["preferred_providers"], ["openai", "ducc"])
         self.assertEqual(
             profile["suggested_test_command"],
-            "pytest runtime/test_task_routing_service.py -q",
+            "pytest tests/runtime/test_task_routing_service.py -q",
         )
         self.assertEqual(suggested_branch_name(worker, profile), "a1_dashboard_service_extraction")
 

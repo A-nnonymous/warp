@@ -15,7 +15,7 @@ from copy import deepcopy
 from pathlib import Path
 
 
-WARP_ROOT = Path(__file__).resolve().parents[1]
+WARP_ROOT = Path(__file__).resolve().parents[2]
 
 
 def _yaml_available_in_system_python() -> bool:
@@ -419,7 +419,7 @@ class ControlPlaneIntegrationTest(unittest.TestCase):
         )
 
     def session_state(self) -> dict[str, object]:
-        session_state_path = self.warp_root / "runtime" / f"session_state_{self.port}.json"
+        session_state_path = self.warp_root / "runtime" / "generated" / "sessions" / f"session_state_{self.port}.json"
         return json.loads(session_state_path.read_text(encoding="utf-8"))
 
     def write_state_payload(self, relative_path: str, payload: dict[str, object]) -> None:
@@ -1597,12 +1597,12 @@ class ControlPlaneIntegrationTest(unittest.TestCase):
 
         heartbeats = {item["agent"]: item for item in state["heartbeats"]["agents"]}
         self.assertEqual(heartbeats["A0"]["state"], "healthy")
-        self.assertIn("polling", heartbeats["A0"]["evidence"])
+        self.assertIn("轮询", heartbeats["A0"]["evidence"])
         self.assertNotEqual(heartbeats["A0"]["last_seen"], "2026-03-10")
 
         manager_report = state["manager_report"]
-        self.assertIn("Stage: live manager polling", manager_report)
-        self.assertIn("Poll loop: every 5 seconds", manager_report)
+        self.assertIn("阶段: 管理者实时轮询中", manager_report)
+        self.assertIn("轮询周期: 每 5 秒", manager_report)
 
         merge_queue = {item["agent"]: item for item in state["merge_queue"]}
         self.assertEqual(merge_queue["A1"]["checkpoint_status"], "not started")
@@ -1913,9 +1913,9 @@ class ControlPlaneIntegrationTest(unittest.TestCase):
         self.assertTrue(launch_result["ok"])
         self.wait_for_agent_state(expected_provider="ducc", expected_model="claude-sonnet-4-5")
 
-        prompt_path = self.warp_root / "runtime" / "generated_prompts" / "A1.md"
+        prompt_path = self.warp_root / "runtime" / "generated" / "prompts" / "A1.md"
         prompt_text = prompt_path.read_text(encoding="utf-8")
-        self.assertIn("Do not start nested control-plane sessions", prompt_text)
+        self.assertIn("不得在当前 worker 会话中启动嵌套 control-plane 会话", prompt_text)
         self.assertIn("claude-code", prompt_text)
         self.assertIn("ducc", prompt_text)
 

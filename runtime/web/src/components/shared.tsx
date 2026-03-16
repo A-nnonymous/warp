@@ -1,16 +1,16 @@
 import type { ReactNode } from 'react';
 import type { ConfigSection, ValidationIssue } from '../types';
-import { classNames, renderCell } from '../lib/utils';
+import { classNames, renderCell, translateColumnLabel, translateOptionLabel } from '../lib/utils';
 
 export function DataTable({ columns, rows }: { columns: string[]; rows: Array<Record<string, unknown>> }) {
   if (!rows.length) {
-    return <div className="small muted">No data</div>;
+    return <div className="small muted">暂无数据</div>;
   }
   return (
     <div className="table-shell">
       <table>
         <thead>
-          <tr>{columns.map((column) => <th key={column}>{column}</th>)}</tr>
+          <tr>{columns.map((column) => <th key={column}>{translateColumnLabel(column)}</th>)}</tr>
         </thead>
         <tbody>
           {rows.map((row, rowIndex) => (
@@ -74,8 +74,8 @@ export function SelectField({
     <label className="field">
       <span className="field-label">{label}</span>
       <select className={classNames('field-input', issues && issues.length > 0 && 'field-input-error')} value={value} onChange={(event) => onChange(event.target.value)}>
-        <option value="">Select…</option>
-        {options.map((option) => <option key={option} value={option}>{option}</option>)}
+        <option value="">请选择…</option>
+        {options.map((option) => <option key={option} value={option}>{translateOptionLabel(option)}</option>)}
       </select>
       {issues && issues.length > 0 ? <span className="field-error">{issues[0]}</span> : null}
     </label>
@@ -88,7 +88,7 @@ export function SectionIssueList({ issues }: { issues: ValidationIssue[] }) {
   }
   return (
     <div className="settings-issues">
-      <h3>Validation Warnings</h3>
+      <h3>校验提示</h3>
       <ul>
         {issues.map((issue, index) => <li key={`${issue.field}-${index}`}>{issue.field}: {issue.message}</li>)}
       </ul>
@@ -121,8 +121,8 @@ export function SectionHeader({
       </div>
       <div className="section-actions">
         {status?.message ? <span className={classNames('section-status', status.error && 'error')}>{status.message}</span> : null}
-        <button className="ghost" type="button" onClick={() => onValidate(section)}>Validate</button>
-        <button type="button" onClick={() => onSave(section)}>Save</button>
+        <button className="ghost" type="button" onClick={() => onValidate(section)}>校验</button>
+        <button type="button" onClick={() => onSave(section)}>保存</button>
         {action}
       </div>
     </div>

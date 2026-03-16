@@ -6,7 +6,7 @@ from http.server import ThreadingHTTPServer
 from pathlib import Path
 from typing import Any
 
-from .constants import LOG_DIR, PROMPT_DIR
+from .constants import LOG_DIR, PROMPT_DIR, SESSION_DIR, WRAPPER_DIR
 from .network import WorkerProcess
 from .config_mixin import ConfigMixin
 from .backlog_mixin import BacklogMixin
@@ -62,6 +62,8 @@ class ControlPlaneService(
         self.processes: dict[str, WorkerProcess] = {}
         self.last_event = "initialized"
         PROMPT_DIR.mkdir(parents=True, exist_ok=True)
+        WRAPPER_DIR.mkdir(parents=True, exist_ok=True)
+        SESSION_DIR.mkdir(parents=True, exist_ok=True)
         LOG_DIR.mkdir(parents=True, exist_ok=True)
         self.config: dict[str, Any] = {}
         self.project: dict[str, Any] = {}

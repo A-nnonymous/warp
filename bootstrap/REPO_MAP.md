@@ -34,7 +34,7 @@ It owns:
 
 ## Operator and Governance Docs
 
-- `README.md`: operator-facing overview and common commands
+- `README.md` / `README_CN.md`: operator-facing overview and common commands (English / Chinese)
 - `governance/axioms.md`: foundational axioms, human-write-only
 - `governance/manager_protocol.md`: manager contract, interruption priority, self-evolution, planning authority
 - `governance/documentation_architecture.md`: markdown responsibility map
@@ -54,4 +54,4 @@ It owns:
 
 - Frontend source lives in `runtime/web/src/`
 - Rebuild frontend with `cd runtime/web && npm run build`
-- Main regression suite is `python3 -m unittest runtime.test_control_plane_integration -v`
+- Main regression suite is `python3 -m unittest tests.runtime.test_control_plane_integration -v`

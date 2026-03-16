@@ -253,44 +253,44 @@ class DashboardMixin:
 
         blocker_lines: list[str] = []
         if control["attention_agents"]:
-            blocker_lines.append(f"attention required: {', '.join(control['attention_agents'])}")
+            blocker_lines.append(f"需优先处理：{', '.join(control['attention_agents'])}")
         if control["blocked_agents"]:
-            blocker_lines.append(f"blocked by dependency or gate: {', '.join(control['blocked_agents'])}")
+            blocker_lines.append(f"被依赖或 Gate 阻塞：{', '.join(control['blocked_agents'])}")
         if not blocker_lines:
-            blocker_lines.append("no manager-side incidents detected")
+            blocker_lines.append("管理侧暂未发现异常")
 
-        return f"""# Manager Report
+        return f"""# 管理者报告
 
-Last updated: {now_iso()}
+最后更新时间: {now_iso()}
 
-## Production View
+## 运行视图
 
-- Stage: live manager polling
-- Delivery mode: {'listener active' if self.listener_active else 'listener offline'}
-- Current gate: {current_gate}
-- Current manager: A0
-- Poll loop: every 5 seconds
+- 阶段: 管理者实时轮询中
+- 交付模式: {'监听器运行中' if self.listener_active else '监听器离线'}
+- 当前 Gate: {current_gate}
+- 当前管理者: A0
+- 轮询周期: 每 5 秒
 
-## Real Liveness
+## 存活情况
 
 {chr(10).join(liveness_lines)}
 
-## Control Snapshot
+## 控制面快照
 
-- Active agents: {', '.join(control['active_agents']) or 'none'}
-- Attention agents: {', '.join(control['attention_agents']) or 'none'}
-- Runnable agents: {', '.join(control['runnable_agents']) or 'none'}
-- Blocked agents: {', '.join(control['blocked_agents']) or 'none'}
+- 活跃 Agent: {', '.join(control['active_agents']) or '无'}
+- 需关注 Agent: {', '.join(control['attention_agents']) or '无'}
+- 可启动 Agent: {', '.join(control['runnable_agents']) or '无'}
+- 被阻塞 Agent: {', '.join(control['blocked_agents']) or '无'}
 
-## Active Blockers
+## 当前阻塞
 
 {chr(10).join(f'- {item}' for item in blocker_lines)}
 
-## Immediate Action
+## 立即动作
 
-1. Review attention agents first and clear launch or runtime faults.
-2. Launch the next runnable set when provider readiness is green.
-3. Keep gate ordering aligned with backlog dependencies before widening scope.
+1. 先处理需关注的 Agent，清理启动或运行时故障。
+2. 当 Provider 就绪后，启动下一批可运行 Agent。
+3. 在扩大范围前，保持 Gate 顺序与 backlog 依赖一致。
 """
 
     def persist_manager_report(
@@ -322,23 +322,23 @@ Last updated: {now_iso()}
             },
         )
         if listener_active:
-            evidence = f"polling {control['worker_count']} workers"
+            evidence = f"正在轮询 {control['worker_count']} 个 worker"
             if control["attention_agents"]:
-                evidence += f"; attention: {', '.join(control['attention_agents'])}"
+                evidence += f"；需关注：{', '.join(control['attention_agents'])}"
             elif control["active_agents"]:
-                evidence += f"; active: {', '.join(control['active_agents'])}"
+                evidence += f"；活跃：{', '.join(control['active_agents'])}"
             elif control["runnable_agents"]:
-                evidence += f"; runnable: {', '.join(control['runnable_agents'])}"
+                evidence += f"；可运行：{', '.join(control['runnable_agents'])}"
             else:
-                evidence += "; no immediate action set"
-            expected_next_checkin = "within monitor loop interval"
+                evidence += "；当前无立即动作"
+            expected_next_checkin = "监控轮询周期内"
             escalation = (
-                "review attention queue and launch runnable workers" if control["attention_agents"] else "none"
+                "处理关注队列并启动可运行 worker" if control["attention_agents"] else "none"
             )
         else:
-            evidence = "control-plane listener offline"
-            expected_next_checkin = "when listener restarts"
-            escalation = "restart control-plane listener to resume manager orchestration"
+            evidence = "control-plane 监听器离线"
+            expected_next_checkin = "监听器重启后"
+            escalation = "请重启 control-plane 监听器以恢复管理者编排"
         return {
             "agent": "A0",
             "role": str(existing.get("role", "")).strip() or "manager",

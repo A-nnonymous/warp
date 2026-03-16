@@ -2,11 +2,7 @@
 runtime/local_config.yaml
 
 # Runtime artifacts
-runtime/control_plane.log
-runtime/session_state*.json
-runtime/generated_prompts/
-runtime/generated_wrappers/
-runtime/logs/
+runtime/generated/
 
 # Python
 runtime/__pycache__/

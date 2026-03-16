@@ -24642,6 +24642,101 @@ var DEFAULT_WORKFLOW_DRAFT = {
 };
 
 // src/lib/utils.ts
+var EXACT_TEXT = {
+  unknown: "\u672A\u77E5",
+  none: "\u65E0",
+  unassigned: "\u672A\u5206\u914D",
+  configured: "\u5DF2\u914D\u7F6E",
+  active: "\u8FD0\u884C\u4E2D",
+  healthy: "\u5065\u5EB7",
+  pending: "\u5F85\u5904\u7406",
+  blocked: "\u963B\u585E",
+  review: "\u5F85\u8BC4\u5BA1",
+  completed: "\u5DF2\u5B8C\u6210",
+  done: "\u5DF2\u5B8C\u6210",
+  merged: "\u5DF2\u5408\u5E76",
+  claimed: "\u5DF2\u8BA4\u9886",
+  unclaimed: "\u672A\u8BA4\u9886",
+  answered: "\u5DF2\u7B54\u590D",
+  resolved: "\u5DF2\u89E3\u51B3",
+  seen: "\u5DF2\u67E5\u770B",
+  stale: "\u9700\u5173\u6CE8",
+  offline: "\u79BB\u7EBF",
+  stopped: "\u5DF2\u505C\u6B62",
+  waiting: "\u7B49\u5F85\u4E2D",
+  parked: "\u5DF2\u6682\u505C",
+  checkpointed: "\u5DF2\u68C0\u67E5\u70B9",
+  error: "\u9519\u8BEF",
+  worker: "Worker",
+  manager: "\u7BA1\u7406\u8005",
+  direct: "\u5B9A\u5411",
+  broadcast: "\u5E7F\u64AD",
+  status_note: "\u72B6\u6001\u540C\u6B65",
+  blocker: "\u963B\u585E",
+  handoff: "\u4EA4\u63A5",
+  review_request: "\u8BC4\u5BA1\u8BF7\u6C42",
+  design_question: "\u8BBE\u8BA1\u95EE\u9898",
+  pending_review: "\u5F85\u5BA1\u6279",
+  approved: "\u5DF2\u6279\u51C6",
+  rejected: "\u5DF2\u62D2\u7EDD",
+  yes: "\u662F",
+  no: "\u5426",
+  process_running: "\u8FDB\u7A0B\u8FD0\u884C\u4E2D",
+  process_exit: "\u8FDB\u7A0B\u5DF2\u9000\u51FA",
+  initial_provider: "\u521D\u59CB Provider",
+  selected_model: "\u6307\u5B9A\u6A21\u578B",
+  elastic: "\u5F39\u6027\u8C03\u5EA6"
+};
+var COLUMN_LABELS = {
+  id: "ID",
+  key: "\u952E",
+  value: "\u503C",
+  agent: "Agent",
+  provider: "Provider",
+  model: "\u6A21\u578B",
+  alive: "\u5B58\u6D3B",
+  pid: "PID",
+  resource_pool: "\u8D44\u6E90\u6C60",
+  progress_pct: "\u8FDB\u5EA6",
+  total_tokens: "\u603B Token",
+  phase: "\u9636\u6BB5",
+  recursion_guard: "\u9012\u5F52\u4FDD\u62A4",
+  wrapper_path: "\u5305\u88C5\u5668\u8DEF\u5F84",
+  returncode: "\u8FD4\u56DE\u7801",
+  branch: "\u5206\u652F",
+  submit_strategy: "\u63D0\u4EA4\u7B56\u7565",
+  worker_identity: "Worker \u8EAB\u4EFD",
+  merge_target: "\u5408\u5E76\u76EE\u6807",
+  status: "\u72B6\u6001",
+  manager_action: "\u7BA1\u7406\u52A8\u4F5C",
+  binary_found: "\u4E8C\u8FDB\u5236\u53EF\u7528",
+  launch_wrapper: "\u542F\u52A8\u5305\u88C5\u5668",
+  auth_mode: "\u8BA4\u8BC1\u6A21\u5F0F",
+  auth_ready: "\u8BA4\u8BC1\u5C31\u7EEA",
+  launch_ready: "\u53EF\u542F\u52A8",
+  active_workers: "\u6D3B\u8DC3 Worker",
+  auth_detail: "\u8BA4\u8BC1\u8BE6\u60C5",
+  connection_quality: "\u8FDE\u63A5\u8D28\u91CF",
+  work_quality: "\u5DE5\u4F5C\u8D28\u91CF",
+  score: "\u8BC4\u5206",
+  state: "\u5FC3\u8DF3\u72B6\u6001",
+  last_seen: "\u6700\u8FD1\u5FC3\u8DF3",
+  expected_next_checkin: "\u4E0B\u6B21\u9884\u671F\u7B7E\u5230",
+  owner: "\u8D1F\u8D23\u4EBA",
+  claimed_by: "\u8BA4\u9886\u8005",
+  claim_state: "\u8BA4\u9886\u72B6\u6001",
+  plan_state: "\u8BA1\u5212\u72B6\u6001",
+  gate: "Gate",
+  title: "\u6807\u9898",
+  name: "\u540D\u79F0",
+  from: "\u53D1\u4EF6\u4EBA",
+  to: "\u6536\u4EF6\u4EBA",
+  topic: "\u4E3B\u9898",
+  ack_state: "\u786E\u8BA4\u72B6\u6001",
+  related_task_ids: "\u76F8\u5173\u4EFB\u52A1",
+  created_at: "\u521B\u5EFA\u65F6\u95F4",
+  body: "\u5185\u5BB9"
+};
 function normalizedText(value) {
   return String(value ?? "").trim();
 }
@@ -24684,8 +24779,25 @@ function firstMeaningfulPath(...values) {
 function classNames(...values) {
   return values.filter(Boolean).join(" ");
 }
+function translateUiText(value) {
+  const original = normalizedText(value);
+  if (!original) {
+    return "";
+  }
+  const exact = EXACT_TEXT[original] || EXACT_TEXT[original.toLowerCase()];
+  if (exact) {
+    return exact;
+  }
+  return original.replace(/validation issue\(s\)/g, "\u6821\u9A8C\u95EE\u9898").replace(/launch blocker\(s\)/g, "\u542F\u52A8\u963B\u585E\u9879").replace(/approval request\(s\)/g, "\u5BA1\u6279\u8BF7\u6C42").replace(/pending request\(s\)/g, "\u5F85\u5904\u7406\u8BF7\u6C42").replace(/open message\(s\)/g, "\u672A\u5904\u7406\u6D88\u606F").replace(/active or healthy/g, "\u8FD0\u884C\u4E2D\u6216\u5065\u5EB7").replace(/ready for review/g, "\u53EF\u8BC4\u5BA1").replace(/in progress/g, "\u8FDB\u884C\u4E2D").replace(/needs attention/g, "\u9700\u5173\u6CE8").replace(/no recent activity/g, "\u8FD1\u671F\u65E0\u6D3B\u52A8").replace(/waiting for launch/g, "\u7B49\u5F85\u542F\u52A8").replace(/A0 manager identity/g, "A0 \u7BA1\u7406\u8EAB\u4EFD").replace(/process is still alive/g, "\u8FDB\u7A0B\u4ECD\u5728\u8FD0\u884C").replace(/pending plan approvals:/g, "\u5F85\u5BA1\u6279\u8BA1\u5212\uFF1A").replace(/pending task reviews:/g, "\u5F85\u5904\u7406\u4EFB\u52A1\u8BC4\u5BA1\uFF1A").replace(/locks still held:/g, "\u4ECD\u6301\u6709\u9501\uFF1A").replace(/active workers must be stopped:/g, "\u5FC5\u987B\u5148\u505C\u6B62\u7684\u6D3B\u8DC3 Worker\uFF1A").replace(/outstanding single-writer locks:/g, "\u4ECD\u672A\u91CA\u653E\u7684\u5355\u5199\u9501\uFF1A").replace(/requested unlocks:/g, "\u8BF7\u6C42\u89E3\u9501\uFF1A").replace(/blockers:/g, "\u963B\u585E\u9879\uFF1A").replace(/line\(s\)/g, "\u884C").replace(/agent\(s\) with output/g, "\u4E2A Agent \u6709\u8F93\u51FA").replace(/gates passed/g, "\u4E2A Gate \u5DF2\u901A\u8FC7").replace(/mailbox is clear/g, "\u90AE\u7BB1\u5DF2\u6E05\u7A7A").replace(/no pending requests/g, "\u65E0\u5F85\u5904\u7406\u8BF7\u6C42").replace(/ready to launch/g, "\u53EF\u542F\u52A8").replace(/within monitor loop interval/g, "\u76D1\u63A7\u8F6E\u8BE2\u5468\u671F\u5185").replace(/when listener restarts/g, "\u76D1\u542C\u5668\u91CD\u542F\u540E").replace(/worker exited cleanly/g, "Worker \u5DF2\u6B63\u5E38\u9000\u51FA").replace(/worker exited with/g, "Worker \u9000\u51FA\u7801").replace(/process running/g, "\u8FDB\u7A0B\u8FD0\u884C\u4E2D").replace(/no runtime heartbeat yet/g, "\u5C1A\u65E0\u8FD0\u884C\u65F6\u5FC3\u8DF3").replace(/listener active/g, "\u76D1\u542C\u5668\u8FD0\u884C\u4E2D").replace(/listener offline/g, "\u76D1\u542C\u5668\u79BB\u7EBF").replace(/All gates passed/g, "\u5168\u90E8 Gate \u5DF2\u901A\u8FC7").replace(/No data/g, "\u6682\u65E0\u6570\u636E");
+}
+function translateColumnLabel(column) {
+  return COLUMN_LABELS[column] || translateUiText(column.replaceAll("_", " "));
+}
+function translateOptionLabel(value) {
+  return translateUiText(value.replaceAll("_", " ")) || value;
+}
 function displayState(value) {
-  return String(value || "unknown").replaceAll("_", " ");
+  return translateUiText(String(value || "unknown").replaceAll("_", " "));
 }
 function stateClass(value) {
   return `state-${String(value || "unknown").replace(/[^a-zA-Z0-9]+/g, "_")}`;
@@ -24695,9 +24807,9 @@ function renderCell(value) {
     return " ";
   }
   if (typeof value === "boolean") {
-    return value ? "yes" : "no";
+    return value ? "\u662F" : "\u5426";
   }
-  return String(value);
+  return translateUiText(String(value));
 }
 function formatTokenCount(value) {
   const amount = Number(value || 0);
@@ -24729,12 +24841,24 @@ function stringifyQueue(values) {
 }
 function launchStrategyLabel(strategy) {
   if (strategy === "initial_provider") {
-    return "Initial Provider";
+    return "\u521D\u59CB Provider";
   }
   if (strategy === "selected_model") {
-    return "Selected Model";
+    return "\u6307\u5B9A\u6A21\u578B";
   }
-  return "Elastic";
+  return "\u5F39\u6027\u8C03\u5EA6";
+}
+function tabLabel(tab) {
+  if (tab === "overview") {
+    return "\u603B\u89C8";
+  }
+  if (tab === "operations") {
+    return "\u8FD0\u884C";
+  }
+  if (tab === "settings") {
+    return "\u8BBE\u7F6E";
+  }
+  return tab;
 }
 function slugify(value) {
   return value.toLowerCase().replace(/[^a-z0-9]+/g, "_").replace(/^_+|_+$/g, "").replace(/_{2,}/g, "_");
@@ -25158,7 +25282,7 @@ function workflowDraftFromRequest(data, request, action) {
       planState: "pending_review",
       planSummary: base.planSummary || contextNote,
       reviewNote: "",
-      managerNote: `Replan requested from ${request.id}: ${contextNote}`.trim()
+      managerNote: `\u6765\u81EA ${request.id} \u7684\u91CD\u89C4\u5212\u8BF7\u6C42\uFF1A${contextNote}`.trim()
     };
   }
   if (action === "reassign") {
@@ -25172,7 +25296,7 @@ function workflowDraftFromRequest(data, request, action) {
       claimState: "unclaimed",
       claimNote: "",
       reviewNote: "",
-      managerNote: `Reassign requested from ${request.id}: ${contextNote}`.trim()
+      managerNote: `\u6765\u81EA ${request.id} \u7684\u91CD\u65B0\u5206\u914D\u8BF7\u6C42\uFF1A${contextNote}`.trim()
     };
   }
   return {
@@ -25183,8 +25307,8 @@ function workflowDraftFromRequest(data, request, action) {
     claimedBy: base.claimedBy || agent,
     status: "pending",
     claimState: base.claimedBy || agent ? "claimed" : "unclaimed",
-    reviewNote: `Reopened from ${request.id}: ${contextNote}`.trim(),
-    managerNote: `Reopen requested from ${request.id}: ${contextNote}`.trim()
+    reviewNote: `\u7531 ${request.id} \u91CD\u65B0\u6253\u5F00\uFF1A${contextNote}`.trim(),
+    managerNote: `\u6765\u81EA ${request.id} \u7684\u91CD\u65B0\u6253\u5F00\u8BF7\u6C42\uFF1A${contextNote}`.trim()
   };
 }
 function pickWorkflowTask(data, taskId = "") {
@@ -25215,9 +25339,9 @@ function workflowBriefLines(data) {
   const planPending = items.filter((item) => item.plan_state === "pending_review");
   const cleanupBlockers = data.cleanup.blockers || [];
   return [
-    `${active.length} active task(s), ${review.length} awaiting review, ${blocked.length} blocked`,
-    `${planPending.length} plan approval request(s), ${data.a0_console.pending_count} A0 queue item(s)`,
-    cleanupBlockers.length ? `${cleanupBlockers.length} cleanup blocker(s) still open` : "cleanup lane is clear"
+    `${active.length} \u4E2A\u4EFB\u52A1\u8FDB\u884C\u4E2D\uFF0C${review.length} \u4E2A\u5F85\u8BC4\u5BA1\uFF0C${blocked.length} \u4E2A\u963B\u585E`,
+    `${planPending.length} \u4E2A\u8BA1\u5212\u5F85\u5BA1\u6279\uFF0CA0 \u961F\u5217\u4E2D\u6709 ${data.a0_console.pending_count} \u9879`,
+    cleanupBlockers.length ? `\u4ECD\u6709 ${cleanupBlockers.length} \u4E2A\u6E05\u7406\u963B\u585E\u9879` : "\u6E05\u7406\u901A\u9053\u5DF2\u7545\u901A"
   ];
 }
 function workflowPeekTasks(data) {
@@ -25341,49 +25465,49 @@ function getLocalValidationIssues(config, data) {
   const workerDefaults = draft.worker_defaults || {};
   const workers = draft.workers || [];
   if (!String(project.repository_name || "").trim()) {
-    add("project.repository_name", "repository name is required");
+    add("project.repository_name", "\u4ED3\u5E93\u540D\u4E0D\u80FD\u4E3A\u7A7A");
   }
   if (!String(project.local_repo_root || "").trim()) {
-    add("project.local_repo_root", "local repo root is required");
+    add("project.local_repo_root", "\u672C\u5730\u4ED3\u5E93\u6839\u76EE\u5F55\u4E0D\u80FD\u4E3A\u7A7A");
   }
   const referenceWorkspace = projectReferenceWorkspace(project);
   if (referenceWorkspace && referenceWorkspace.startsWith("/absolute/path/")) {
-    add("project.reference_workspace_root", "reference workspace must be replaced with a real path");
+    add("project.reference_workspace_root", "\u53C2\u8003\u5DE5\u4F5C\u533A\u5FC5\u987B\u66FF\u6362\u4E3A\u771F\u5B9E\u8DEF\u5F84");
   }
   if (!String(dashboard.host || "").trim()) {
-    add("project.dashboard.host", "dashboard host is required");
+    add("project.dashboard.host", "Dashboard Host \u4E0D\u80FD\u4E3A\u7A7A");
   }
   if (!Number.isInteger(Number(dashboard.port)) || Number(dashboard.port) < 1 || Number(dashboard.port) > 65535) {
-    add("project.dashboard.port", "dashboard port must be between 1 and 65535");
+    add("project.dashboard.port", "Dashboard Port \u5FC5\u987B\u5728 1 \u5230 65535 \u4E4B\u95F4");
   }
   if (!String(project.integration_branch || project.base_branch || "").trim()) {
-    add("project.integration_branch", "integration branch is required");
+    add("project.integration_branch", "\u96C6\u6210\u5206\u652F\u4E0D\u80FD\u4E3A\u7A7A");
   }
   const seenAgents = /* @__PURE__ */ new Set();
   const seenBranches = /* @__PURE__ */ new Set();
   const seenWorktrees = /* @__PURE__ */ new Set();
   Object.entries(pools).forEach(([poolName, pool]) => {
     if (!String(pool.provider || "").trim()) {
-      add(`resource_pools.${poolName}.provider`, "provider is required");
+      add(`resource_pools.${poolName}.provider`, "Provider \u4E0D\u80FD\u4E3A\u7A7A");
     }
     if (!String(pool.model || "").trim()) {
-      add(`resource_pools.${poolName}.model`, "model is required");
+      add(`resource_pools.${poolName}.model`, "\u6A21\u578B\u4E0D\u80FD\u4E3A\u7A7A");
     }
     if (!Number.isInteger(Number(pool.priority ?? 100))) {
-      add(`resource_pools.${poolName}.priority`, "priority must be an integer");
+      add(`resource_pools.${poolName}.priority`, "\u4F18\u5148\u7EA7\u5FC5\u987B\u662F\u6574\u6570");
     }
   });
   if (workerDefaults.resource_pool && !pools[workerDefaults.resource_pool]) {
-    add("worker_defaults.resource_pool", "default resource pool must refer to an existing pool");
+    add("worker_defaults.resource_pool", "\u9ED8\u8BA4\u8D44\u6E90\u6C60\u5FC5\u987B\u5F15\u7528\u5DF2\u5B58\u5728\u7684\u6C60");
   }
   if (workerDefaults.resource_pool_queue && workerDefaults.resource_pool_queue.some((poolName) => !pools[poolName])) {
-    add("worker_defaults.resource_pool_queue", "default queue must contain only existing pools");
+    add("worker_defaults.resource_pool_queue", "\u9ED8\u8BA4\u961F\u5217\u53EA\u80FD\u5305\u542B\u5DF2\u5B58\u5728\u7684\u8D44\u6E90\u6C60");
   }
   if (workerDefaults.git_identity?.name && !workerDefaults.git_identity?.email) {
-    add("worker_defaults.git_identity.email", "default git identity email is required when name is set");
+    add("worker_defaults.git_identity.email", "\u8BBE\u7F6E\u9ED8\u8BA4 Git \u540D\u79F0\u65F6\u5FC5\u987B\u540C\u65F6\u586B\u5199\u90AE\u7BB1");
   }
   if (workerDefaults.git_identity?.email && !workerDefaults.git_identity?.name) {
-    add("worker_defaults.git_identity.name", "default git identity name is required when email is set");
+    add("worker_defaults.git_identity.name", "\u8BBE\u7F6E\u9ED8\u8BA4 Git \u90AE\u7BB1\u65F6\u5FC5\u987B\u540C\u65F6\u586B\u5199\u540D\u79F0");
   }
   workers.forEach((worker, index) => {
     const effectiveWorker = mergeWorkerWithDefaults(worker, workerDefaults);
@@ -25392,39 +25516,39 @@ function getLocalValidationIssues(config, data) {
     const branch = String(effectiveWorker.branch || "").trim();
     const worktreePath = String(effectiveWorker.worktree_path || "").trim();
     if (!agent) {
-      add(`${root}.agent`, "agent is required");
+      add(`${root}.agent`, "Agent \u4E0D\u80FD\u4E3A\u7A7A");
     } else if (seenAgents.has(agent)) {
-      add(`${root}.agent`, "agent must be unique");
+      add(`${root}.agent`, "Agent \u5FC5\u987B\u552F\u4E00");
     } else {
       seenAgents.add(agent);
     }
     if (!branch) {
-      add(`${root}.branch`, "branch is required");
+      add(`${root}.branch`, "\u5206\u652F\u4E0D\u80FD\u4E3A\u7A7A");
     } else if (seenBranches.has(branch)) {
-      add(`${root}.branch`, "branch must be unique");
+      add(`${root}.branch`, "\u5206\u652F\u5FC5\u987B\u552F\u4E00");
     } else {
       seenBranches.add(branch);
     }
     if (!worktreePath) {
-      add(`${root}.worktree_path`, "worktree path is required");
+      add(`${root}.worktree_path`, "worktree \u8DEF\u5F84\u4E0D\u80FD\u4E3A\u7A7A");
     } else if (seenWorktrees.has(worktreePath)) {
-      add(`${root}.worktree_path`, "worktree path must be unique");
+      add(`${root}.worktree_path`, "worktree \u8DEF\u5F84\u5FC5\u987B\u552F\u4E00");
     } else {
       seenWorktrees.add(worktreePath);
     }
     const poolName = String(effectiveWorker.resource_pool || "").trim();
     const queue = effectiveWorker.resource_pool_queue || [];
     if (!poolName && !queue.length) {
-      add(`${root}.resource_pool`, "resource pool or queue is required");
+      add(`${root}.resource_pool`, "\u5FC5\u987B\u8BBE\u7F6E\u8D44\u6E90\u6C60\u6216\u8D44\u6E90\u6C60\u961F\u5217");
     }
     if (!String(effectiveWorker.test_command || "").trim()) {
-      add(`${root}.test_command`, "test command is required");
+      add(`${root}.test_command`, "\u6D4B\u8BD5\u547D\u4EE4\u4E0D\u80FD\u4E3A\u7A7A");
     }
     if (!String(effectiveWorker.submit_strategy || "").trim()) {
-      add(`${root}.submit_strategy`, "submit strategy is required");
+      add(`${root}.submit_strategy`, "\u63D0\u4EA4\u7B56\u7565\u4E0D\u80FD\u4E3A\u7A7A");
     }
     if (String(effectiveWorker.environment_type || "uv") === "venv" && !String(effectiveWorker.environment_path || "").trim()) {
-      add(`${root}.environment_path`, "environment path is required when environment type is venv");
+      add(`${root}.environment_path`, "\u73AF\u5883\u7C7B\u578B\u4E3A venv \u65F6\u5FC5\u987B\u586B\u5199\u73AF\u5883\u8DEF\u5F84");
     }
   });
   return issues;
@@ -25442,29 +25566,29 @@ function buildIssueMap(issues) {
 function summarizeValidationMessages(issues, blockers) {
   const parts = [];
   if (issues.length) {
-    parts.push(`${issues.length} validation issue(s)`);
+    parts.push(`${issues.length} \u4E2A\u6821\u9A8C\u95EE\u9898`);
   }
   if (blockers.length) {
-    parts.push(`${blockers.length} launch blocker(s)`);
+    parts.push(`${blockers.length} \u4E2A\u542F\u52A8\u963B\u585E\u9879`);
   }
-  return parts.join(", ") || "unknown validation failure";
+  return parts.join("\uFF0C") || "\u672A\u77E5\u6821\u9A8C\u5931\u8D25";
 }
 function formatLaunchErrorMessage(error) {
   const message = error instanceof Error ? error.message : String(error);
   if (message.includes("status 4")) {
-    return `launch rejected: ${message}`;
+    return `\u542F\u52A8\u8BF7\u6C42\u88AB\u62D2\u7EDD\uFF1A${translateUiText(message)}`;
   }
-  return `launch failed: ${message}`;
+  return `\u542F\u52A8\u5931\u8D25\uFF1A${translateUiText(message)}`;
 }
 function renderValidation(data) {
   const launchBlockers = data.launch_blockers || [];
   const notes = data.validation_errors || [];
   const lines = [
-    launchBlockers.length ? `Launch blockers:
-- ${launchBlockers.join("\n- ")}` : "Launch blockers:\nnone",
+    launchBlockers.length ? `\u542F\u52A8\u963B\u585E\u9879\uFF1A
+- ${launchBlockers.map((item) => translateUiText(item)).join("\n- ")}` : "\u542F\u52A8\u963B\u585E\u9879\uFF1A\n\u65E0",
     notes.length ? `
-Config notes:
-- ${notes.join("\n- ")}` : "\nConfig notes:\nnone"
+\u914D\u7F6E\u63D0\u793A\uFF1A
+- ${notes.map((item) => translateUiText(item)).join("\n- ")}` : "\n\u914D\u7F6E\u63D0\u793A\uFF1A\n\u65E0"
   ];
   return lines.join("\n");
 }
@@ -25473,10 +25597,10 @@ Config notes:
 var import_jsx_runtime = __toESM(require_jsx_runtime(), 1);
 function DataTable({ columns, rows }) {
   if (!rows.length) {
-    return /* @__PURE__ */ (0, import_jsx_runtime.jsx)("div", { className: "small muted", children: "No data" });
+    return /* @__PURE__ */ (0, import_jsx_runtime.jsx)("div", { className: "small muted", children: "\u6682\u65E0\u6570\u636E" });
   }
   return /* @__PURE__ */ (0, import_jsx_runtime.jsx)("div", { className: "table-shell", children: /* @__PURE__ */ (0, import_jsx_runtime.jsxs)("table", { children: [
-    /* @__PURE__ */ (0, import_jsx_runtime.jsx)("thead", { children: /* @__PURE__ */ (0, import_jsx_runtime.jsx)("tr", { children: columns.map((column) => /* @__PURE__ */ (0, import_jsx_runtime.jsx)("th", { children: column }, column)) }) }),
+    /* @__PURE__ */ (0, import_jsx_runtime.jsx)("thead", { children: /* @__PURE__ */ (0, import_jsx_runtime.jsx)("tr", { children: columns.map((column) => /* @__PURE__ */ (0, import_jsx_runtime.jsx)("th", { children: translateColumnLabel(column) }, column)) }) }),
     /* @__PURE__ */ (0, import_jsx_runtime.jsx)("tbody", { children: rows.map((row, rowIndex) => /* @__PURE__ */ (0, import_jsx_runtime.jsx)("tr", { children: columns.map((column) => /* @__PURE__ */ (0, import_jsx_runtime.jsx)("td", { children: renderCell(row[column]) }, column)) }, rowIndex)) })
   ] }) });
 }
@@ -25515,8 +25639,8 @@ function SelectField({
   return /* @__PURE__ */ (0, import_jsx_runtime.jsxs)("label", { className: "field", children: [
     /* @__PURE__ */ (0, import_jsx_runtime.jsx)("span", { className: "field-label", children: label }),
     /* @__PURE__ */ (0, import_jsx_runtime.jsxs)("select", { className: classNames("field-input", issues && issues.length > 0 && "field-input-error"), value, onChange: (event) => onChange(event.target.value), children: [
-      /* @__PURE__ */ (0, import_jsx_runtime.jsx)("option", { value: "", children: "Select\u2026" }),
-      options.map((option) => /* @__PURE__ */ (0, import_jsx_runtime.jsx)("option", { value: option, children: option }, option))
+      /* @__PURE__ */ (0, import_jsx_runtime.jsx)("option", { value: "", children: "\u8BF7\u9009\u62E9\u2026" }),
+      options.map((option) => /* @__PURE__ */ (0, import_jsx_runtime.jsx)("option", { value: option, children: translateOptionLabel(option) }, option))
     ] }),
     issues && issues.length > 0 ? /* @__PURE__ */ (0, import_jsx_runtime.jsx)("span", { className: "field-error", children: issues[0] }) : null
   ] });
@@ -25526,7 +25650,7 @@ function SectionIssueList({ issues }) {
     return null;
   }
   return /* @__PURE__ */ (0, import_jsx_runtime.jsxs)("div", { className: "settings-issues", children: [
-    /* @__PURE__ */ (0, import_jsx_runtime.jsx)("h3", { children: "Validation Warnings" }),
+    /* @__PURE__ */ (0, import_jsx_runtime.jsx)("h3", { children: "\u6821\u9A8C\u63D0\u793A" }),
     /* @__PURE__ */ (0, import_jsx_runtime.jsx)("ul", { children: issues.map((issue, index) => /* @__PURE__ */ (0, import_jsx_runtime.jsxs)("li", { children: [
       issue.field,
       ": ",
@@ -25550,8 +25674,8 @@ function SectionHeader({
     ] }),
     /* @__PURE__ */ (0, import_jsx_runtime.jsxs)("div", { className: "section-actions", children: [
       status?.message ? /* @__PURE__ */ (0, import_jsx_runtime.jsx)("span", { className: classNames("section-status", status.error && "error"), children: status.message }) : null,
-      /* @__PURE__ */ (0, import_jsx_runtime.jsx)("button", { className: "ghost", type: "button", onClick: () => onValidate(section), children: "Validate" }),
-      /* @__PURE__ */ (0, import_jsx_runtime.jsx)("button", { type: "button", onClick: () => onSave(section), children: "Save" }),
+      /* @__PURE__ */ (0, import_jsx_runtime.jsx)("button", { className: "ghost", type: "button", onClick: () => onValidate(section), children: "\u6821\u9A8C" }),
+      /* @__PURE__ */ (0, import_jsx_runtime.jsx)("button", { type: "button", onClick: () => onSave(section), children: "\u4FDD\u5B58" }),
       action
     ] })
   ] });
@@ -25580,7 +25704,7 @@ function HelperCard({ title, body }) {
 var import_jsx_runtime2 = __toESM(require_jsx_runtime(), 1);
 function MergeCard({ item }) {
   const raw = String(item.status || "not_started");
-  const status = raw === "active" || raw === "healthy" ? { label: "In progress", className: "state-active" } : raw === "stale" || raw.startsWith("launch_failed") ? { label: "Needs attention", className: "state-stale" } : raw === "offline" || raw === "stopped" ? { label: "Ready for review", className: "state-offline" } : { label: "Queued", className: "state-not_started" };
+  const status = raw === "active" || raw === "healthy" ? { label: "\u8FDB\u884C\u4E2D", className: "state-active" } : raw === "stale" || raw.startsWith("launch_failed") ? { label: "\u9700\u5173\u6CE8", className: "state-stale" } : raw === "offline" || raw === "stopped" ? { label: "\u5F85\u8BC4\u5BA1", className: "state-offline" } : { label: "\u6392\u961F\u4E2D", className: "state-not_started" };
   const blockers = item.blockers || [];
   const pendingWork = item.pending_work || [];
   const requestedUnlocks = item.requested_unlocks || [];
@@ -25599,64 +25723,64 @@ function MergeCard({ item }) {
     ] }),
     /* @__PURE__ */ (0, import_jsx_runtime2.jsxs)("div", { className: "merge-meta", children: [
       /* @__PURE__ */ (0, import_jsx_runtime2.jsxs)("div", { children: [
-        /* @__PURE__ */ (0, import_jsx_runtime2.jsx)("strong", { children: "Submit" }),
+        /* @__PURE__ */ (0, import_jsx_runtime2.jsx)("strong", { children: "\u63D0\u4EA4" }),
         " ",
         item.submit_strategy
       ] }),
       /* @__PURE__ */ (0, import_jsx_runtime2.jsxs)("div", { children: [
-        /* @__PURE__ */ (0, import_jsx_runtime2.jsx)("strong", { children: "Worker identity" }),
+        /* @__PURE__ */ (0, import_jsx_runtime2.jsx)("strong", { children: "Worker \u8EAB\u4EFD" }),
         " ",
         item.worker_identity
       ] }),
       /* @__PURE__ */ (0, import_jsx_runtime2.jsxs)("div", { children: [
-        /* @__PURE__ */ (0, import_jsx_runtime2.jsx)("strong", { children: "Manager" }),
+        /* @__PURE__ */ (0, import_jsx_runtime2.jsx)("strong", { children: "\u7BA1\u7406\u8005" }),
         " ",
         item.manager_identity
       ] }),
       /* @__PURE__ */ (0, import_jsx_runtime2.jsxs)("div", { children: [
-        /* @__PURE__ */ (0, import_jsx_runtime2.jsx)("strong", { children: "Checkpoint" }),
+        /* @__PURE__ */ (0, import_jsx_runtime2.jsx)("strong", { children: "\u68C0\u67E5\u70B9" }),
         " ",
-        item.checkpoint_status || "unknown"
+        translateUiText(item.checkpoint_status || "unknown")
       ] })
     ] }),
     item.attention_summary ? /* @__PURE__ */ (0, import_jsx_runtime2.jsxs)("div", { className: "merge-attention", children: [
-      /* @__PURE__ */ (0, import_jsx_runtime2.jsx)("strong", { children: "Attention" }),
+      /* @__PURE__ */ (0, import_jsx_runtime2.jsx)("strong", { children: "\u5173\u6CE8\u9879" }),
       " ",
-      item.attention_summary
+      translateUiText(item.attention_summary)
     ] }) : null,
     blockers.length ? /* @__PURE__ */ (0, import_jsx_runtime2.jsxs)("div", { className: "merge-list-block", children: [
-      /* @__PURE__ */ (0, import_jsx_runtime2.jsx)("strong", { children: "Blockers" }),
-      /* @__PURE__ */ (0, import_jsx_runtime2.jsx)("ul", { children: blockers.map((entry) => /* @__PURE__ */ (0, import_jsx_runtime2.jsx)("li", { children: entry }, entry)) })
+      /* @__PURE__ */ (0, import_jsx_runtime2.jsx)("strong", { children: "\u963B\u585E\u9879" }),
+      /* @__PURE__ */ (0, import_jsx_runtime2.jsx)("ul", { children: blockers.map((entry) => /* @__PURE__ */ (0, import_jsx_runtime2.jsx)("li", { children: translateUiText(entry) }, entry)) })
     ] }) : null,
     pendingWork.length ? /* @__PURE__ */ (0, import_jsx_runtime2.jsxs)("div", { className: "merge-list-block", children: [
-      /* @__PURE__ */ (0, import_jsx_runtime2.jsx)("strong", { children: "Pending Work" }),
-      /* @__PURE__ */ (0, import_jsx_runtime2.jsx)("ul", { children: pendingWork.map((entry) => /* @__PURE__ */ (0, import_jsx_runtime2.jsx)("li", { children: entry }, entry)) })
+      /* @__PURE__ */ (0, import_jsx_runtime2.jsx)("strong", { children: "\u5F85\u5B8C\u6210\u5DE5\u4F5C" }),
+      /* @__PURE__ */ (0, import_jsx_runtime2.jsx)("ul", { children: pendingWork.map((entry) => /* @__PURE__ */ (0, import_jsx_runtime2.jsx)("li", { children: translateUiText(entry) }, entry)) })
     ] }) : null,
     requestedUnlocks.length ? /* @__PURE__ */ (0, import_jsx_runtime2.jsxs)("div", { className: "merge-list-block", children: [
-      /* @__PURE__ */ (0, import_jsx_runtime2.jsx)("strong", { children: "Requested Unlocks" }),
-      /* @__PURE__ */ (0, import_jsx_runtime2.jsx)("ul", { children: requestedUnlocks.map((entry) => /* @__PURE__ */ (0, import_jsx_runtime2.jsx)("li", { children: entry }, entry)) })
+      /* @__PURE__ */ (0, import_jsx_runtime2.jsx)("strong", { children: "\u8BF7\u6C42\u89E3\u9501" }),
+      /* @__PURE__ */ (0, import_jsx_runtime2.jsx)("ul", { children: requestedUnlocks.map((entry) => /* @__PURE__ */ (0, import_jsx_runtime2.jsx)("li", { children: translateUiText(entry) }, entry)) })
     ] }) : null,
     dependencies.length ? /* @__PURE__ */ (0, import_jsx_runtime2.jsxs)("div", { className: "merge-list-block", children: [
-      /* @__PURE__ */ (0, import_jsx_runtime2.jsx)("strong", { children: "Dependencies" }),
-      /* @__PURE__ */ (0, import_jsx_runtime2.jsx)("ul", { children: dependencies.map((entry) => /* @__PURE__ */ (0, import_jsx_runtime2.jsx)("li", { children: entry }, entry)) })
+      /* @__PURE__ */ (0, import_jsx_runtime2.jsx)("strong", { children: "\u4F9D\u8D56\u9879" }),
+      /* @__PURE__ */ (0, import_jsx_runtime2.jsx)("ul", { children: dependencies.map((entry) => /* @__PURE__ */ (0, import_jsx_runtime2.jsx)("li", { children: translateUiText(entry) }, entry)) })
     ] }) : null,
     item.resume_instruction ? /* @__PURE__ */ (0, import_jsx_runtime2.jsxs)("div", { className: "merge-attention", children: [
-      /* @__PURE__ */ (0, import_jsx_runtime2.jsx)("strong", { children: "Resume" }),
+      /* @__PURE__ */ (0, import_jsx_runtime2.jsx)("strong", { children: "\u6062\u590D\u8BF4\u660E" }),
       " ",
-      item.resume_instruction
+      translateUiText(item.resume_instruction)
     ] }) : null,
     item.next_checkin ? /* @__PURE__ */ (0, import_jsx_runtime2.jsxs)("div", { className: "merge-note", children: [
-      /* @__PURE__ */ (0, import_jsx_runtime2.jsx)("strong", { children: "Next check-in" }),
+      /* @__PURE__ */ (0, import_jsx_runtime2.jsx)("strong", { children: "\u4E0B\u6B21\u7B7E\u5230" }),
       " ",
-      item.next_checkin
+      translateUiText(item.next_checkin)
     ] }) : null,
-    /* @__PURE__ */ (0, import_jsx_runtime2.jsx)("div", { className: "merge-note", children: item.manager_action })
+    /* @__PURE__ */ (0, import_jsx_runtime2.jsx)("div", { className: "merge-note", children: translateUiText(item.manager_action) })
   ] });
 }
 function AgentCard({ item }) {
-  const processLine = item.process_alive ? `pid ${item.pid}` : item.last_seen || "no heartbeat yet";
-  const detailLine = item.process_alive ? item.phase || item.last_log_line || "process alive" : item.escalation && item.escalation !== "none" ? item.escalation : item.evidence || item.expected_next_checkin || "waiting for launch";
-  const telemetryLine = item.process_alive ? `${item.progress_pct ?? "\u2013"}% progress \xB7 ${formatTokenCount(item.total_tokens)} tokens` : item.last_activity_at || item.expected_next_checkin || "no recent activity";
+  const processLine = item.process_alive ? `pid ${item.pid}` : item.last_seen || "\u5C1A\u65E0\u5FC3\u8DF3";
+  const detailLine = item.process_alive ? item.phase || item.last_log_line || "\u8FDB\u7A0B\u5B58\u6D3B" : item.escalation && item.escalation !== "none" ? item.escalation : item.evidence || item.expected_next_checkin || "\u7B49\u5F85\u542F\u52A8";
+  const telemetryLine = item.process_alive ? `${item.progress_pct ?? "\u2013"}% \u8FDB\u5EA6 \xB7 ${formatTokenCount(item.total_tokens)} token` : item.last_activity_at || item.expected_next_checkin || "\u8FD1\u671F\u65E0\u6D3B\u52A8";
   return /* @__PURE__ */ (0, import_jsx_runtime2.jsxs)("article", { className: "agent-card", children: [
     /* @__PURE__ */ (0, import_jsx_runtime2.jsxs)("header", { children: [
       /* @__PURE__ */ (0, import_jsx_runtime2.jsxs)("div", { children: [
@@ -25667,33 +25791,33 @@ function AgentCard({ item }) {
     ] }),
     /* @__PURE__ */ (0, import_jsx_runtime2.jsxs)("div", { className: "agent-meta", children: [
       /* @__PURE__ */ (0, import_jsx_runtime2.jsxs)("div", { children: [
-        /* @__PURE__ */ (0, import_jsx_runtime2.jsx)("strong", { children: "Pool" }),
+        /* @__PURE__ */ (0, import_jsx_runtime2.jsx)("strong", { children: "\u8D44\u6E90\u6C60" }),
         " ",
         item.resource_pool,
         " / ",
         item.provider
       ] }),
       /* @__PURE__ */ (0, import_jsx_runtime2.jsxs)("div", { children: [
-        /* @__PURE__ */ (0, import_jsx_runtime2.jsx)("strong", { children: "Model" }),
+        /* @__PURE__ */ (0, import_jsx_runtime2.jsx)("strong", { children: "\u6A21\u578B" }),
         " ",
         item.model
       ] }),
       /* @__PURE__ */ (0, import_jsx_runtime2.jsxs)("div", { children: [
-        /* @__PURE__ */ (0, import_jsx_runtime2.jsx)("strong", { children: "Branch" }),
+        /* @__PURE__ */ (0, import_jsx_runtime2.jsx)("strong", { children: "\u5206\u652F" }),
         " ",
         item.branch
       ] }),
       /* @__PURE__ */ (0, import_jsx_runtime2.jsxs)("div", { children: [
-        /* @__PURE__ */ (0, import_jsx_runtime2.jsx)("strong", { children: "Heartbeat" }),
+        /* @__PURE__ */ (0, import_jsx_runtime2.jsx)("strong", { children: "\u5FC3\u8DF3" }),
         " ",
-        processLine
+        translateUiText(processLine)
       ] }),
       /* @__PURE__ */ (0, import_jsx_runtime2.jsxs)("div", { children: [
-        /* @__PURE__ */ (0, import_jsx_runtime2.jsx)("strong", { children: "Telemetry" }),
+        /* @__PURE__ */ (0, import_jsx_runtime2.jsx)("strong", { children: "\u9065\u6D4B" }),
         " ",
-        telemetryLine
+        translateUiText(telemetryLine)
       ] }),
-      /* @__PURE__ */ (0, import_jsx_runtime2.jsx)("div", { className: "muted", children: detailLine })
+      /* @__PURE__ */ (0, import_jsx_runtime2.jsx)("div", { className: "muted", children: translateUiText(detailLine) })
     ] })
   ] });
 }
@@ -25704,8 +25828,8 @@ function A0RequestCard({
   onReply,
   onPrepareWorkflow
 }) {
-  const primaryAction = item.request_type === "plan_review" ? { action: "approve", label: "Approve plan" } : item.request_type === "task_review" ? { action: "approve", label: "Accept task" } : { action: "resume", label: "Resume" };
-  const secondaryAction = item.request_type === "plan_review" ? { action: "reject", label: "Reject plan", className: "danger-outline" } : item.request_type === "task_review" ? { action: "reject", label: "Reopen task", className: "danger-outline" } : { action: "acknowledged", label: "Acknowledge", className: "ghost" };
+  const primaryAction = item.request_type === "plan_review" ? { action: "approve", label: "\u6279\u51C6\u8BA1\u5212" } : item.request_type === "task_review" ? { action: "approve", label: "\u63A5\u53D7\u4EFB\u52A1" } : { action: "resume", label: "\u6062\u590D" };
+  const secondaryAction = item.request_type === "plan_review" ? { action: "reject", label: "\u62D2\u7EDD\u8BA1\u5212", className: "danger-outline" } : item.request_type === "task_review" ? { action: "reject", label: "\u91CD\u65B0\u6253\u5F00\u4EFB\u52A1", className: "danger-outline" } : { action: "acknowledged", label: "\u786E\u8BA4\u6536\u5230", className: "ghost" };
   return /* @__PURE__ */ (0, import_jsx_runtime2.jsxs)("article", { className: "merge-card a0-request-card", children: [
     /* @__PURE__ */ (0, import_jsx_runtime2.jsxs)("div", { className: "merge-card-header", children: [
       /* @__PURE__ */ (0, import_jsx_runtime2.jsxs)("div", { children: [
@@ -25716,41 +25840,41 @@ function A0RequestCard({
           /* @__PURE__ */ (0, import_jsx_runtime2.jsx)("span", { children: item.status })
         ] })
       ] }),
-      /* @__PURE__ */ (0, import_jsx_runtime2.jsx)("span", { className: classNames("chip", item.response_state === "pending" ? "state-stale" : "state-active"), children: item.response_state === "pending" ? "Awaiting reply" : item.response_state || "answered" })
+      /* @__PURE__ */ (0, import_jsx_runtime2.jsx)("span", { className: classNames("chip", item.response_state === "pending" ? "state-stale" : "state-active"), children: item.response_state === "pending" ? "\u7B49\u5F85\u56DE\u590D" : translateUiText(item.response_state || "answered") })
     ] }),
     /* @__PURE__ */ (0, import_jsx_runtime2.jsxs)("div", { className: "merge-attention", children: [
-      /* @__PURE__ */ (0, import_jsx_runtime2.jsx)("strong", { children: "A0 asks" }),
+      /* @__PURE__ */ (0, import_jsx_runtime2.jsx)("strong", { children: "A0 \u8BF7\u6C42" }),
       " ",
       item.body
     ] }),
     item.resume_instruction ? /* @__PURE__ */ (0, import_jsx_runtime2.jsxs)("div", { className: "merge-note", children: [
-      /* @__PURE__ */ (0, import_jsx_runtime2.jsx)("strong", { children: "Resume" }),
+      /* @__PURE__ */ (0, import_jsx_runtime2.jsx)("strong", { children: "\u6062\u590D\u8BF4\u660E" }),
       " ",
-      item.resume_instruction
+      translateUiText(item.resume_instruction)
     ] }) : null,
     item.next_checkin ? /* @__PURE__ */ (0, import_jsx_runtime2.jsxs)("div", { className: "merge-note", children: [
-      /* @__PURE__ */ (0, import_jsx_runtime2.jsx)("strong", { children: "Next check-in" }),
+      /* @__PURE__ */ (0, import_jsx_runtime2.jsx)("strong", { children: "\u4E0B\u6B21\u7B7E\u5230" }),
       " ",
-      item.next_checkin
+      translateUiText(item.next_checkin)
     ] }) : null,
     item.response_note ? /* @__PURE__ */ (0, import_jsx_runtime2.jsxs)("div", { className: "merge-note", children: [
-      /* @__PURE__ */ (0, import_jsx_runtime2.jsx)("strong", { children: "Latest reply" }),
+      /* @__PURE__ */ (0, import_jsx_runtime2.jsx)("strong", { children: "\u6700\u65B0\u56DE\u590D" }),
       " ",
       item.response_note
     ] }) : null,
     /* @__PURE__ */ (0, import_jsx_runtime2.jsxs)("label", { className: "field", children: [
-      /* @__PURE__ */ (0, import_jsx_runtime2.jsx)("span", { className: "field-label", children: "Reply to A0" }),
-      /* @__PURE__ */ (0, import_jsx_runtime2.jsx)("textarea", { className: "field-input field-textarea", value: replyDraft, onChange: (event) => onReplyChange(item.id, event.target.value), placeholder: "Give A0 the decision, constraint, or unblock instruction." })
+      /* @__PURE__ */ (0, import_jsx_runtime2.jsx)("span", { className: "field-label", children: "\u56DE\u590D A0" }),
+      /* @__PURE__ */ (0, import_jsx_runtime2.jsx)("textarea", { className: "field-input field-textarea", value: replyDraft, onChange: (event) => onReplyChange(item.id, event.target.value), placeholder: "\u5411 A0 \u8BF4\u660E\u51B3\u7B56\u3001\u7EA6\u675F\u6216\u89E3\u963B\u6307\u4EE4\u3002" })
     ] }),
     item.task_id ? /* @__PURE__ */ (0, import_jsx_runtime2.jsxs)("div", { className: "toolbar-group a0-actions", children: [
-      /* @__PURE__ */ (0, import_jsx_runtime2.jsx)("button", { className: "ghost", type: "button", onClick: () => onPrepareWorkflow(item, "replan"), children: "Prep replan" }),
-      /* @__PURE__ */ (0, import_jsx_runtime2.jsx)("button", { className: "ghost", type: "button", onClick: () => onPrepareWorkflow(item, "reassign"), children: "Prep reassign" }),
-      /* @__PURE__ */ (0, import_jsx_runtime2.jsx)("button", { className: "ghost", type: "button", onClick: () => onPrepareWorkflow(item, "reopen"), children: "Prep reopen" })
+      /* @__PURE__ */ (0, import_jsx_runtime2.jsx)("button", { className: "ghost", type: "button", onClick: () => onPrepareWorkflow(item, "replan"), children: "\u9884\u586B\u91CD\u89C4\u5212" }),
+      /* @__PURE__ */ (0, import_jsx_runtime2.jsx)("button", { className: "ghost", type: "button", onClick: () => onPrepareWorkflow(item, "reassign"), children: "\u9884\u586B\u91CD\u5206\u914D" }),
+      /* @__PURE__ */ (0, import_jsx_runtime2.jsx)("button", { className: "ghost", type: "button", onClick: () => onPrepareWorkflow(item, "reopen"), children: "\u9884\u586B\u91CD\u65B0\u6253\u5F00" })
     ] }) : null,
     /* @__PURE__ */ (0, import_jsx_runtime2.jsxs)("div", { className: "toolbar-group a0-actions", children: [
       /* @__PURE__ */ (0, import_jsx_runtime2.jsx)("button", { type: "button", onClick: () => onReply(item, primaryAction.action), children: primaryAction.label }),
       /* @__PURE__ */ (0, import_jsx_runtime2.jsx)("button", { className: secondaryAction.className, type: "button", onClick: () => onReply(item, secondaryAction.action), children: secondaryAction.label }),
-      item.request_type === "worker_intervention" ? /* @__PURE__ */ (0, import_jsx_runtime2.jsx)("button", { className: "danger-outline", type: "button", onClick: () => onReply(item, "blocked"), children: "Still blocked" }) : null
+      item.request_type === "worker_intervention" ? /* @__PURE__ */ (0, import_jsx_runtime2.jsx)("button", { className: "danger-outline", type: "button", onClick: () => onReply(item, "blocked"), children: "\u4ECD\u7136\u963B\u585E" }) : null
     ] })
   ] });
 }
@@ -25768,23 +25892,23 @@ function MailboxCard({ item, onAck }) {
       /* @__PURE__ */ (0, import_jsx_runtime2.jsx)("span", { className: classNames("chip", item.ack_state === "pending" ? "state-stale" : "state-active"), children: displayState(item.ack_state) })
     ] }),
     /* @__PURE__ */ (0, import_jsx_runtime2.jsxs)("div", { className: "merge-attention", children: [
-      /* @__PURE__ */ (0, import_jsx_runtime2.jsx)("strong", { children: "Message" }),
+      /* @__PURE__ */ (0, import_jsx_runtime2.jsx)("strong", { children: "\u6D88\u606F" }),
       " ",
       item.body
     ] }),
     item.related_task_ids?.length ? /* @__PURE__ */ (0, import_jsx_runtime2.jsxs)("div", { className: "merge-note", children: [
-      /* @__PURE__ */ (0, import_jsx_runtime2.jsx)("strong", { children: "Tasks" }),
+      /* @__PURE__ */ (0, import_jsx_runtime2.jsx)("strong", { children: "\u4EFB\u52A1" }),
       " ",
       item.related_task_ids.join(", ")
     ] }) : null,
     /* @__PURE__ */ (0, import_jsx_runtime2.jsxs)("div", { className: "merge-note", children: [
-      /* @__PURE__ */ (0, import_jsx_runtime2.jsx)("strong", { children: "Created" }),
+      /* @__PURE__ */ (0, import_jsx_runtime2.jsx)("strong", { children: "\u521B\u5EFA\u65F6\u95F4" }),
       " ",
       item.created_at
     ] }),
     /* @__PURE__ */ (0, import_jsx_runtime2.jsxs)("div", { className: "toolbar-group a0-actions", children: [
-      /* @__PURE__ */ (0, import_jsx_runtime2.jsx)("button", { className: "ghost", type: "button", onClick: () => onAck(item.id, "seen"), children: "Mark seen" }),
-      /* @__PURE__ */ (0, import_jsx_runtime2.jsx)("button", { type: "button", onClick: () => onAck(item.id, "resolved"), children: "Resolve" })
+      /* @__PURE__ */ (0, import_jsx_runtime2.jsx)("button", { className: "ghost", type: "button", onClick: () => onAck(item.id, "seen"), children: "\u6807\u8BB0\u5DF2\u67E5\u770B" }),
+      /* @__PURE__ */ (0, import_jsx_runtime2.jsx)("button", { type: "button", onClick: () => onAck(item.id, "resolved"), children: "\u89E3\u51B3" })
     ] })
   ] });
 }
@@ -25794,18 +25918,18 @@ function CleanupWorkerCard({ item, onStopWorker, disabled }) {
       /* @__PURE__ */ (0, import_jsx_runtime2.jsxs)("div", { children: [
         /* @__PURE__ */ (0, import_jsx_runtime2.jsx)("div", { className: "merge-branch", children: item.agent }),
         /* @__PURE__ */ (0, import_jsx_runtime2.jsxs)("div", { className: "merge-track", children: [
-          /* @__PURE__ */ (0, import_jsx_runtime2.jsx)("span", { children: item.runtime_status || "runtime unknown" }),
+          /* @__PURE__ */ (0, import_jsx_runtime2.jsx)("span", { children: translateUiText(item.runtime_status || "runtime unknown") }),
           /* @__PURE__ */ (0, import_jsx_runtime2.jsx)("span", { className: "merge-arrow", children: "->" }),
-          /* @__PURE__ */ (0, import_jsx_runtime2.jsx)("span", { children: item.heartbeat_state || "heartbeat unknown" })
+          /* @__PURE__ */ (0, import_jsx_runtime2.jsx)("span", { children: translateUiText(item.heartbeat_state || "heartbeat unknown") })
         ] })
       ] }),
-      /* @__PURE__ */ (0, import_jsx_runtime2.jsx)("span", { className: classNames("chip", item.ready ? "state-active" : "state-stale"), children: item.ready ? "Ready" : "Blocked" })
+      /* @__PURE__ */ (0, import_jsx_runtime2.jsx)("span", { className: classNames("chip", item.ready ? "state-active" : "state-stale"), children: item.ready ? "\u5C31\u7EEA" : "\u963B\u585E" })
     ] }),
     item.blockers.length ? /* @__PURE__ */ (0, import_jsx_runtime2.jsxs)("div", { className: "merge-list-block", children: [
-      /* @__PURE__ */ (0, import_jsx_runtime2.jsx)("strong", { children: "Blockers" }),
-      /* @__PURE__ */ (0, import_jsx_runtime2.jsx)("ul", { children: item.blockers.map((entry) => /* @__PURE__ */ (0, import_jsx_runtime2.jsx)("li", { children: entry }, `${item.agent}-${entry}`)) })
-    ] }) : /* @__PURE__ */ (0, import_jsx_runtime2.jsx)("div", { className: "small muted", children: "No cleanup blockers remain for this worker." }),
-    /* @__PURE__ */ (0, import_jsx_runtime2.jsx)("div", { className: "toolbar-group a0-actions", children: /* @__PURE__ */ (0, import_jsx_runtime2.jsx)("button", { type: "button", onClick: () => onStopWorker(item.agent), disabled: disabled || !item.active, children: "Shut down worker" }) })
+      /* @__PURE__ */ (0, import_jsx_runtime2.jsx)("strong", { children: "\u963B\u585E\u9879" }),
+      /* @__PURE__ */ (0, import_jsx_runtime2.jsx)("ul", { children: item.blockers.map((entry) => /* @__PURE__ */ (0, import_jsx_runtime2.jsx)("li", { children: translateUiText(entry) }, `${item.agent}-${entry}`)) })
+    ] }) : /* @__PURE__ */ (0, import_jsx_runtime2.jsx)("div", { className: "small muted", children: "\u8BE5 Worker \u5F53\u524D\u6CA1\u6709\u6E05\u7406\u963B\u585E\u9879\u3002" }),
+    /* @__PURE__ */ (0, import_jsx_runtime2.jsx)("div", { className: "toolbar-group a0-actions", children: /* @__PURE__ */ (0, import_jsx_runtime2.jsx)("button", { type: "button", onClick: () => onStopWorker(item.agent), disabled: disabled || !item.active, children: "\u5173\u95ED Worker" }) })
   ] });
 }
 function MailboxComposerCard({
@@ -25818,23 +25942,23 @@ function MailboxComposerCard({
   const recipientOptions = ["all", "manager", ...participants.filter((item) => item !== "A0")];
   return /* @__PURE__ */ (0, import_jsx_runtime2.jsxs)("section", { className: "card", children: [
     /* @__PURE__ */ (0, import_jsx_runtime2.jsx)("div", { className: "panel-title", children: /* @__PURE__ */ (0, import_jsx_runtime2.jsxs)("div", { children: [
-      /* @__PURE__ */ (0, import_jsx_runtime2.jsx)("h2", { children: "Mailbox Composer" }),
-      /* @__PURE__ */ (0, import_jsx_runtime2.jsx)("p", { className: "small", children: "Send durable coordination notes through the team mailbox so they survive worker restarts and provider changes." })
+      /* @__PURE__ */ (0, import_jsx_runtime2.jsx)("h2", { children: "\u90AE\u7BB1\u7F16\u5199\u5668" }),
+      /* @__PURE__ */ (0, import_jsx_runtime2.jsx)("p", { className: "small", children: "\u901A\u8FC7\u56E2\u961F\u90AE\u7BB1\u53D1\u9001\u53EF\u6301\u4E45\u5316\u7684\u534F\u4F5C\u8BF4\u660E\uFF0C\u8BA9\u5B83\u4EEC\u5728 Worker \u91CD\u542F\u6216 Provider \u5207\u6362\u540E\u4ECD\u7136\u4FDD\u7559\u3002" })
     ] }) }),
     /* @__PURE__ */ (0, import_jsx_runtime2.jsxs)("section", { className: "grid", children: [
-      /* @__PURE__ */ (0, import_jsx_runtime2.jsx)(SelectField, { label: "From", value: draft.from, onChange: (value) => onChange("from", value), options: participants }),
-      /* @__PURE__ */ (0, import_jsx_runtime2.jsx)(SelectField, { label: "To", value: draft.to, onChange: (value) => onChange("to", value), options: recipientOptions })
+      /* @__PURE__ */ (0, import_jsx_runtime2.jsx)(SelectField, { label: "\u53D1\u4EF6\u4EBA", value: draft.from, onChange: (value) => onChange("from", value), options: participants }),
+      /* @__PURE__ */ (0, import_jsx_runtime2.jsx)(SelectField, { label: "\u6536\u4EF6\u4EBA", value: draft.to, onChange: (value) => onChange("to", value), options: recipientOptions })
     ] }),
     /* @__PURE__ */ (0, import_jsx_runtime2.jsxs)("section", { className: "grid", children: [
-      /* @__PURE__ */ (0, import_jsx_runtime2.jsx)(SelectField, { label: "Topic", value: draft.topic, onChange: (value) => onChange("topic", value), options: ["status_note", "blocker", "handoff", "review_request", "design_question"] }),
-      /* @__PURE__ */ (0, import_jsx_runtime2.jsx)(SelectField, { label: "Scope", value: draft.scope, onChange: (value) => onChange("scope", value), options: ["direct", "broadcast", "manager"] })
+      /* @__PURE__ */ (0, import_jsx_runtime2.jsx)(SelectField, { label: "\u4E3B\u9898", value: draft.topic, onChange: (value) => onChange("topic", value), options: ["status_note", "blocker", "handoff", "review_request", "design_question"] }),
+      /* @__PURE__ */ (0, import_jsx_runtime2.jsx)(SelectField, { label: "\u8303\u56F4", value: draft.scope, onChange: (value) => onChange("scope", value), options: ["direct", "broadcast", "manager"] })
     ] }),
-    /* @__PURE__ */ (0, import_jsx_runtime2.jsx)(Field, { label: "Related tasks", value: draft.relatedTaskIds, onChange: (value) => onChange("relatedTaskIds", value), helpText: "Optional comma-separated task ids.", placeholder: "A1-001, A6-001" }),
+    /* @__PURE__ */ (0, import_jsx_runtime2.jsx)(Field, { label: "\u76F8\u5173\u4EFB\u52A1", value: draft.relatedTaskIds, onChange: (value) => onChange("relatedTaskIds", value), helpText: "\u53EF\u9009\uFF0C\u4F7F\u7528\u9017\u53F7\u5206\u9694\u591A\u4E2A\u4EFB\u52A1 ID\u3002", placeholder: "A1-001, A6-001" }),
     /* @__PURE__ */ (0, import_jsx_runtime2.jsxs)("label", { className: "field", children: [
-      /* @__PURE__ */ (0, import_jsx_runtime2.jsx)("span", { className: "field-label", children: "Message body" }),
-      /* @__PURE__ */ (0, import_jsx_runtime2.jsx)("textarea", { className: "field-input field-textarea", value: draft.body, onChange: (event) => onChange("body", event.target.value), placeholder: "Write the durable coordination note that should land in the shared mailbox." })
+      /* @__PURE__ */ (0, import_jsx_runtime2.jsx)("span", { className: "field-label", children: "\u6D88\u606F\u6B63\u6587" }),
+      /* @__PURE__ */ (0, import_jsx_runtime2.jsx)("textarea", { className: "field-input field-textarea", value: draft.body, onChange: (event) => onChange("body", event.target.value), placeholder: "\u586B\u5199\u5E94\u5199\u5165\u5171\u4EAB\u90AE\u7BB1\u7684\u6301\u4E45\u5316\u534F\u4F5C\u8BF4\u660E\u3002" })
     ] }),
-    /* @__PURE__ */ (0, import_jsx_runtime2.jsx)("div", { className: "toolbar-group a0-actions", children: /* @__PURE__ */ (0, import_jsx_runtime2.jsx)("button", { type: "button", onClick: onSend, disabled: disabled || !draft.from || !draft.to || !draft.body.trim(), children: "Send mailbox message" }) })
+    /* @__PURE__ */ (0, import_jsx_runtime2.jsx)("div", { className: "toolbar-group a0-actions", children: /* @__PURE__ */ (0, import_jsx_runtime2.jsx)("button", { type: "button", onClick: onSend, disabled: disabled || !draft.from || !draft.to || !draft.body.trim(), children: "\u53D1\u9001\u90AE\u7BB1\u6D88\u606F" }) })
   ] });
 }
 function WorkflowBriefCard({ data }) {
@@ -25842,8 +25966,8 @@ function WorkflowBriefCard({ data }) {
   const tasks = workflowPeekTasks(data);
   return /* @__PURE__ */ (0, import_jsx_runtime2.jsxs)("section", { className: "card", children: [
     /* @__PURE__ */ (0, import_jsx_runtime2.jsx)("div", { className: "panel-title", children: /* @__PURE__ */ (0, import_jsx_runtime2.jsxs)("div", { children: [
-      /* @__PURE__ */ (0, import_jsx_runtime2.jsx)("h2", { children: "Workflow Brief" }),
-      /* @__PURE__ */ (0, import_jsx_runtime2.jsx)("p", { className: "small", children: "A0 can scan the current delivery lane before changing ownership, review gates, or task sequencing." })
+      /* @__PURE__ */ (0, import_jsx_runtime2.jsx)("h2", { children: "\u5DE5\u4F5C\u6D41\u7B80\u62A5" }),
+      /* @__PURE__ */ (0, import_jsx_runtime2.jsx)("p", { className: "small", children: "A0 \u53EF\u4EE5\u5728\u8C03\u6574\u5F52\u5C5E\u3001\u8BC4\u5BA1 Gate \u6216\u4EFB\u52A1\u987A\u5E8F\u4E4B\u524D\uFF0C\u5148\u6D4F\u89C8\u5F53\u524D\u4EA4\u4ED8\u901A\u9053\u3002" })
     ] }) }),
     /* @__PURE__ */ (0, import_jsx_runtime2.jsx)("div", { className: "stack-list", children: lines.map((line) => /* @__PURE__ */ (0, import_jsx_runtime2.jsx)("div", { className: "subcard", children: /* @__PURE__ */ (0, import_jsx_runtime2.jsx)("p", { children: line }) }, line)) }),
     /* @__PURE__ */ (0, import_jsx_runtime2.jsx)("div", { className: "stack-list", children: tasks.length ? tasks.map((task) => /* @__PURE__ */ (0, import_jsx_runtime2.jsxs)("div", { className: "subcard", children: [
@@ -25853,19 +25977,19 @@ function WorkflowBriefCard({ data }) {
         task.title
       ] }),
       /* @__PURE__ */ (0, import_jsx_runtime2.jsxs)("div", { className: "small muted", children: [
-        task.owner || "unassigned",
+        translateUiText(task.owner || "unassigned"),
         " \xB7 ",
-        task.status,
+        translateUiText(task.status),
         " \xB7 ",
-        task.claim_state || "unclaimed",
+        translateUiText(task.claim_state || "unclaimed"),
         " \xB7 ",
-        task.plan_state || "none"
+        translateUiText(task.plan_state || "none")
       ] }),
       task.dependencies?.length ? /* @__PURE__ */ (0, import_jsx_runtime2.jsxs)("p", { className: "small", children: [
-        "Depends on ",
+        "\u4F9D\u8D56\u4E8E ",
         task.dependencies.join(", ")
       ] }) : null
-    ] }, task.id)) : /* @__PURE__ */ (0, import_jsx_runtime2.jsx)("div", { className: "small muted", children: "No workflow items available." }) })
+    ] }, task.id)) : /* @__PURE__ */ (0, import_jsx_runtime2.jsx)("div", { className: "small muted", children: "\u5F53\u524D\u6CA1\u6709\u53EF\u5C55\u793A\u7684\u5DE5\u4F5C\u6D41\u6761\u76EE\u3002" }) })
   ] });
 }
 function MailboxPeekCard({ data }) {
@@ -25873,12 +25997,12 @@ function MailboxPeekCard({ data }) {
   return /* @__PURE__ */ (0, import_jsx_runtime2.jsxs)("section", { className: "card", children: [
     /* @__PURE__ */ (0, import_jsx_runtime2.jsxs)("div", { className: "panel-title", children: [
       /* @__PURE__ */ (0, import_jsx_runtime2.jsxs)("div", { children: [
-        /* @__PURE__ */ (0, import_jsx_runtime2.jsx)("h2", { children: "Mailbox Peek" }),
-        /* @__PURE__ */ (0, import_jsx_runtime2.jsx)("p", { className: "small", children: "Recent unresolved coordination notes, without leaving the current operating view." })
+        /* @__PURE__ */ (0, import_jsx_runtime2.jsx)("h2", { children: "\u90AE\u7BB1\u9884\u89C8" }),
+        /* @__PURE__ */ (0, import_jsx_runtime2.jsx)("p", { className: "small", children: "\u65E0\u9700\u79BB\u5F00\u5F53\u524D\u89C6\u56FE\u5373\u53EF\u67E5\u770B\u8FD1\u671F\u672A\u89E3\u51B3\u7684\u534F\u4F5C\u8BF4\u660E\u3002" })
       ] }),
       /* @__PURE__ */ (0, import_jsx_runtime2.jsxs)("div", { className: "small muted", children: [
         data.team_mailbox.pending_count,
-        " open"
+        " \u6761\u5F85\u5904\u7406"
       ] })
     ] }),
     /* @__PURE__ */ (0, import_jsx_runtime2.jsx)("div", { className: "stack-list", children: messages.length ? messages.map((item) => /* @__PURE__ */ (0, import_jsx_runtime2.jsxs)("div", { className: "subcard", children: [
@@ -25888,16 +26012,16 @@ function MailboxPeekCard({ data }) {
         " -> ",
         item.to,
         " \xB7 ",
-        item.ack_state,
+        translateUiText(item.ack_state),
         " \xB7 ",
         item.created_at
       ] }),
       /* @__PURE__ */ (0, import_jsx_runtime2.jsx)("p", { children: item.body }),
       item.related_task_ids?.length ? /* @__PURE__ */ (0, import_jsx_runtime2.jsxs)("div", { className: "small muted", children: [
-        "Tasks: ",
+        "\u4EFB\u52A1\uFF1A",
         item.related_task_ids.join(", ")
       ] }) : null
-    ] }, item.id)) : /* @__PURE__ */ (0, import_jsx_runtime2.jsx)("div", { className: "small muted", children: "No unresolved mailbox items." }) })
+    ] }, item.id)) : /* @__PURE__ */ (0, import_jsx_runtime2.jsx)("div", { className: "small muted", children: "\u5F53\u524D\u6CA1\u6709\u672A\u89E3\u51B3\u7684\u90AE\u7BB1\u6D88\u606F\u3002" }) })
   ] });
 }
 function WorkflowPatchCard({
@@ -25911,89 +26035,89 @@ function WorkflowPatchCard({
   const taskOptions = (data.backlog.items || []).map((item) => item.id);
   return /* @__PURE__ */ (0, import_jsx_runtime2.jsxs)("section", { id: "workflow-replan-card", className: "card", children: [
     /* @__PURE__ */ (0, import_jsx_runtime2.jsx)("div", { className: "panel-title", children: /* @__PURE__ */ (0, import_jsx_runtime2.jsxs)("div", { children: [
-      /* @__PURE__ */ (0, import_jsx_runtime2.jsx)("h2", { children: "Workflow Replan" }),
-      /* @__PURE__ */ (0, import_jsx_runtime2.jsx)("p", { className: "small", children: "A0 can rewrite ownership, claim state, review posture, and plan intent directly from the control plane." })
+      /* @__PURE__ */ (0, import_jsx_runtime2.jsx)("h2", { children: "\u5DE5\u4F5C\u6D41\u91CD\u89C4\u5212" }),
+      /* @__PURE__ */ (0, import_jsx_runtime2.jsx)("p", { className: "small", children: "A0 \u53EF\u4EE5\u76F4\u63A5\u5728\u63A7\u5236\u5E73\u9762\u4E2D\u6539\u5199\u5F52\u5C5E\u3001\u8BA4\u9886\u72B6\u6001\u3001\u8BC4\u5BA1\u59FF\u6001\u548C\u8BA1\u5212\u610F\u56FE\u3002" })
     ] }) }),
     /* @__PURE__ */ (0, import_jsx_runtime2.jsxs)("section", { className: "grid", children: [
-      /* @__PURE__ */ (0, import_jsx_runtime2.jsx)(SelectField, { label: "Task", value: draft.taskId, onChange: (value) => onChange("taskId", value), options: taskOptions }),
-      /* @__PURE__ */ (0, import_jsx_runtime2.jsx)(Field, { label: "Gate", value: draft.gate, onChange: (value) => onChange("gate", value), placeholder: "gate name" })
+      /* @__PURE__ */ (0, import_jsx_runtime2.jsx)(SelectField, { label: "\u4EFB\u52A1", value: draft.taskId, onChange: (value) => onChange("taskId", value), options: taskOptions }),
+      /* @__PURE__ */ (0, import_jsx_runtime2.jsx)(Field, { label: "\u5173\u5361", value: draft.gate, onChange: (value) => onChange("gate", value), placeholder: "\u5173\u5361\u540D\u79F0" })
     ] }),
     /* @__PURE__ */ (0, import_jsx_runtime2.jsxs)("section", { className: "grid", children: [
-      /* @__PURE__ */ (0, import_jsx_runtime2.jsx)(Field, { label: "Title", value: draft.title, onChange: (value) => onChange("title", value) }),
-      /* @__PURE__ */ (0, import_jsx_runtime2.jsx)(Field, { label: "Priority", value: draft.priority, onChange: (value) => onChange("priority", value), placeholder: "P0 / P1" })
+      /* @__PURE__ */ (0, import_jsx_runtime2.jsx)(Field, { label: "\u6807\u9898", value: draft.title, onChange: (value) => onChange("title", value) }),
+      /* @__PURE__ */ (0, import_jsx_runtime2.jsx)(Field, { label: "\u4F18\u5148\u7EA7", value: draft.priority, onChange: (value) => onChange("priority", value), placeholder: "P0 / P1" })
     ] }),
     /* @__PURE__ */ (0, import_jsx_runtime2.jsxs)("section", { className: "grid", children: [
-      /* @__PURE__ */ (0, import_jsx_runtime2.jsx)(SelectField, { label: "Owner", value: draft.owner, onChange: (value) => onChange("owner", value), options: participants }),
-      /* @__PURE__ */ (0, import_jsx_runtime2.jsx)(SelectField, { label: "Claimed By", value: draft.claimedBy, onChange: (value) => onChange("claimedBy", value), options: participants })
+      /* @__PURE__ */ (0, import_jsx_runtime2.jsx)(SelectField, { label: "\u8D1F\u8D23\u4EBA", value: draft.owner, onChange: (value) => onChange("owner", value), options: participants }),
+      /* @__PURE__ */ (0, import_jsx_runtime2.jsx)(SelectField, { label: "\u8BA4\u9886\u8005", value: draft.claimedBy, onChange: (value) => onChange("claimedBy", value), options: participants })
     ] }),
     /* @__PURE__ */ (0, import_jsx_runtime2.jsxs)("section", { className: "grid", children: [
-      /* @__PURE__ */ (0, import_jsx_runtime2.jsx)(SelectField, { label: "Status", value: draft.status, onChange: (value) => onChange("status", value), options: ["pending", "active", "blocked", "review", "completed"] }),
-      /* @__PURE__ */ (0, import_jsx_runtime2.jsx)(SelectField, { label: "Claim State", value: draft.claimState, onChange: (value) => onChange("claimState", value), options: ["unclaimed", "claimed", "in_progress", "review", "completed"] })
+      /* @__PURE__ */ (0, import_jsx_runtime2.jsx)(SelectField, { label: "\u72B6\u6001", value: draft.status, onChange: (value) => onChange("status", value), options: ["pending", "active", "blocked", "review", "completed"] }),
+      /* @__PURE__ */ (0, import_jsx_runtime2.jsx)(SelectField, { label: "\u8BA4\u9886\u72B6\u6001", value: draft.claimState, onChange: (value) => onChange("claimState", value), options: ["unclaimed", "claimed", "in_progress", "review", "completed"] })
     ] }),
     /* @__PURE__ */ (0, import_jsx_runtime2.jsxs)("section", { className: "grid", children: [
-      /* @__PURE__ */ (0, import_jsx_runtime2.jsx)(SelectField, { label: "Plan Required", value: draft.planRequired, onChange: (value) => onChange("planRequired", value), options: ["yes", "no"] }),
-      /* @__PURE__ */ (0, import_jsx_runtime2.jsx)(SelectField, { label: "Plan State", value: draft.planState, onChange: (value) => onChange("planState", value), options: ["none", "pending_review", "approved", "rejected"] })
+      /* @__PURE__ */ (0, import_jsx_runtime2.jsx)(SelectField, { label: "\u9700\u8981\u8BA1\u5212", value: draft.planRequired, onChange: (value) => onChange("planRequired", value), options: ["yes", "no"] }),
+      /* @__PURE__ */ (0, import_jsx_runtime2.jsx)(SelectField, { label: "\u8BA1\u5212\u72B6\u6001", value: draft.planState, onChange: (value) => onChange("planState", value), options: ["none", "pending_review", "approved", "rejected"] })
     ] }),
-    /* @__PURE__ */ (0, import_jsx_runtime2.jsx)(Field, { label: "Dependencies", value: draft.dependencies, onChange: (value) => onChange("dependencies", value), helpText: "Comma-separated task ids.", placeholder: "A1-001, A2-001" }),
+    /* @__PURE__ */ (0, import_jsx_runtime2.jsx)(Field, { label: "\u4F9D\u8D56\u9879", value: draft.dependencies, onChange: (value) => onChange("dependencies", value), helpText: "\u4F7F\u7528\u9017\u53F7\u5206\u9694\u591A\u4E2A\u4EFB\u52A1 ID\u3002", placeholder: "A1-001, A2-001" }),
     /* @__PURE__ */ (0, import_jsx_runtime2.jsxs)("label", { className: "field", children: [
-      /* @__PURE__ */ (0, import_jsx_runtime2.jsx)("span", { className: "field-label", children: "Plan Summary" }),
-      /* @__PURE__ */ (0, import_jsx_runtime2.jsx)("textarea", { className: "field-input field-textarea", value: draft.planSummary, onChange: (event) => onChange("planSummary", event.target.value), placeholder: "Rewrite the implementation plan or approval expectations." })
+      /* @__PURE__ */ (0, import_jsx_runtime2.jsx)("span", { className: "field-label", children: "\u8BA1\u5212\u6458\u8981" }),
+      /* @__PURE__ */ (0, import_jsx_runtime2.jsx)("textarea", { className: "field-input field-textarea", value: draft.planSummary, onChange: (event) => onChange("planSummary", event.target.value), placeholder: "\u91CD\u5199\u5B9E\u73B0\u8BA1\u5212\u6216\u5BA1\u6279\u9884\u671F\u3002" })
     ] }),
     /* @__PURE__ */ (0, import_jsx_runtime2.jsxs)("section", { className: "grid", children: [
-      /* @__PURE__ */ (0, import_jsx_runtime2.jsx)(Field, { label: "Claim Note", value: draft.claimNote, onChange: (value) => onChange("claimNote", value), placeholder: "Current ownership note" }),
-      /* @__PURE__ */ (0, import_jsx_runtime2.jsx)(Field, { label: "Review Note", value: draft.reviewNote, onChange: (value) => onChange("reviewNote", value), placeholder: "Acceptance or reopen note" })
+      /* @__PURE__ */ (0, import_jsx_runtime2.jsx)(Field, { label: "\u8BA4\u9886\u8BF4\u660E", value: draft.claimNote, onChange: (value) => onChange("claimNote", value), placeholder: "\u5F53\u524D\u5F52\u5C5E\u8BF4\u660E" }),
+      /* @__PURE__ */ (0, import_jsx_runtime2.jsx)(Field, { label: "\u8BC4\u5BA1\u8BF4\u660E", value: draft.reviewNote, onChange: (value) => onChange("reviewNote", value), placeholder: "\u9A8C\u6536\u6216\u91CD\u65B0\u6253\u5F00\u8BF4\u660E" })
     ] }),
     /* @__PURE__ */ (0, import_jsx_runtime2.jsxs)("label", { className: "field", children: [
-      /* @__PURE__ */ (0, import_jsx_runtime2.jsx)("span", { className: "field-label", children: "Manager Note" }),
-      /* @__PURE__ */ (0, import_jsx_runtime2.jsx)("textarea", { className: "field-input field-textarea", value: draft.managerNote, onChange: (event) => onChange("managerNote", event.target.value), placeholder: "Optional durable note to send with the workflow change." })
+      /* @__PURE__ */ (0, import_jsx_runtime2.jsx)("span", { className: "field-label", children: "\u7BA1\u7406\u8005\u5907\u6CE8" }),
+      /* @__PURE__ */ (0, import_jsx_runtime2.jsx)("textarea", { className: "field-input field-textarea", value: draft.managerNote, onChange: (event) => onChange("managerNote", event.target.value), placeholder: "\u53EF\u9009\uFF1A\u968F\u5DE5\u4F5C\u6D41\u53D8\u66F4\u4E00\u8D77\u4FDD\u5B58\u7684\u6301\u4E45\u5316\u5907\u6CE8\u3002" })
     ] }),
-    /* @__PURE__ */ (0, import_jsx_runtime2.jsx)("div", { className: "toolbar-group a0-actions", children: /* @__PURE__ */ (0, import_jsx_runtime2.jsx)("button", { type: "button", onClick: onSubmit, disabled: disabled || !draft.taskId, children: "Apply workflow update" }) })
+    /* @__PURE__ */ (0, import_jsx_runtime2.jsx)("div", { className: "toolbar-group a0-actions", children: /* @__PURE__ */ (0, import_jsx_runtime2.jsx)("button", { type: "button", onClick: onSubmit, disabled: disabled || !draft.taskId, children: "\u5E94\u7528\u5DE5\u4F5C\u6D41\u66F4\u65B0" }) })
   ] });
 }
 function AutomationSummary({ draftConfig, data }) {
   const plannedWorkers = buildPlannedWorkers(data, draftConfig);
   const autoManaged = [
-    "Repository name and dashboard host/port defaults",
-    "Worker roster from backlog and runtime state",
-    "Worker task IDs from the current plan",
-    "Suggested branch names from task ownership and title",
-    "Worktree paths from repo root plus agent ID",
-    "Task-aware resource-pool recommendation and lock from provider quality history",
-    "Default pool queue from live provider ranking",
-    "Environment type/path defaults",
-    "Default sync command",
-    "Default submit strategy",
-    "Task-aware test-command selection with safe fallbacks"
+    "\u4ED3\u5E93\u540D\u4EE5\u53CA dashboard host/port \u9ED8\u8BA4\u503C",
+    "\u6765\u81EA backlog \u4E0E\u8FD0\u884C\u65F6\u72B6\u6001\u7684 Worker \u540D\u518C",
+    "\u6765\u81EA\u5F53\u524D\u8BA1\u5212\u7684 Worker \u4EFB\u52A1 ID",
+    "\u6839\u636E\u4EFB\u52A1\u5F52\u5C5E\u548C\u6807\u9898\u751F\u6210\u7684\u63A8\u8350\u5206\u652F\u540D",
+    "\u7531\u4ED3\u5E93\u6839\u76EE\u5F55\u4E0E Agent ID \u6D3E\u751F\u51FA\u7684 worktree \u8DEF\u5F84",
+    "\u57FA\u4E8E Provider \u8D28\u91CF\u5386\u53F2\u7684\u4EFB\u52A1\u611F\u77E5\u8D44\u6E90\u6C60\u63A8\u8350\u4E0E\u9501\u5B9A",
+    "\u6765\u81EA\u5B9E\u65F6 Provider \u6392\u540D\u7684\u9ED8\u8BA4\u8D44\u6E90\u6C60\u961F\u5217",
+    "\u73AF\u5883\u7C7B\u578B/\u8DEF\u5F84\u9ED8\u8BA4\u503C",
+    "\u9ED8\u8BA4\u540C\u6B65\u547D\u4EE4",
+    "\u9ED8\u8BA4\u63D0\u4EA4\u7B56\u7565",
+    "\u5E26\u5B89\u5168\u56DE\u9000\u7684\u4EFB\u52A1\u611F\u77E5\u6D4B\u8BD5\u547D\u4EE4\u9009\u62E9"
   ];
   const userOnly = [
-    "Local repo root if A0 cannot infer it correctly",
-    "Reference workspace path when the project really needs one",
-    "Integration branch policy",
-    "Resource-pool credentials, provider choice, and model choice",
-    "Only exceptional per-worker routing or environment overrides that truly differ from the default path"
+    "\u5F53 A0 \u65E0\u6CD5\u6B63\u786E\u63A8\u65AD\u65F6\uFF0C\u9700\u8981\u4EBA\u5DE5\u786E\u8BA4\u7684\u672C\u5730\u4ED3\u5E93\u6839\u76EE\u5F55",
+    "\u9879\u76EE\u786E\u5B9E\u9700\u8981\u65F6\u624D\u586B\u5199\u7684\u53C2\u8003\u5DE5\u4F5C\u533A\u8DEF\u5F84",
+    "\u96C6\u6210\u5206\u652F\u7B56\u7565",
+    "\u8D44\u6E90\u6C60\u51ED\u636E\u3001Provider \u9009\u62E9\u4E0E\u6A21\u578B\u9009\u62E9",
+    "\u53EA\u6709\u786E\u5B9E\u504F\u79BB\u9ED8\u8BA4\u8DEF\u5F84\u65F6\u624D\u9700\u8981\u586B\u5199\u7684 Worker \u7EA7\u8DEF\u7531\u6216\u73AF\u5883\u8986\u5199"
   ];
   return /* @__PURE__ */ (0, import_jsx_runtime2.jsxs)("section", { className: "helper-card settings-card settings-card-wide", children: [
     /* @__PURE__ */ (0, import_jsx_runtime2.jsxs)("div", { className: "section-head", children: [
-      /* @__PURE__ */ (0, import_jsx_runtime2.jsx)("h3", { children: "A0-Managed Defaults" }),
+      /* @__PURE__ */ (0, import_jsx_runtime2.jsx)("h3", { children: "A0 \u7BA1\u7406\u9ED8\u8BA4\u503C" }),
       /* @__PURE__ */ (0, import_jsx_runtime2.jsxs)("div", { className: "small muted", children: [
         autoManaged.length,
-        " areas auto-managed, ",
+        " \u9879\u7531\u7CFB\u7EDF\u81EA\u52A8\u7BA1\u7406\uFF0C",
         userOnly.length,
-        " areas still need human confirmation"
+        " \u9879\u4ECD\u9700\u8981\u4EBA\u5DE5\u786E\u8BA4"
       ] })
     ] }),
     /* @__PURE__ */ (0, import_jsx_runtime2.jsxs)("p", { className: "small muted", children: [
-      "Planned workers currently detected: ",
-      plannedWorkers.map((worker) => worker.agent).join(", ") || "none",
-      ". In Settings, A0 plan means the derived target state; override means a human-pinned exception that should be rare and easy to reset."
+      "\u5F53\u524D\u68C0\u6D4B\u5230\u7684\u8BA1\u5212\u5185 Worker\uFF1A",
+      plannedWorkers.map((worker) => worker.agent).join(", ") || "\u65E0",
+      "\u3002\u5728\u8BBE\u7F6E\u9875\u4E2D\uFF0CA0 \u8BA1\u5212\u8868\u793A\u6D3E\u751F\u51FA\u7684\u76EE\u6807\u72B6\u6001\uFF1B\u8986\u5199\u8868\u793A\u4EBA\u5DE5\u9489\u4F4F\u7684\u4F8B\u5916\u9879\uFF0C\u5E94\u5F53\u5C3D\u91CF\u5C11\u4E14\u5BB9\u6613\u91CD\u7F6E\u3002"
     ] }),
     /* @__PURE__ */ (0, import_jsx_runtime2.jsxs)("div", { className: "automation-grid", children: [
       /* @__PURE__ */ (0, import_jsx_runtime2.jsxs)("div", { className: "subcard", children: [
-        /* @__PURE__ */ (0, import_jsx_runtime2.jsx)("div", { className: "subcard-title", children: "You should usually not need to fill these by hand" }),
+        /* @__PURE__ */ (0, import_jsx_runtime2.jsx)("div", { className: "subcard-title", children: "\u901A\u5E38\u4E0D\u9700\u8981\u624B\u586B\u8FD9\u4E9B\u9879" }),
         /* @__PURE__ */ (0, import_jsx_runtime2.jsx)("ul", { className: "automation-list", children: autoManaged.map((item) => /* @__PURE__ */ (0, import_jsx_runtime2.jsx)("li", { children: item }, item)) })
       ] }),
       /* @__PURE__ */ (0, import_jsx_runtime2.jsxs)("div", { className: "subcard", children: [
-        /* @__PURE__ */ (0, import_jsx_runtime2.jsx)("div", { className: "subcard-title", children: "You should mostly only confirm these" }),
+        /* @__PURE__ */ (0, import_jsx_runtime2.jsx)("div", { className: "subcard-title", children: "\u4F60\u901A\u5E38\u53EA\u9700\u8981\u786E\u8BA4\u8FD9\u4E9B\u9879" }),
         /* @__PURE__ */ (0, import_jsx_runtime2.jsx)("ul", { className: "automation-list", children: userOnly.map((item) => /* @__PURE__ */ (0, import_jsx_runtime2.jsx)("li", { children: item }, item)) })
       ] })
     ] })
@@ -26019,23 +26143,23 @@ function AgentPeekPanel({ data }) {
   });
   if (!allAgents.length) {
     return /* @__PURE__ */ (0, import_jsx_runtime3.jsxs)("section", { className: "card", children: [
-      /* @__PURE__ */ (0, import_jsx_runtime3.jsx)("h2", { children: "Agent Peek" }),
-      /* @__PURE__ */ (0, import_jsx_runtime3.jsx)("div", { className: "small muted", children: "No agent output available. Peek buffers populate when agents are active." })
+      /* @__PURE__ */ (0, import_jsx_runtime3.jsx)("h2", { children: "Agent \u8F93\u51FA\u7A97\u53E3" }),
+      /* @__PURE__ */ (0, import_jsx_runtime3.jsx)("div", { className: "small muted", children: "\u5F53\u524D\u6CA1\u6709 Agent \u8F93\u51FA\u3002Agent \u6D3B\u8DC3\u540E\u4F1A\u9010\u6B65\u586B\u5145 Peek \u7F13\u51B2\u533A\u3002" })
     ] });
   }
   return /* @__PURE__ */ (0, import_jsx_runtime3.jsxs)("section", { className: "card", children: [
     /* @__PURE__ */ (0, import_jsx_runtime3.jsxs)("div", { className: "panel-title", children: [
       /* @__PURE__ */ (0, import_jsx_runtime3.jsxs)("div", { children: [
-        /* @__PURE__ */ (0, import_jsx_runtime3.jsx)("h2", { children: "Agent Peek" }),
+        /* @__PURE__ */ (0, import_jsx_runtime3.jsx)("h2", { children: "Agent \u8F93\u51FA\u7A97\u53E3" }),
         /* @__PURE__ */ (0, import_jsx_runtime3.jsxs)("p", { className: "small", children: [
-          "Real-time sliding window of each agent's output. Last ",
+          "\u6BCF\u4E2A Agent \u8F93\u51FA\u7684\u5B9E\u65F6\u6ED1\u52A8\u7A97\u53E3\u3002\u5F53\u524D\u5C55\u793A\u6700\u8FD1 ",
           PEEK_WINDOW_LINES,
-          " lines shown."
+          " \u884C\u3002"
         ] })
       ] }),
       /* @__PURE__ */ (0, import_jsx_runtime3.jsxs)("div", { className: "small muted", children: [
         agents.length,
-        " agent(s) with output"
+        " \u4E2A Agent \u6709\u8F93\u51FA"
       ] })
     ] }),
     /* @__PURE__ */ (0, import_jsx_runtime3.jsx)("div", { className: "peek-grid", children: allAgents.map((agent) => /* @__PURE__ */ (0, import_jsx_runtime3.jsx)(PeekWindow, { agent, lines: peek[agent] || [] }, agent)) })
@@ -26055,10 +26179,10 @@ function PeekWindow({ agent, lines }) {
       /* @__PURE__ */ (0, import_jsx_runtime3.jsx)("strong", { children: agent }),
       /* @__PURE__ */ (0, import_jsx_runtime3.jsxs)("span", { className: "small muted", children: [
         lines.length,
-        " line(s)"
+        " \u884C"
       ] })
     ] }),
-    /* @__PURE__ */ (0, import_jsx_runtime3.jsx)("pre", { ref: containerRef, className: "peek-content", children: displayLines.length ? displayLines.join("\n") : "(no output yet)" })
+    /* @__PURE__ */ (0, import_jsx_runtime3.jsx)("pre", { ref: containerRef, className: "peek-content", children: displayLines.length ? displayLines.join("\n") : "\uFF08\u5C1A\u65E0\u8F93\u51FA\uFF09" })
   ] });
 }
 
@@ -26156,7 +26280,7 @@ function TaskDAG({ data }) {
   if (!nodes.length) {
     return /* @__PURE__ */ (0, import_jsx_runtime4.jsxs)("section", { className: "card", children: [
       /* @__PURE__ */ (0, import_jsx_runtime4.jsx)("h2", { children: "Task DAG" }),
-      /* @__PURE__ */ (0, import_jsx_runtime4.jsx)("div", { className: "small muted", children: "No backlog items to visualize." })
+      /* @__PURE__ */ (0, import_jsx_runtime4.jsx)("div", { className: "small muted", children: "\u5F53\u524D\u6CA1\u6709\u53EF\u89C6\u5316\u7684 backlog \u9879\u3002" })
     ] });
   }
   const nodeById = new Map(nodes.map((n) => [n.id, n]));
@@ -26170,7 +26294,7 @@ function TaskDAG({ data }) {
   return /* @__PURE__ */ (0, import_jsx_runtime4.jsxs)("section", { className: "card", children: [
     /* @__PURE__ */ (0, import_jsx_runtime4.jsx)("div", { className: "panel-title", children: /* @__PURE__ */ (0, import_jsx_runtime4.jsxs)("div", { children: [
       /* @__PURE__ */ (0, import_jsx_runtime4.jsx)("h2", { children: "Task DAG" }),
-      /* @__PURE__ */ (0, import_jsx_runtime4.jsx)("p", { className: "small", children: "Dependency graph showing task flow, status, and gate assignments." })
+      /* @__PURE__ */ (0, import_jsx_runtime4.jsx)("p", { className: "small", children: "\u5C55\u793A\u4EFB\u52A1\u6D41\u8F6C\u3001\u72B6\u6001\u4E0E Gate \u5206\u914D\u5173\u7CFB\u7684\u4F9D\u8D56\u56FE\u3002" })
     ] }) }),
     /* @__PURE__ */ (0, import_jsx_runtime4.jsx)("div", { className: "dag-container", children: /* @__PURE__ */ (0, import_jsx_runtime4.jsxs)("svg", { viewBox: `0 0 ${width} ${height}`, width, height, style: { maxWidth: "100%", height: "auto" }, children: [
       /* @__PURE__ */ (0, import_jsx_runtime4.jsx)("defs", { children: /* @__PURE__ */ (0, import_jsx_runtime4.jsx)("marker", { id: "dag-arrow", viewBox: "0 0 10 10", refX: "10", refY: "5", markerWidth: "8", markerHeight: "8", orient: "auto-start-reverse", children: /* @__PURE__ */ (0, import_jsx_runtime4.jsx)("path", { d: "M0 0 L10 5 L0 10 z", fill: "#64748b" }) }) }),
@@ -26217,7 +26341,7 @@ function TaskDAG({ data }) {
             " \xB7 ",
             node.gate
           ] }),
-          /* @__PURE__ */ (0, import_jsx_runtime4.jsx)("text", { x: node.x + NODE_W / 2, y: node.y + 52, textAnchor: "middle", fill: style.text, fontSize: 10, opacity: 0.8, children: node.status })
+          /* @__PURE__ */ (0, import_jsx_runtime4.jsx)("text", { x: node.x + NODE_W / 2, y: node.y + 52, textAnchor: "middle", fill: style.text, fontSize: 10, opacity: 0.8, children: translateUiText(node.status) })
         ] }, node.id);
       })
     ] }) })
@@ -26236,48 +26360,48 @@ function OverviewTab({ data, agentRows, progress, onOpenA0Console }) {
       /* @__PURE__ */ (0, import_jsx_runtime5.jsxs)("section", { className: "card progress-card", children: [
         /* @__PURE__ */ (0, import_jsx_runtime5.jsxs)("div", { className: "page-header", children: [
           /* @__PURE__ */ (0, import_jsx_runtime5.jsxs)("div", { children: [
-            /* @__PURE__ */ (0, import_jsx_runtime5.jsx)("h2", { children: "Overall Progress" }),
-            /* @__PURE__ */ (0, import_jsx_runtime5.jsx)("p", { className: "small", children: "A compact view of delivery momentum and the current control-plane state." })
+            /* @__PURE__ */ (0, import_jsx_runtime5.jsx)("h2", { children: "\u6574\u4F53\u8FDB\u5EA6" }),
+            /* @__PURE__ */ (0, import_jsx_runtime5.jsx)("p", { className: "small", children: "\u4EA4\u4ED8\u63A8\u8FDB\u60C5\u51B5\u4E0E\u5F53\u524D\u63A7\u5236\u9762\u72B6\u6001\u7684\u7D27\u51D1\u89C6\u56FE\u3002" })
           ] }),
           /* @__PURE__ */ (0, import_jsx_runtime5.jsxs)("div", { className: "small muted", children: [
             progress.passedGates,
             "/",
             progress.totalGates,
-            " gates passed"
+            " \u4E2A Gate \u5DF2\u901A\u8FC7"
           ] })
         ] }),
         /* @__PURE__ */ (0, import_jsx_runtime5.jsx)("div", { className: "progress-bar", children: /* @__PURE__ */ (0, import_jsx_runtime5.jsx)("div", { className: "progress-fill", style: { width: `${progress.progress}%` } }) }),
         /* @__PURE__ */ (0, import_jsx_runtime5.jsxs)("div", { className: "summary", children: [
-          /* @__PURE__ */ (0, import_jsx_runtime5.jsx)(Metric, { label: "Agents", value: agentRows.length, hint: `${progress.activeAgents} active or healthy` }),
-          /* @__PURE__ */ (0, import_jsx_runtime5.jsx)(Metric, { label: "Overall Progress", value: `${progress.progress}%`, hint: `${progress.passedGates}/${progress.totalGates} gates passed` }),
-          /* @__PURE__ */ (0, import_jsx_runtime5.jsx)(Metric, { label: "Attention Needed", value: progress.attentionAgents, hint: `${progress.blockedItems} backlog items blocked` }),
-          /* @__PURE__ */ (0, import_jsx_runtime5.jsx)(Metric, { label: "Pending Reviews", value: progress.reviewItems + progress.planPending, hint: `${progress.mailboxPending} mailbox item(s) open` })
+          /* @__PURE__ */ (0, import_jsx_runtime5.jsx)(Metric, { label: "Agent", value: agentRows.length, hint: `${progress.activeAgents} \u4E2A\u8FD0\u884C\u4E2D\u6216\u5065\u5EB7` }),
+          /* @__PURE__ */ (0, import_jsx_runtime5.jsx)(Metric, { label: "\u6574\u4F53\u8FDB\u5EA6", value: `${progress.progress}%`, hint: `${progress.passedGates}/${progress.totalGates} \u4E2A Gate \u5DF2\u901A\u8FC7` }),
+          /* @__PURE__ */ (0, import_jsx_runtime5.jsx)(Metric, { label: "\u9700\u5173\u6CE8", value: progress.attentionAgents, hint: `${progress.blockedItems} \u4E2A backlog \u9879\u88AB\u963B\u585E` }),
+          /* @__PURE__ */ (0, import_jsx_runtime5.jsx)(Metric, { label: "\u5F85\u8BC4\u5BA1", value: progress.reviewItems + progress.planPending, hint: `${progress.mailboxPending} \u6761\u90AE\u7BB1\u6D88\u606F\u672A\u5904\u7406` })
         ] }),
         /* @__PURE__ */ (0, import_jsx_runtime5.jsxs)("div", { className: "progress-list", children: [
-          /* @__PURE__ */ (0, import_jsx_runtime5.jsx)(ProgressRow, { label: "Backlog", value: `${progress.completedItems}/${progress.totalItems} completed` }),
-          /* @__PURE__ */ (0, import_jsx_runtime5.jsx)(ProgressRow, { label: "Blocked work", value: `${progress.blockedItems} items` }),
-          /* @__PURE__ */ (0, import_jsx_runtime5.jsx)(ProgressRow, { label: "Claimed work", value: `${progress.claimedItems} items` }),
-          /* @__PURE__ */ (0, import_jsx_runtime5.jsx)(ProgressRow, { label: "Awaiting review", value: `${progress.reviewItems} handoff(s), ${progress.planPending} plan(s)` }),
-          /* @__PURE__ */ (0, import_jsx_runtime5.jsx)(ProgressRow, { label: "Agents needing action", value: `${progress.attentionAgents}` }),
-          /* @__PURE__ */ (0, import_jsx_runtime5.jsx)(ProgressRow, { label: "Current gate", value: progress.openGate ? `${progress.openGate.id} \xB7 ${progress.openGate.name}` : "All gates passed" })
+          /* @__PURE__ */ (0, import_jsx_runtime5.jsx)(ProgressRow, { label: "Backlog", value: `${progress.completedItems}/${progress.totalItems} \u5DF2\u5B8C\u6210` }),
+          /* @__PURE__ */ (0, import_jsx_runtime5.jsx)(ProgressRow, { label: "\u963B\u585E\u4EFB\u52A1", value: `${progress.blockedItems} \u9879` }),
+          /* @__PURE__ */ (0, import_jsx_runtime5.jsx)(ProgressRow, { label: "\u5DF2\u8BA4\u9886\u4EFB\u52A1", value: `${progress.claimedItems} \u9879` }),
+          /* @__PURE__ */ (0, import_jsx_runtime5.jsx)(ProgressRow, { label: "\u7B49\u5F85\u8BC4\u5BA1", value: `${progress.reviewItems} \u4E2A\u4EA4\u63A5\uFF0C${progress.planPending} \u4E2A\u8BA1\u5212` }),
+          /* @__PURE__ */ (0, import_jsx_runtime5.jsx)(ProgressRow, { label: "\u9700\u5904\u7406 Agent", value: `${progress.attentionAgents}` }),
+          /* @__PURE__ */ (0, import_jsx_runtime5.jsx)(ProgressRow, { label: "\u5F53\u524D Gate", value: progress.openGate ? `${progress.openGate.id} \xB7 ${progress.openGate.name}` : "\u5168\u90E8 Gate \u5DF2\u901A\u8FC7" })
         ] })
       ] }),
       /* @__PURE__ */ (0, import_jsx_runtime5.jsxs)("section", { className: "card", children: [
         /* @__PURE__ */ (0, import_jsx_runtime5.jsx)("div", { className: "page-header", children: /* @__PURE__ */ (0, import_jsx_runtime5.jsxs)("div", { children: [
-          /* @__PURE__ */ (0, import_jsx_runtime5.jsx)("h2", { children: "Program Snapshot" }),
-          /* @__PURE__ */ (0, import_jsx_runtime5.jsx)("p", { className: "small", children: "What is blocked, what is runnable, and which event happened last." })
+          /* @__PURE__ */ (0, import_jsx_runtime5.jsx)("h2", { children: "\u8FD0\u884C\u5FEB\u7167" }),
+          /* @__PURE__ */ (0, import_jsx_runtime5.jsx)("p", { className: "small", children: "\u5F53\u524D\u54EA\u4E9B\u5185\u5BB9\u88AB\u963B\u585E\u3001\u54EA\u4E9B\u53EF\u4EE5\u8FD0\u884C\u3001\u6700\u8FD1\u53D1\u751F\u4E86\u4EC0\u4E48\u4E8B\u4EF6\u3002" })
         ] }) }),
         /* @__PURE__ */ (0, import_jsx_runtime5.jsxs)("div", { className: "helper-list", children: [
-          /* @__PURE__ */ (0, import_jsx_runtime5.jsx)(HelperCard, { title: "Startup state", body: data.mode.reason || data.mode.state }),
-          /* @__PURE__ */ (0, import_jsx_runtime5.jsx)(HelperCard, { title: "Config target", body: data.mode.persist_config_path }),
-          /* @__PURE__ */ (0, import_jsx_runtime5.jsx)(HelperCard, { title: "Last event", body: data.last_event || "none" }),
-          /* @__PURE__ */ (0, import_jsx_runtime5.jsx)(HelperCard, { title: "Launch posture", body: data.launch_blockers.length ? `${data.launch_blockers.length} blocker(s)` : "ready to launch" }),
-          /* @__PURE__ */ (0, import_jsx_runtime5.jsx)(HelperCard, { title: "A0 approvals", body: data.a0_console.pending_count ? `${data.a0_console.pending_count} pending request(s)` : "no pending requests" }),
-          /* @__PURE__ */ (0, import_jsx_runtime5.jsx)(HelperCard, { title: "Team mailbox", body: data.team_mailbox.pending_count ? `${data.team_mailbox.pending_count} open message(s)` : "mailbox is clear" }),
-          /* @__PURE__ */ (0, import_jsx_runtime5.jsx)(HelperCard, { title: "Cleanup", body: data.cleanup.ready ? "ready to release the team" : `${data.cleanup.blockers.length} cleanup blocker(s)` }),
-          /* @__PURE__ */ (0, import_jsx_runtime5.jsx)(HelperCard, { title: "ducc pool", body: duccPool ? `${duccPool.active_workers} active \xB7 ${formatTokenCount(duccPool.usage?.total_tokens)} tokens` : "ducc pool not configured" })
+          /* @__PURE__ */ (0, import_jsx_runtime5.jsx)(HelperCard, { title: "\u542F\u52A8\u72B6\u6001", body: translateUiText(data.mode.reason || data.mode.state) }),
+          /* @__PURE__ */ (0, import_jsx_runtime5.jsx)(HelperCard, { title: "\u914D\u7F6E\u76EE\u6807", body: data.mode.persist_config_path }),
+          /* @__PURE__ */ (0, import_jsx_runtime5.jsx)(HelperCard, { title: "\u6700\u65B0\u4E8B\u4EF6", body: data.last_event || "\u65E0" }),
+          /* @__PURE__ */ (0, import_jsx_runtime5.jsx)(HelperCard, { title: "\u542F\u52A8\u6761\u4EF6", body: data.launch_blockers.length ? `${data.launch_blockers.length} \u4E2A\u963B\u585E\u9879` : "\u53EF\u542F\u52A8" }),
+          /* @__PURE__ */ (0, import_jsx_runtime5.jsx)(HelperCard, { title: "A0 \u5BA1\u6279", body: data.a0_console.pending_count ? `${data.a0_console.pending_count} \u4E2A\u5F85\u5904\u7406\u8BF7\u6C42` : "\u65E0\u5F85\u5904\u7406\u8BF7\u6C42" }),
+          /* @__PURE__ */ (0, import_jsx_runtime5.jsx)(HelperCard, { title: "\u56E2\u961F\u90AE\u7BB1", body: data.team_mailbox.pending_count ? `${data.team_mailbox.pending_count} \u6761\u672A\u5904\u7406\u6D88\u606F` : "\u90AE\u7BB1\u5DF2\u6E05\u7A7A" }),
+          /* @__PURE__ */ (0, import_jsx_runtime5.jsx)(HelperCard, { title: "\u6E05\u7406\u72B6\u6001", body: data.cleanup.ready ? "\u53EF\u4EE5\u91CA\u653E\u56E2\u961F" : `${data.cleanup.blockers.length} \u4E2A\u6E05\u7406\u963B\u585E\u9879` }),
+          /* @__PURE__ */ (0, import_jsx_runtime5.jsx)(HelperCard, { title: "ducc \u8D44\u6E90\u6C60", body: duccPool ? `${duccPool.active_workers} \u4E2A\u6D3B\u8DC3 \xB7 ${formatTokenCount(duccPool.usage?.total_tokens)} token` : "ducc \u8D44\u6E90\u6C60\u672A\u914D\u7F6E" })
         ] }),
-        /* @__PURE__ */ (0, import_jsx_runtime5.jsx)("div", { className: "toolbar-group", children: /* @__PURE__ */ (0, import_jsx_runtime5.jsx)("button", { className: "ghost", type: "button", onClick: onOpenA0Console, children: "Open A0 Console" }) })
+        /* @__PURE__ */ (0, import_jsx_runtime5.jsx)("div", { className: "toolbar-group", children: /* @__PURE__ */ (0, import_jsx_runtime5.jsx)("button", { className: "ghost", type: "button", onClick: onOpenA0Console, children: "\u6253\u5F00 A0 \u63A7\u5236\u53F0" }) })
       ] })
     ] }),
     /* @__PURE__ */ (0, import_jsx_runtime5.jsx)(TaskDAG, { data }),
@@ -26285,29 +26409,29 @@ function OverviewTab({ data, agentRows, progress, onOpenA0Console }) {
     /* @__PURE__ */ (0, import_jsx_runtime5.jsxs)("section", { className: "card", children: [
       /* @__PURE__ */ (0, import_jsx_runtime5.jsxs)("div", { className: "panel-title", children: [
         /* @__PURE__ */ (0, import_jsx_runtime5.jsxs)("div", { children: [
-          /* @__PURE__ */ (0, import_jsx_runtime5.jsx)("h2", { children: "Branch Merge Status" }),
-          /* @__PURE__ */ (0, import_jsx_runtime5.jsx)("p", { className: "small", children: "Manager-owned merge visibility for every worker branch." })
+          /* @__PURE__ */ (0, import_jsx_runtime5.jsx)("h2", { children: "\u5206\u652F\u5408\u5E76\u72B6\u6001" }),
+          /* @__PURE__ */ (0, import_jsx_runtime5.jsx)("p", { className: "small", children: "\u7531\u7BA1\u7406\u8005\u638C\u63E1\u7684\u5404 Worker \u5206\u652F\u5408\u5E76\u53EF\u89C1\u6027\u3002" })
         ] }),
         /* @__PURE__ */ (0, import_jsx_runtime5.jsxs)("div", { className: "small muted", children: [
           mergeActive,
-          " in progress, ",
+          " \u4E2A\u8FDB\u884C\u4E2D\uFF0C",
           mergeReady,
-          " ready for review"
+          " \u4E2A\u5F85\u8BC4\u5BA1"
         ] })
       ] }),
-      /* @__PURE__ */ (0, import_jsx_runtime5.jsx)("div", { className: "merge-board", children: mergeQueue.length ? mergeQueue.map((item) => /* @__PURE__ */ (0, import_jsx_runtime5.jsx)(MergeCard, { item }, `${item.agent}-${item.branch}`)) : /* @__PURE__ */ (0, import_jsx_runtime5.jsx)("div", { className: "small muted", children: "No worker branches registered for manager merge review." }) })
+      /* @__PURE__ */ (0, import_jsx_runtime5.jsx)("div", { className: "merge-board", children: mergeQueue.length ? mergeQueue.map((item) => /* @__PURE__ */ (0, import_jsx_runtime5.jsx)(MergeCard, { item }, `${item.agent}-${item.branch}`)) : /* @__PURE__ */ (0, import_jsx_runtime5.jsx)("div", { className: "small muted", children: "\u5F53\u524D\u6CA1\u6709\u767B\u8BB0\u5230\u7BA1\u7406\u8005\u5408\u5E76\u8BC4\u5BA1\u7684 Worker \u5206\u652F\u3002" }) })
     ] }),
     /* @__PURE__ */ (0, import_jsx_runtime5.jsxs)("section", { className: "card", children: [
       /* @__PURE__ */ (0, import_jsx_runtime5.jsxs)("div", { className: "panel-title", children: [
         /* @__PURE__ */ (0, import_jsx_runtime5.jsxs)("div", { children: [
-          /* @__PURE__ */ (0, import_jsx_runtime5.jsx)("h2", { children: "Agent Dashboards" }),
-          /* @__PURE__ */ (0, import_jsx_runtime5.jsx)("p", { className: "small", children: "Health, execution context, and current ownership." })
+          /* @__PURE__ */ (0, import_jsx_runtime5.jsx)("h2", { children: "Agent \u9762\u677F" }),
+          /* @__PURE__ */ (0, import_jsx_runtime5.jsx)("p", { className: "small", children: "\u5065\u5EB7\u72B6\u6001\u3001\u6267\u884C\u4E0A\u4E0B\u6587\u4E0E\u5F53\u524D\u5F52\u5C5E\u3002" })
         ] }),
         /* @__PURE__ */ (0, import_jsx_runtime5.jsxs)("div", { className: "small muted", children: [
           progress.activeAgents,
-          " active, ",
+          " \u4E2A\u6D3B\u8DC3\uFF0C",
           progress.attentionAgents,
-          " need attention"
+          " \u4E2A\u9700\u5173\u6CE8"
         ] })
       ] }),
       /* @__PURE__ */ (0, import_jsx_runtime5.jsx)("div", { className: "agent-wall", children: agentRows.map((item) => /* @__PURE__ */ (0, import_jsx_runtime5.jsx)(AgentCard, { item }, item.agent)) })
@@ -26353,7 +26477,7 @@ function OperationsTab({
     ] }),
     /* @__PURE__ */ (0, import_jsx_runtime6.jsxs)("section", { className: "grid", children: [
       /* @__PURE__ */ (0, import_jsx_runtime6.jsxs)("section", { className: "card", children: [
-        /* @__PURE__ */ (0, import_jsx_runtime6.jsx)("h2", { children: "Commands" }),
+        /* @__PURE__ */ (0, import_jsx_runtime6.jsx)("h2", { children: "\u547D\u4EE4" }),
         /* @__PURE__ */ (0, import_jsx_runtime6.jsx)("pre", { children: `serve:
 ${data.commands.serve}
 
@@ -26361,37 +26485,37 @@ up:
 ${data.commands.up}` })
       ] }),
       /* @__PURE__ */ (0, import_jsx_runtime6.jsxs)("section", { className: "card", children: [
-        /* @__PURE__ */ (0, import_jsx_runtime6.jsx)("h2", { children: "Validation" }),
+        /* @__PURE__ */ (0, import_jsx_runtime6.jsx)("h2", { children: "\u6821\u9A8C" }),
         /* @__PURE__ */ (0, import_jsx_runtime6.jsx)("pre", { children: renderValidation(data) })
       ] })
     ] }),
     /* @__PURE__ */ (0, import_jsx_runtime6.jsxs)("section", { className: "grid", children: [
       /* @__PURE__ */ (0, import_jsx_runtime6.jsxs)("section", { className: "card", children: [
-        /* @__PURE__ */ (0, import_jsx_runtime6.jsx)("h2", { children: "Provider Queue" }),
+        /* @__PURE__ */ (0, import_jsx_runtime6.jsx)("h2", { children: "Provider \u961F\u5217" }),
         /* @__PURE__ */ (0, import_jsx_runtime6.jsx)(DataTable, { columns: ["resource_pool", "provider", "priority", "binary_found", "recursion_guard", "launch_wrapper", "auth_mode", "auth_ready", "launch_ready", "active_workers", "progress_pct", "total_tokens", "auth_detail", "connection_quality", "work_quality", "score"], rows: providerRows })
       ] }),
       /* @__PURE__ */ (0, import_jsx_runtime6.jsxs)("section", { className: "card", children: [
-        /* @__PURE__ */ (0, import_jsx_runtime6.jsx)("h2", { children: "Merge Queue" }),
+        /* @__PURE__ */ (0, import_jsx_runtime6.jsx)("h2", { children: "\u5408\u5E76\u961F\u5217" }),
         /* @__PURE__ */ (0, import_jsx_runtime6.jsx)(DataTable, { columns: ["agent", "branch", "submit_strategy", "worker_identity", "merge_target", "status", "manager_action"], rows: mergeRows })
       ] })
     ] }),
     /* @__PURE__ */ (0, import_jsx_runtime6.jsxs)("section", { className: "grid", children: [
       /* @__PURE__ */ (0, import_jsx_runtime6.jsxs)("section", { className: "card", children: [
-        /* @__PURE__ */ (0, import_jsx_runtime6.jsx)("h2", { children: "Active Processes" }),
+        /* @__PURE__ */ (0, import_jsx_runtime6.jsx)("h2", { children: "\u6D3B\u8DC3\u8FDB\u7A0B" }),
         /* @__PURE__ */ (0, import_jsx_runtime6.jsx)(DataTable, { columns: ["agent", "provider", "model", "alive", "pid", "resource_pool", "progress_pct", "total_tokens", "phase", "recursion_guard", "wrapper_path", "returncode"], rows: processRows })
       ] }),
       /* @__PURE__ */ (0, import_jsx_runtime6.jsxs)("section", { className: "card", children: [
-        /* @__PURE__ */ (0, import_jsx_runtime6.jsx)("h2", { children: "Project" }),
+        /* @__PURE__ */ (0, import_jsx_runtime6.jsx)("h2", { children: "\u9879\u76EE" }),
         /* @__PURE__ */ (0, import_jsx_runtime6.jsx)(DataTable, { columns: ["key", "value"], rows: projectRows })
       ] })
     ] }),
     /* @__PURE__ */ (0, import_jsx_runtime6.jsxs)("section", { className: "grid", children: [
       /* @__PURE__ */ (0, import_jsx_runtime6.jsxs)("section", { className: "card", children: [
-        /* @__PURE__ */ (0, import_jsx_runtime6.jsx)("h2", { children: "Runtime Topology" }),
+        /* @__PURE__ */ (0, import_jsx_runtime6.jsx)("h2", { children: "\u8FD0\u884C\u65F6\u62D3\u6251" }),
         /* @__PURE__ */ (0, import_jsx_runtime6.jsx)(DataTable, { columns: ["agent", "resource_pool", "provider", "model", "branch", "recursion_guard", "launch_wrapper", "status"], rows: data.runtime.workers || [] })
       ] }),
       /* @__PURE__ */ (0, import_jsx_runtime6.jsxs)("section", { className: "card", children: [
-        /* @__PURE__ */ (0, import_jsx_runtime6.jsx)("h2", { children: "Heartbeats" }),
+        /* @__PURE__ */ (0, import_jsx_runtime6.jsx)("h2", { children: "\u5FC3\u8DF3" }),
         /* @__PURE__ */ (0, import_jsx_runtime6.jsx)(DataTable, { columns: ["agent", "state", "last_seen", "expected_next_checkin"], rows: data.heartbeats.agents || [] })
       ] })
     ] }),
@@ -26410,30 +26534,30 @@ ${data.commands.up}` })
     /* @__PURE__ */ (0, import_jsx_runtime6.jsxs)("section", { className: "card", children: [
       /* @__PURE__ */ (0, import_jsx_runtime6.jsxs)("div", { className: "panel-title", children: [
         /* @__PURE__ */ (0, import_jsx_runtime6.jsxs)("div", { children: [
-          /* @__PURE__ */ (0, import_jsx_runtime6.jsx)("h2", { children: "Cleanup Readiness" }),
-          /* @__PURE__ */ (0, import_jsx_runtime6.jsx)("p", { className: "small", children: "Cleanup remains blocked while workers are alive, reviews are unresolved, or single-writer locks are still held." })
+          /* @__PURE__ */ (0, import_jsx_runtime6.jsx)("h2", { children: "\u6E05\u7406\u5C31\u7EEA\u5EA6" }),
+          /* @__PURE__ */ (0, import_jsx_runtime6.jsx)("p", { className: "small", children: "\u53EA\u8981 Worker \u4ECD\u5728\u8FD0\u884C\u3001\u8BC4\u5BA1\u672A\u89E3\u51B3\uFF0C\u6216\u4ECD\u6301\u6709\u5355\u5199\u9501\uFF0C\u6E05\u7406\u5C31\u4F1A\u88AB\u963B\u585E\u3002" })
         ] }),
-        /* @__PURE__ */ (0, import_jsx_runtime6.jsx)("div", { className: classNames("chip", cleanup.ready ? "state-active" : "state-stale"), children: cleanup.ready ? "Ready" : "Blocked" })
+        /* @__PURE__ */ (0, import_jsx_runtime6.jsx)("div", { className: classNames("chip", cleanup.ready ? "state-active" : "state-stale"), children: cleanup.ready ? "\u5C31\u7EEA" : "\u963B\u585E" })
       ] }),
       cleanup.blockers.length ? /* @__PURE__ */ (0, import_jsx_runtime6.jsxs)("div", { className: "merge-list-block", children: [
-        /* @__PURE__ */ (0, import_jsx_runtime6.jsx)("strong", { children: "Cleanup blockers" }),
-        /* @__PURE__ */ (0, import_jsx_runtime6.jsx)("ul", { children: cleanup.blockers.map((entry) => /* @__PURE__ */ (0, import_jsx_runtime6.jsx)("li", { children: entry }, entry)) })
-      ] }) : /* @__PURE__ */ (0, import_jsx_runtime6.jsx)("div", { className: "small muted", children: "No cleanup blockers remain. The team cleanup gate can be confirmed safely." }),
+        /* @__PURE__ */ (0, import_jsx_runtime6.jsx)("strong", { children: "\u6E05\u7406\u963B\u585E\u9879" }),
+        /* @__PURE__ */ (0, import_jsx_runtime6.jsx)("ul", { children: cleanup.blockers.map((entry) => /* @__PURE__ */ (0, import_jsx_runtime6.jsx)("li", { children: translateUiText(entry) }, entry)) })
+      ] }) : /* @__PURE__ */ (0, import_jsx_runtime6.jsx)("div", { className: "small muted", children: "\u5F53\u524D\u5DF2\u65E0\u6E05\u7406\u963B\u585E\u9879\uFF0C\u53EF\u4EE5\u5B89\u5168\u786E\u8BA4\u56E2\u961F\u6E05\u7406 Gate\u3002" }),
       /* @__PURE__ */ (0, import_jsx_runtime6.jsxs)("div", { className: "toolbar-group a0-actions", children: [
         /* @__PURE__ */ (0, import_jsx_runtime6.jsxs)("label", { className: "toggle", children: [
           /* @__PURE__ */ (0, import_jsx_runtime6.jsx)("input", { type: "checkbox", checked: cleanupReleaseListener, onChange: (event) => onCleanupReleaseChange(event.target.checked) }),
-          " Auto-release listener after confirm"
+          " \u786E\u8BA4\u540E\u81EA\u52A8\u91CA\u653E\u76D1\u542C\u5668"
         ] }),
-        /* @__PURE__ */ (0, import_jsx_runtime6.jsx)("button", { type: "button", onClick: onConfirmCleanup, disabled: actionInFlight || !cleanup.ready, children: "Confirm cleanup gate" })
+        /* @__PURE__ */ (0, import_jsx_runtime6.jsx)("button", { type: "button", onClick: onConfirmCleanup, disabled: actionInFlight || !cleanup.ready, children: "\u786E\u8BA4\u6E05\u7406 Gate" })
       ] }),
       /* @__PURE__ */ (0, import_jsx_runtime6.jsx)("div", { className: "merge-board", children: (cleanup.workers || []).map((item) => /* @__PURE__ */ (0, import_jsx_runtime6.jsx)(CleanupWorkerCard, { item, onStopWorker, disabled: actionInFlight }, item.agent)) })
     ] }),
     /* @__PURE__ */ (0, import_jsx_runtime6.jsxs)("section", { className: "card", children: [
-      /* @__PURE__ */ (0, import_jsx_runtime6.jsx)("h2", { children: "Team Mailbox" }),
+      /* @__PURE__ */ (0, import_jsx_runtime6.jsx)("h2", { children: "\u56E2\u961F\u90AE\u7BB1" }),
       /* @__PURE__ */ (0, import_jsx_runtime6.jsx)(DataTable, { columns: ["id", "from", "to", "topic", "ack_state", "related_task_ids", "created_at", "body"], rows: mailboxRows })
     ] }),
     /* @__PURE__ */ (0, import_jsx_runtime6.jsxs)("section", { className: "card", children: [
-      /* @__PURE__ */ (0, import_jsx_runtime6.jsx)("h2", { children: "Manager Report" }),
+      /* @__PURE__ */ (0, import_jsx_runtime6.jsx)("h2", { children: "\u7BA1\u7406\u8005\u62A5\u544A" }),
       /* @__PURE__ */ (0, import_jsx_runtime6.jsx)("pre", { children: data.manager_report })
     ] })
   ] });
@@ -26470,42 +26594,42 @@ function SettingsTab({
   const issues = buildIssueMap(allIssues);
   return /* @__PURE__ */ (0, import_jsx_runtime7.jsx)("div", { className: "tab-body", children: /* @__PURE__ */ (0, import_jsx_runtime7.jsxs)("section", { className: "card", children: [
     /* @__PURE__ */ (0, import_jsx_runtime7.jsx)("div", { className: "page-header", children: /* @__PURE__ */ (0, import_jsx_runtime7.jsxs)("div", { children: [
-      /* @__PURE__ */ (0, import_jsx_runtime7.jsx)("h2", { children: "Settings" }),
-      /* @__PURE__ */ (0, import_jsx_runtime7.jsx)("p", { className: "small", children: "A0 now auto-hydrates the worker roster, branch proposals, worktree paths, and shared defaults. You should mostly verify project paths, pool routing, and true exceptions." })
+      /* @__PURE__ */ (0, import_jsx_runtime7.jsx)("h2", { children: "\u8BBE\u7F6E" }),
+      /* @__PURE__ */ (0, import_jsx_runtime7.jsx)("p", { className: "small", children: "A0 \u73B0\u5728\u4F1A\u81EA\u52A8\u8865\u9F50 Worker \u540D\u518C\u3001\u5206\u652F\u5EFA\u8BAE\u3001worktree \u8DEF\u5F84\u548C\u5171\u4EAB\u9ED8\u8BA4\u503C\u3002\u4F60\u901A\u5E38\u53EA\u9700\u8981\u786E\u8BA4\u9879\u76EE\u8DEF\u5F84\u3001\u8D44\u6E90\u6C60\u8DEF\u7531\u548C\u771F\u6B63\u7684\u4F8B\u5916\u9879\u3002" })
     ] }) }),
     /* @__PURE__ */ (0, import_jsx_runtime7.jsxs)("div", { className: "settings-stack", children: [
       /* @__PURE__ */ (0, import_jsx_runtime7.jsxs)("section", { className: "helper-card settings-card settings-card-wide", children: [
-        /* @__PURE__ */ (0, import_jsx_runtime7.jsx)(SectionHeader, { title: "Resource Pools", section: "resource_pools", status: sectionStatuses.resource_pools, onValidate: onValidateSection, onSave: onSaveSection, action: /* @__PURE__ */ (0, import_jsx_runtime7.jsx)("button", { className: "ghost", type: "button", onClick: onAddPool, children: "Add Pool" }) }),
+        /* @__PURE__ */ (0, import_jsx_runtime7.jsx)(SectionHeader, { title: "\u8D44\u6E90\u6C60", section: "resource_pools", status: sectionStatuses.resource_pools, onValidate: onValidateSection, onSave: onSaveSection, action: /* @__PURE__ */ (0, import_jsx_runtime7.jsx)("button", { className: "ghost", type: "button", onClick: onAddPool, children: "\u65B0\u589E\u8D44\u6E90\u6C60" }) }),
         /* @__PURE__ */ (0, import_jsx_runtime7.jsx)(SectionIssueList, { issues: collectSectionIssues("resource_pools", allIssues) }),
         /* @__PURE__ */ (0, import_jsx_runtime7.jsx)("div", { className: "pool-strip", children: Object.entries(pools).map(([poolName, pool]) => /* @__PURE__ */ (0, import_jsx_runtime7.jsxs)("div", { className: "subcard pool-card", children: [
           /* @__PURE__ */ (0, import_jsx_runtime7.jsx)("div", { className: "subcard-title", children: poolName }),
           /* @__PURE__ */ (0, import_jsx_runtime7.jsxs)("div", { className: "field-grid", children: [
-            /* @__PURE__ */ (0, import_jsx_runtime7.jsx)(SelectField, { label: "Provider", value: String(pool.provider || ""), onChange: (value) => onPoolChange(poolName, "provider", value), issues: issues[`resource_pools.${poolName}.provider`], options: providerOptions }),
-            /* @__PURE__ */ (0, import_jsx_runtime7.jsx)(Field, { label: "Model", value: String(pool.model || ""), onChange: (value) => onPoolChange(poolName, "model", value), issues: issues[`resource_pools.${poolName}.model`] }),
-            /* @__PURE__ */ (0, import_jsx_runtime7.jsx)(Field, { label: "Priority", type: "number", value: Number(pool.priority ?? 100), onChange: (value) => onPoolChange(poolName, "priority", value), issues: issues[`resource_pools.${poolName}.priority`] }),
+            /* @__PURE__ */ (0, import_jsx_runtime7.jsx)(SelectField, { label: "\u63D0\u4F9B\u65B9", value: String(pool.provider || ""), onChange: (value) => onPoolChange(poolName, "provider", value), issues: issues[`resource_pools.${poolName}.provider`], options: providerOptions }),
+            /* @__PURE__ */ (0, import_jsx_runtime7.jsx)(Field, { label: "\u6A21\u578B", value: String(pool.model || ""), onChange: (value) => onPoolChange(poolName, "model", value), issues: issues[`resource_pools.${poolName}.model`] }),
+            /* @__PURE__ */ (0, import_jsx_runtime7.jsx)(Field, { label: "\u4F18\u5148\u7EA7", type: "number", value: Number(pool.priority ?? 100), onChange: (value) => onPoolChange(poolName, "priority", value), issues: issues[`resource_pools.${poolName}.priority`] }),
             /* @__PURE__ */ (0, import_jsx_runtime7.jsx)(Field, { label: "API Key", value: String(pool.api_key || ""), onChange: (value) => onPoolChange(poolName, "api_key", value) })
           ] })
         ] }, poolName)) })
       ] }),
       /* @__PURE__ */ (0, import_jsx_runtime7.jsxs)("div", { className: "settings-duo", children: [
         /* @__PURE__ */ (0, import_jsx_runtime7.jsxs)("section", { className: "helper-card settings-card", children: [
-          /* @__PURE__ */ (0, import_jsx_runtime7.jsx)(SectionHeader, { title: "Project", section: "project", status: sectionStatuses.project, onValidate: onValidateSection, onSave: onSaveSection }),
+          /* @__PURE__ */ (0, import_jsx_runtime7.jsx)(SectionHeader, { title: "\u9879\u76EE", section: "project", status: sectionStatuses.project, onValidate: onValidateSection, onSave: onSaveSection }),
           /* @__PURE__ */ (0, import_jsx_runtime7.jsx)(SectionIssueList, { issues: collectSectionIssues("project", allIssues) }),
           /* @__PURE__ */ (0, import_jsx_runtime7.jsxs)("div", { className: "field-grid", children: [
-            /* @__PURE__ */ (0, import_jsx_runtime7.jsx)(Field, { label: "Repository", value: project.repository_name || "", onChange: (value) => onProjectChange("repository_name", value), issues: issues["project.repository_name"] }),
-            /* @__PURE__ */ (0, import_jsx_runtime7.jsx)(Field, { label: "Local Repo Root", value: project.local_repo_root || "", onChange: (value) => onProjectChange("local_repo_root", value), issues: issues["project.local_repo_root"] }),
-            /* @__PURE__ */ (0, import_jsx_runtime7.jsx)(Field, { label: "Reference Workspace", value: projectReferenceWorkspace(project), onChange: (value) => onProjectChange("reference_workspace_root", value), issues: issues["project.reference_workspace_root"], helpText: "Optional shared reference repo or baseline workspace for task guidance." }),
-            /* @__PURE__ */ (0, import_jsx_runtime7.jsx)(Field, { label: "Dashboard Host", value: dashboard.host || "", onChange: (value) => onProjectChange("dashboard.host", value), issues: issues["project.dashboard.host"] }),
-            /* @__PURE__ */ (0, import_jsx_runtime7.jsx)(Field, { label: "Dashboard Port", type: "number", value: dashboard.port || 8233, onChange: (value) => onProjectChange("dashboard.port", value), issues: issues["project.dashboard.port"] })
+            /* @__PURE__ */ (0, import_jsx_runtime7.jsx)(Field, { label: "\u4ED3\u5E93\u540D", value: project.repository_name || "", onChange: (value) => onProjectChange("repository_name", value), issues: issues["project.repository_name"] }),
+            /* @__PURE__ */ (0, import_jsx_runtime7.jsx)(Field, { label: "\u672C\u5730\u4ED3\u5E93\u6839\u76EE\u5F55", value: project.local_repo_root || "", onChange: (value) => onProjectChange("local_repo_root", value), issues: issues["project.local_repo_root"] }),
+            /* @__PURE__ */ (0, import_jsx_runtime7.jsx)(Field, { label: "\u53C2\u8003\u5DE5\u4F5C\u533A", value: projectReferenceWorkspace(project), onChange: (value) => onProjectChange("reference_workspace_root", value), issues: issues["project.reference_workspace_root"], helpText: "\u53EF\u9009\uFF1A\u5171\u4EAB\u53C2\u8003\u4ED3\u5E93\u6216 baseline \u5DE5\u4F5C\u533A\uFF0C\u7528\u4E8E\u4E3A\u4EFB\u52A1\u63D0\u4F9B\u4E0A\u4E0B\u6587\u3002" }),
+            /* @__PURE__ */ (0, import_jsx_runtime7.jsx)(Field, { label: "\u9762\u677F Host", value: dashboard.host || "", onChange: (value) => onProjectChange("dashboard.host", value), issues: issues["project.dashboard.host"] }),
+            /* @__PURE__ */ (0, import_jsx_runtime7.jsx)(Field, { label: "\u9762\u677F\u7AEF\u53E3", type: "number", value: dashboard.port || 8233, onChange: (value) => onProjectChange("dashboard.port", value), issues: issues["project.dashboard.port"] })
           ] })
         ] }),
         /* @__PURE__ */ (0, import_jsx_runtime7.jsxs)("section", { className: "helper-card settings-card", children: [
-          /* @__PURE__ */ (0, import_jsx_runtime7.jsx)(SectionHeader, { title: "Merge Policy", section: "merge_policy", status: sectionStatuses.merge_policy, onValidate: onValidateSection, onSave: onSaveSection }),
+          /* @__PURE__ */ (0, import_jsx_runtime7.jsx)(SectionHeader, { title: "\u5408\u5E76\u7B56\u7565", section: "merge_policy", status: sectionStatuses.merge_policy, onValidate: onValidateSection, onSave: onSaveSection }),
           /* @__PURE__ */ (0, import_jsx_runtime7.jsx)(SectionIssueList, { issues: collectSectionIssues("merge_policy", allIssues) }),
           /* @__PURE__ */ (0, import_jsx_runtime7.jsxs)("div", { className: "field-grid", children: [
-            /* @__PURE__ */ (0, import_jsx_runtime7.jsx)(Field, { label: "Integration Branch", value: project.integration_branch || project.base_branch || "", onChange: (value) => onMergeChange("integration_branch", value), issues: issues["project.integration_branch"] }),
-            /* @__PURE__ */ (0, import_jsx_runtime7.jsx)(Field, { label: "Manager Name", value: project.manager_git_identity?.name || "", onChange: (value) => onMergeChange("manager_git_identity.name", value) }),
-            /* @__PURE__ */ (0, import_jsx_runtime7.jsx)(Field, { label: "Manager Email", value: project.manager_git_identity?.email || "", onChange: (value) => onMergeChange("manager_git_identity.email", value) })
+            /* @__PURE__ */ (0, import_jsx_runtime7.jsx)(Field, { label: "\u96C6\u6210\u5206\u652F", value: project.integration_branch || project.base_branch || "", onChange: (value) => onMergeChange("integration_branch", value), issues: issues["project.integration_branch"] }),
+            /* @__PURE__ */ (0, import_jsx_runtime7.jsx)(Field, { label: "\u7BA1\u7406\u8005\u59D3\u540D", value: project.manager_git_identity?.name || "", onChange: (value) => onMergeChange("manager_git_identity.name", value) }),
+            /* @__PURE__ */ (0, import_jsx_runtime7.jsx)(Field, { label: "\u7BA1\u7406\u8005\u90AE\u7BB1", value: project.manager_git_identity?.email || "", onChange: (value) => onMergeChange("manager_git_identity.email", value) })
           ] })
         ] })
       ] }),
@@ -26513,31 +26637,31 @@ function SettingsTab({
         /* @__PURE__ */ (0, import_jsx_runtime7.jsx)(
           SectionHeader,
           {
-            title: "Worker Defaults",
+            title: "Worker \u9ED8\u8BA4\u503C",
             section: "worker_defaults",
             status: sectionStatuses.worker_defaults,
             onValidate: onValidateSection,
             onSave: onSaveSection,
-            subtitle: "Common defaults are the few knobs you may actually standardize across workers. Advanced defaults are fallback overrides for exceptional environments.",
-            action: /* @__PURE__ */ (0, import_jsx_runtime7.jsx)("button", { className: "ghost", type: "button", onClick: onResetWorkerDefaults, children: "Reset to A0" })
+            subtitle: "\u5171\u4EAB\u9ED8\u8BA4\u503C\u662F\u4F60\u771F\u6B63\u9700\u8981\u8DE8 Worker \u6807\u51C6\u5316\u7684\u5C11\u91CF\u65CB\u94AE\uFF1B\u9AD8\u7EA7\u9ED8\u8BA4\u503C\u5219\u662F\u5F02\u5E38\u73AF\u5883\u4E0B\u7684\u515C\u5E95\u8986\u5199\u3002",
+            action: /* @__PURE__ */ (0, import_jsx_runtime7.jsx)("button", { className: "ghost", type: "button", onClick: onResetWorkerDefaults, children: "\u91CD\u7F6E\u4E3A A0" })
           }
         ),
         /* @__PURE__ */ (0, import_jsx_runtime7.jsx)(SectionIssueList, { issues: collectSectionIssues("worker_defaults", allIssues) }),
-        /* @__PURE__ */ (0, import_jsx_runtime7.jsx)("p", { className: "small muted", children: "These values apply to every worker unless a row below overrides them. Blank fields are auto-filled from runtime conventions or sensible defaults where possible, so the main path should stay sparse." }),
+        /* @__PURE__ */ (0, import_jsx_runtime7.jsx)("p", { className: "small muted", children: "\u8FD9\u4E9B\u503C\u4F1A\u4F5C\u7528\u4E8E\u6240\u6709 Worker\uFF0C\u9664\u975E\u4E0B\u9762\u67D0\u4E00\u884C\u663E\u5F0F\u8986\u5199\u3002\u7A7A\u767D\u5B57\u6BB5\u4F1A\u5C3D\u91CF\u6309\u8FD0\u884C\u65F6\u7EA6\u5B9A\u6216\u5408\u7406\u9ED8\u8BA4\u503C\u81EA\u52A8\u8865\u9F50\uFF0C\u56E0\u6B64\u4E3B\u8DEF\u5F84\u5E94\u4FDD\u6301\u7A00\u758F\u3002" }),
         /* @__PURE__ */ (0, import_jsx_runtime7.jsxs)("div", { className: "field-grid compact-field-grid", children: [
-          /* @__PURE__ */ (0, import_jsx_runtime7.jsx)(Field, { label: "Default Pool", value: workerDefaults.resource_pool || "", onChange: (value) => onWorkerChange(-1, "worker_defaults.resource_pool", value), issues: issues["worker_defaults.resource_pool"], helpText: "Leave blank to rely on pool queue or per-worker overrides." }),
-          /* @__PURE__ */ (0, import_jsx_runtime7.jsx)(Field, { label: "Default Pool Queue", value: stringifyQueue(workerDefaults.resource_pool_queue), onChange: (value) => onWorkerChange(-1, "worker_defaults.resource_pool_queue", value), issues: issues["worker_defaults.resource_pool_queue"], placeholder: "ducc_pool" }),
-          /* @__PURE__ */ (0, import_jsx_runtime7.jsx)(SelectField, { label: "Default Environment", value: workerDefaults.environment_type || "uv", onChange: (value) => onWorkerChange(-1, "worker_defaults.environment_type", value), options: ["uv", "venv", "none"] }),
-          /* @__PURE__ */ (0, import_jsx_runtime7.jsx)(Field, { label: "Default Environment Path", value: workerDefaults.environment_path || "", onChange: (value) => onWorkerChange(-1, "worker_defaults.environment_path", value), issues: issues["worker_defaults.environment_path"] })
+          /* @__PURE__ */ (0, import_jsx_runtime7.jsx)(Field, { label: "\u9ED8\u8BA4\u8D44\u6E90\u6C60", value: workerDefaults.resource_pool || "", onChange: (value) => onWorkerChange(-1, "worker_defaults.resource_pool", value), issues: issues["worker_defaults.resource_pool"], helpText: "\u7559\u7A7A\u5219\u4F9D\u8D56\u8D44\u6E90\u6C60\u961F\u5217\u6216\u6BCF\u4E2A Worker \u7684\u8986\u5199\u3002" }),
+          /* @__PURE__ */ (0, import_jsx_runtime7.jsx)(Field, { label: "\u9ED8\u8BA4\u8D44\u6E90\u6C60\u961F\u5217", value: stringifyQueue(workerDefaults.resource_pool_queue), onChange: (value) => onWorkerChange(-1, "worker_defaults.resource_pool_queue", value), issues: issues["worker_defaults.resource_pool_queue"], placeholder: "ducc_pool" }),
+          /* @__PURE__ */ (0, import_jsx_runtime7.jsx)(SelectField, { label: "\u9ED8\u8BA4\u73AF\u5883", value: workerDefaults.environment_type || "uv", onChange: (value) => onWorkerChange(-1, "worker_defaults.environment_type", value), options: ["uv", "venv", "none"] }),
+          /* @__PURE__ */ (0, import_jsx_runtime7.jsx)(Field, { label: "\u9ED8\u8BA4\u73AF\u5883\u8DEF\u5F84", value: workerDefaults.environment_path || "", onChange: (value) => onWorkerChange(-1, "worker_defaults.environment_path", value), issues: issues["worker_defaults.environment_path"] })
         ] }),
         /* @__PURE__ */ (0, import_jsx_runtime7.jsxs)("details", { className: "advanced-panel defaults-panel", children: [
-          /* @__PURE__ */ (0, import_jsx_runtime7.jsx)("summary", { children: "Advanced defaults" }),
+          /* @__PURE__ */ (0, import_jsx_runtime7.jsx)("summary", { children: "\u9AD8\u7EA7\u9ED8\u8BA4\u503C" }),
           /* @__PURE__ */ (0, import_jsx_runtime7.jsxs)("div", { className: "field-grid advanced-grid", children: [
-            /* @__PURE__ */ (0, import_jsx_runtime7.jsx)(Field, { label: "Default Sync Command", value: workerDefaults.sync_command || "", onChange: (value) => onWorkerChange(-1, "worker_defaults.sync_command", value), helpText: "Leave blank to let A0 follow the environment convention." }),
-            /* @__PURE__ */ (0, import_jsx_runtime7.jsx)(Field, { label: "Default Test Command", value: workerDefaults.test_command || "", onChange: (value) => onWorkerChange(-1, "worker_defaults.test_command", value), issues: issues["worker_defaults.test_command"], helpText: "Leave blank to let task policy choose per worker." }),
-            /* @__PURE__ */ (0, import_jsx_runtime7.jsx)(Field, { label: "Default Submit Strategy", value: workerDefaults.submit_strategy || "", onChange: (value) => onWorkerChange(-1, "worker_defaults.submit_strategy", value), issues: issues["worker_defaults.submit_strategy"], helpText: "Leave blank to keep A0's standard handoff flow." }),
-            /* @__PURE__ */ (0, import_jsx_runtime7.jsx)(Field, { label: "Default Git Name", value: workerDefaults.git_identity?.name || "", onChange: (value) => onWorkerChange(-1, "worker_defaults.git_identity.name", value), issues: issues["worker_defaults.git_identity.name"] }),
-            /* @__PURE__ */ (0, import_jsx_runtime7.jsx)(Field, { label: "Default Git Email", value: workerDefaults.git_identity?.email || "", onChange: (value) => onWorkerChange(-1, "worker_defaults.git_identity.email", value), issues: issues["worker_defaults.git_identity.email"] })
+            /* @__PURE__ */ (0, import_jsx_runtime7.jsx)(Field, { label: "\u9ED8\u8BA4\u540C\u6B65\u547D\u4EE4", value: workerDefaults.sync_command || "", onChange: (value) => onWorkerChange(-1, "worker_defaults.sync_command", value), helpText: "\u7559\u7A7A\u5219\u8BA9 A0 \u6309\u73AF\u5883\u7EA6\u5B9A\u81EA\u52A8\u5904\u7406\u3002" }),
+            /* @__PURE__ */ (0, import_jsx_runtime7.jsx)(Field, { label: "\u9ED8\u8BA4\u6D4B\u8BD5\u547D\u4EE4", value: workerDefaults.test_command || "", onChange: (value) => onWorkerChange(-1, "worker_defaults.test_command", value), issues: issues["worker_defaults.test_command"], helpText: "\u7559\u7A7A\u5219\u8BA9\u4EFB\u52A1\u7B56\u7565\u4E3A\u6BCF\u4E2A Worker \u81EA\u52A8\u9009\u62E9\u3002" }),
+            /* @__PURE__ */ (0, import_jsx_runtime7.jsx)(Field, { label: "\u9ED8\u8BA4\u63D0\u4EA4\u7B56\u7565", value: workerDefaults.submit_strategy || "", onChange: (value) => onWorkerChange(-1, "worker_defaults.submit_strategy", value), issues: issues["worker_defaults.submit_strategy"], helpText: "\u7559\u7A7A\u5219\u4FDD\u6301 A0 \u7684\u6807\u51C6\u4EA4\u6D41\u7A0B\u3002" }),
+            /* @__PURE__ */ (0, import_jsx_runtime7.jsx)(Field, { label: "\u9ED8\u8BA4 Git \u540D\u79F0", value: workerDefaults.git_identity?.name || "", onChange: (value) => onWorkerChange(-1, "worker_defaults.git_identity.name", value), issues: issues["worker_defaults.git_identity.name"] }),
+            /* @__PURE__ */ (0, import_jsx_runtime7.jsx)(Field, { label: "\u9ED8\u8BA4 Git \u90AE\u7BB1", value: workerDefaults.git_identity?.email || "", onChange: (value) => onWorkerChange(-1, "worker_defaults.git_identity.email", value), issues: issues["worker_defaults.git_identity.email"] })
           ] })
         ] })
       ] }),
@@ -26546,23 +26670,23 @@ function SettingsTab({
         /* @__PURE__ */ (0, import_jsx_runtime7.jsx)(
           SectionHeader,
           {
-            title: "Worker Config",
+            title: "Worker \u914D\u7F6E",
             section: "workers",
             status: sectionStatuses.workers,
             onValidate: onValidateSection,
             onSave: onSaveSection,
             action: /* @__PURE__ */ (0, import_jsx_runtime7.jsxs)(import_jsx_runtime7.Fragment, { children: [
-              /* @__PURE__ */ (0, import_jsx_runtime7.jsx)("button", { className: "ghost", type: "button", onClick: onSyncWorkers, children: "Sync From Plan" }),
-              /* @__PURE__ */ (0, import_jsx_runtime7.jsx)("button", { className: "ghost", type: "button", onClick: onAutoFillWorktreePaths, children: "Auto Paths" }),
-              /* @__PURE__ */ (0, import_jsx_runtime7.jsx)("button", { className: "ghost", type: "button", onClick: onAddWorker, children: "Add Worker" })
+              /* @__PURE__ */ (0, import_jsx_runtime7.jsx)("button", { className: "ghost", type: "button", onClick: onSyncWorkers, children: "\u4ECE\u8BA1\u5212\u540C\u6B65" }),
+              /* @__PURE__ */ (0, import_jsx_runtime7.jsx)("button", { className: "ghost", type: "button", onClick: onAutoFillWorktreePaths, children: "\u81EA\u52A8\u8865\u8DEF\u5F84" }),
+              /* @__PURE__ */ (0, import_jsx_runtime7.jsx)("button", { className: "ghost", type: "button", onClick: onAddWorker, children: "\u65B0\u589E Worker" })
             ] })
           }
         ),
         /* @__PURE__ */ (0, import_jsx_runtime7.jsx)(SectionIssueList, { issues: collectSectionIssues("workers", allIssues) }),
         /* @__PURE__ */ (0, import_jsx_runtime7.jsxs)("p", { className: "small muted", children: [
-          "Detected workers from backlog/runtime: ",
-          plannedWorkers.map((item) => item.agent).join(", ") || "none",
-          ". A0 plan is the derived execution target. Any filled override below becomes a human-pinned exception; use Reset to A0 to clear those pins and fall back to the plan."
+          "\u5F53\u524D\u4ECE backlog/\u8FD0\u884C\u65F6\u68C0\u6D4B\u5230\u7684 Worker\uFF1A",
+          plannedWorkers.map((item) => item.agent).join(", ") || "\u65E0",
+          "\u3002A0 \u8BA1\u5212\u662F\u6D3E\u751F\u51FA\u7684\u9ED8\u8BA4\u6267\u884C\u76EE\u6807\u3002\u4E0B\u9762\u4EFB\u4F55\u5DF2\u586B\u5199\u7684\u8986\u5199\u90FD\u4F1A\u53D8\u6210\u4EBA\u5DE5\u9489\u4F4F\u7684\u4F8B\u5916\u9879\uFF1B\u4F7F\u7528\u201C\u91CD\u7F6E\u4E3A A0\u201D\u53EF\u4EE5\u6E05\u9664\u8FD9\u4E9B\u9489\u5B50\u5E76\u56DE\u9000\u5230\u8BA1\u5212\u3002"
         ] }),
         /* @__PURE__ */ (0, import_jsx_runtime7.jsx)("div", { className: "worker-grid", children: workers.map((worker, index) => /* @__PURE__ */ (0, import_jsx_runtime7.jsx)("div", { className: "subcard", children: (() => {
           const resolved = resolvedByAgent.get(worker.agent || "");
@@ -26572,57 +26696,57 @@ function SettingsTab({
           return /* @__PURE__ */ (0, import_jsx_runtime7.jsxs)(import_jsx_runtime7.Fragment, { children: [
             /* @__PURE__ */ (0, import_jsx_runtime7.jsxs)("div", { className: "subcard-title worker-card-title-row", children: [
               /* @__PURE__ */ (0, import_jsx_runtime7.jsx)("span", { children: worker.agent || `Worker ${index + 1}` }),
-              /* @__PURE__ */ (0, import_jsx_runtime7.jsx)("button", { className: "ghost", type: "button", onClick: () => onResetWorkerOverrides(index), children: "Reset to A0" })
+              /* @__PURE__ */ (0, import_jsx_runtime7.jsx)("button", { className: "ghost", type: "button", onClick: () => onResetWorkerOverrides(index), children: "\u91CD\u7F6E\u4E3A A0" })
             ] }),
-            recommendation ? /* @__PURE__ */ (0, import_jsx_runtime7.jsx)("p", { className: "small muted", children: recommendation }) : null,
+            recommendation ? /* @__PURE__ */ (0, import_jsx_runtime7.jsx)("p", { className: "small muted", children: translateUiText(recommendation) }) : null,
             /* @__PURE__ */ (0, import_jsx_runtime7.jsxs)("div", { className: "plan-grid", children: [
               /* @__PURE__ */ (0, import_jsx_runtime7.jsxs)("div", { className: "plan-row", children: [
-                /* @__PURE__ */ (0, import_jsx_runtime7.jsx)("span", { className: "muted", children: "Task" }),
-                /* @__PURE__ */ (0, import_jsx_runtime7.jsx)("strong", { children: planned.taskId || "A0 will assign" })
+                /* @__PURE__ */ (0, import_jsx_runtime7.jsx)("span", { className: "muted", children: "\u4EFB\u52A1" }),
+                /* @__PURE__ */ (0, import_jsx_runtime7.jsx)("strong", { children: planned.taskId || "A0 \u5C06\u5206\u914D" })
               ] }),
               /* @__PURE__ */ (0, import_jsx_runtime7.jsxs)("div", { className: "plan-row", children: [
-                /* @__PURE__ */ (0, import_jsx_runtime7.jsx)("span", { className: "muted", children: "Type" }),
-                /* @__PURE__ */ (0, import_jsx_runtime7.jsx)("strong", { children: planned.taskType || "default" })
+                /* @__PURE__ */ (0, import_jsx_runtime7.jsx)("span", { className: "muted", children: "\u7C7B\u578B" }),
+                /* @__PURE__ */ (0, import_jsx_runtime7.jsx)("strong", { children: translateUiText(planned.taskType || "default") })
               ] }),
               /* @__PURE__ */ (0, import_jsx_runtime7.jsxs)("div", { className: "plan-row", children: [
-                /* @__PURE__ */ (0, import_jsx_runtime7.jsx)("span", { className: "muted", children: "Branch" }),
-                /* @__PURE__ */ (0, import_jsx_runtime7.jsx)("strong", { children: planned.branch || "A0 will derive" })
+                /* @__PURE__ */ (0, import_jsx_runtime7.jsx)("span", { className: "muted", children: "\u5206\u652F" }),
+                /* @__PURE__ */ (0, import_jsx_runtime7.jsx)("strong", { children: planned.branch || "A0 \u5C06\u81EA\u52A8\u63A8\u5BFC" })
               ] }),
               /* @__PURE__ */ (0, import_jsx_runtime7.jsxs)("div", { className: "plan-row", children: [
-                /* @__PURE__ */ (0, import_jsx_runtime7.jsx)("span", { className: "muted", children: "Worktree" }),
-                /* @__PURE__ */ (0, import_jsx_runtime7.jsx)("strong", { children: planned.worktreePath || "derived from Local Repo Root" })
+                /* @__PURE__ */ (0, import_jsx_runtime7.jsx)("span", { className: "muted", children: "\u5DE5\u4F5C\u6811" }),
+                /* @__PURE__ */ (0, import_jsx_runtime7.jsx)("strong", { children: planned.worktreePath || "\u7531\u672C\u5730\u4ED3\u5E93\u6839\u76EE\u5F55\u63A8\u5BFC" })
               ] }),
               /* @__PURE__ */ (0, import_jsx_runtime7.jsxs)("div", { className: "plan-row", children: [
-                /* @__PURE__ */ (0, import_jsx_runtime7.jsx)("span", { className: "muted", children: "Pool" }),
-                /* @__PURE__ */ (0, import_jsx_runtime7.jsx)("strong", { children: planned.lockedPool || planned.recommendedPool || "A0 routing" })
+                /* @__PURE__ */ (0, import_jsx_runtime7.jsx)("span", { className: "muted", children: "\u8D44\u6E90\u6C60" }),
+                /* @__PURE__ */ (0, import_jsx_runtime7.jsx)("strong", { children: planned.lockedPool || planned.recommendedPool || "A0 \u8DEF\u7531" })
               ] }),
               /* @__PURE__ */ (0, import_jsx_runtime7.jsxs)("div", { className: "plan-row", children: [
-                /* @__PURE__ */ (0, import_jsx_runtime7.jsx)("span", { className: "muted", children: "Test" }),
-                /* @__PURE__ */ (0, import_jsx_runtime7.jsx)("strong", { children: planned.testCommand || suggestedTest || "A0 default" })
+                /* @__PURE__ */ (0, import_jsx_runtime7.jsx)("span", { className: "muted", children: "\u6D4B\u8BD5" }),
+                /* @__PURE__ */ (0, import_jsx_runtime7.jsx)("strong", { children: planned.testCommand || suggestedTest || "A0 \u9ED8\u8BA4\u503C" })
               ] })
             ] }),
             /* @__PURE__ */ (0, import_jsx_runtime7.jsxs)("div", { className: "field-grid compact-field-grid", children: [
               /* @__PURE__ */ (0, import_jsx_runtime7.jsx)(Field, { label: "Agent", value: worker.agent || "", onChange: (value) => onWorkerChange(index, "agent", value), issues: issues[`workers[${index}].agent`] }),
-              /* @__PURE__ */ (0, import_jsx_runtime7.jsx)(Field, { label: "Pool Override", value: worker.resource_pool || "", onChange: (value) => onWorkerChange(index, "resource_pool", value), issues: issues[`workers[${index}].resource_pool`], helpText: resolved?.locked_pool ? `A0 lock: ${resolved.locked_pool}` : resolved?.recommended_pool ? `A0 recommends: ${resolved.recommended_pool}` : workerDefaults.resource_pool ? `Default: ${workerDefaults.resource_pool}` : "Blank means inherit A0 routing." })
+              /* @__PURE__ */ (0, import_jsx_runtime7.jsx)(Field, { label: "\u8D44\u6E90\u6C60\u8986\u5199", value: worker.resource_pool || "", onChange: (value) => onWorkerChange(index, "resource_pool", value), issues: issues[`workers[${index}].resource_pool`], helpText: resolved?.locked_pool ? `A0 \u9501\u5B9A\uFF1A${resolved.locked_pool}` : resolved?.recommended_pool ? `A0 \u63A8\u8350\uFF1A${resolved.recommended_pool}` : workerDefaults.resource_pool ? `\u9ED8\u8BA4\u503C\uFF1A${workerDefaults.resource_pool}` : "\u7559\u7A7A\u8868\u793A\u7EE7\u627F A0 \u8DEF\u7531\u3002" })
             ] }),
             /* @__PURE__ */ (0, import_jsx_runtime7.jsxs)("details", { className: "advanced-panel", children: [
-              /* @__PURE__ */ (0, import_jsx_runtime7.jsx)("summary", { children: "Advanced overrides" }),
+              /* @__PURE__ */ (0, import_jsx_runtime7.jsx)("summary", { children: "\u9AD8\u7EA7\u8986\u5199" }),
               /* @__PURE__ */ (0, import_jsx_runtime7.jsxs)("div", { className: "override-toolbar", children: [
-                /* @__PURE__ */ (0, import_jsx_runtime7.jsx)("button", { className: "ghost", type: "button", onClick: () => onResetWorkerOverrides(index, "routing"), children: "Reset routing" }),
-                /* @__PURE__ */ (0, import_jsx_runtime7.jsx)("button", { className: "ghost", type: "button", onClick: () => onResetWorkerOverrides(index, "runtime"), children: "Reset runtime" })
+                /* @__PURE__ */ (0, import_jsx_runtime7.jsx)("button", { className: "ghost", type: "button", onClick: () => onResetWorkerOverrides(index, "routing"), children: "\u91CD\u7F6E\u8DEF\u7531" }),
+                /* @__PURE__ */ (0, import_jsx_runtime7.jsx)("button", { className: "ghost", type: "button", onClick: () => onResetWorkerOverrides(index, "runtime"), children: "\u91CD\u7F6E\u8FD0\u884C\u65F6" })
               ] }),
               /* @__PURE__ */ (0, import_jsx_runtime7.jsxs)("div", { className: "field-grid advanced-grid", children: [
-                /* @__PURE__ */ (0, import_jsx_runtime7.jsx)(Field, { label: "Task ID Override", value: worker.task_id || "", onChange: (value) => onWorkerChange(index, "task_id", value), helpText: planned.taskId ? `A0 plan: ${planned.taskId}` : "Leave blank to inherit A0 task assignment." }),
-                /* @__PURE__ */ (0, import_jsx_runtime7.jsx)(Field, { label: "Branch Override", value: worker.branch || "", onChange: (value) => onWorkerChange(index, "branch", value), issues: issues[`workers[${index}].branch`], helpText: planned.branch ? `A0 plan: ${planned.branch}` : "Leave blank to let A0 derive the branch." }),
-                /* @__PURE__ */ (0, import_jsx_runtime7.jsx)(Field, { label: "Worktree Path Override", value: worker.worktree_path || "", onChange: (value) => onWorkerChange(index, "worktree_path", value), issues: issues[`workers[${index}].worktree_path`], helpText: planned.worktreePath ? `A0 plan: ${planned.worktreePath}` : "Leave blank to derive from Local Repo Root." }),
-                /* @__PURE__ */ (0, import_jsx_runtime7.jsx)(Field, { label: "Queue Override", value: stringifyQueue(worker.resource_pool_queue), onChange: (value) => onWorkerChange(index, "resource_pool_queue", value), issues: issues[`workers[${index}].resource_pool_queue`], placeholder: "pool_a, pool_b", helpText: resolved?.resource_pool_queue?.length ? `A0 order: ${stringifyQueue(resolved.resource_pool_queue)}` : workerDefaults.resource_pool_queue?.length ? `Default: ${stringifyQueue(workerDefaults.resource_pool_queue)}` : "Blank means inherit A0 queue." }),
-                /* @__PURE__ */ (0, import_jsx_runtime7.jsx)(SelectField, { label: "Environment Type", value: worker.environment_type || "", onChange: (value) => onWorkerChange(index, "environment_type", value), options: ["uv", "venv", "none"] }),
-                /* @__PURE__ */ (0, import_jsx_runtime7.jsx)(Field, { label: "Environment Path", value: worker.environment_path || "", onChange: (value) => onWorkerChange(index, "environment_path", value), issues: issues[`workers[${index}].environment_path`], helpText: workerDefaults.environment_path ? `Default: ${workerDefaults.environment_path}` : void 0 }),
-                /* @__PURE__ */ (0, import_jsx_runtime7.jsx)(Field, { label: "Sync Command", value: worker.sync_command || "", onChange: (value) => onWorkerChange(index, "sync_command", value), helpText: workerDefaults.sync_command ? `Default: ${workerDefaults.sync_command}` : void 0 }),
-                /* @__PURE__ */ (0, import_jsx_runtime7.jsx)(Field, { label: "Test Command", value: worker.test_command || "", onChange: (value) => onWorkerChange(index, "test_command", value), issues: issues[`workers[${index}].test_command`], helpText: suggestedTest ? `A0 picked: ${suggestedTest}` : workerDefaults.test_command ? `Default: ${workerDefaults.test_command}` : void 0 }),
-                /* @__PURE__ */ (0, import_jsx_runtime7.jsx)(Field, { label: "Submit Strategy", value: worker.submit_strategy || "", onChange: (value) => onWorkerChange(index, "submit_strategy", value), issues: issues[`workers[${index}].submit_strategy`], helpText: workerDefaults.submit_strategy ? `Default: ${workerDefaults.submit_strategy}` : void 0 }),
-                /* @__PURE__ */ (0, import_jsx_runtime7.jsx)(Field, { label: "Git Name", value: worker.git_identity?.name || "", onChange: (value) => onWorkerChange(index, "git_identity.name", value), helpText: workerDefaults.git_identity?.name ? `Default: ${workerDefaults.git_identity.name}` : void 0 }),
-                /* @__PURE__ */ (0, import_jsx_runtime7.jsx)(Field, { label: "Git Email", value: worker.git_identity?.email || "", onChange: (value) => onWorkerChange(index, "git_identity.email", value), helpText: workerDefaults.git_identity?.email ? `Default: ${workerDefaults.git_identity.email}` : void 0 })
+                /* @__PURE__ */ (0, import_jsx_runtime7.jsx)(Field, { label: "\u4EFB\u52A1 ID \u8986\u5199", value: worker.task_id || "", onChange: (value) => onWorkerChange(index, "task_id", value), helpText: planned.taskId ? `A0 \u8BA1\u5212\uFF1A${planned.taskId}` : "\u7559\u7A7A\u8868\u793A\u7EE7\u627F A0 \u4EFB\u52A1\u5206\u914D\u3002" }),
+                /* @__PURE__ */ (0, import_jsx_runtime7.jsx)(Field, { label: "\u5206\u652F\u8986\u5199", value: worker.branch || "", onChange: (value) => onWorkerChange(index, "branch", value), issues: issues[`workers[${index}].branch`], helpText: planned.branch ? `A0 \u8BA1\u5212\uFF1A${planned.branch}` : "\u7559\u7A7A\u5219\u8BA9 A0 \u81EA\u52A8\u63A8\u5BFC\u5206\u652F\u3002" }),
+                /* @__PURE__ */ (0, import_jsx_runtime7.jsx)(Field, { label: "Worktree \u8DEF\u5F84\u8986\u5199", value: worker.worktree_path || "", onChange: (value) => onWorkerChange(index, "worktree_path", value), issues: issues[`workers[${index}].worktree_path`], helpText: planned.worktreePath ? `A0 \u8BA1\u5212\uFF1A${planned.worktreePath}` : "\u7559\u7A7A\u5219\u6839\u636E\u672C\u5730\u4ED3\u5E93\u6839\u76EE\u5F55\u63A8\u5BFC\u3002" }),
+                /* @__PURE__ */ (0, import_jsx_runtime7.jsx)(Field, { label: "\u961F\u5217\u8986\u5199", value: stringifyQueue(worker.resource_pool_queue), onChange: (value) => onWorkerChange(index, "resource_pool_queue", value), issues: issues[`workers[${index}].resource_pool_queue`], placeholder: "pool_a, pool_b", helpText: resolved?.resource_pool_queue?.length ? `A0 \u987A\u5E8F\uFF1A${stringifyQueue(resolved.resource_pool_queue)}` : workerDefaults.resource_pool_queue?.length ? `\u9ED8\u8BA4\u503C\uFF1A${stringifyQueue(workerDefaults.resource_pool_queue)}` : "\u7559\u7A7A\u8868\u793A\u7EE7\u627F A0 \u961F\u5217\u3002" }),
+                /* @__PURE__ */ (0, import_jsx_runtime7.jsx)(SelectField, { label: "\u73AF\u5883\u7C7B\u578B", value: worker.environment_type || "", onChange: (value) => onWorkerChange(index, "environment_type", value), options: ["uv", "venv", "none"] }),
+                /* @__PURE__ */ (0, import_jsx_runtime7.jsx)(Field, { label: "\u73AF\u5883\u8DEF\u5F84", value: worker.environment_path || "", onChange: (value) => onWorkerChange(index, "environment_path", value), issues: issues[`workers[${index}].environment_path`], helpText: workerDefaults.environment_path ? `\u9ED8\u8BA4\u503C\uFF1A${workerDefaults.environment_path}` : void 0 }),
+                /* @__PURE__ */ (0, import_jsx_runtime7.jsx)(Field, { label: "\u540C\u6B65\u547D\u4EE4", value: worker.sync_command || "", onChange: (value) => onWorkerChange(index, "sync_command", value), helpText: workerDefaults.sync_command ? `\u9ED8\u8BA4\u503C\uFF1A${workerDefaults.sync_command}` : void 0 }),
+                /* @__PURE__ */ (0, import_jsx_runtime7.jsx)(Field, { label: "\u6D4B\u8BD5\u547D\u4EE4", value: worker.test_command || "", onChange: (value) => onWorkerChange(index, "test_command", value), issues: issues[`workers[${index}].test_command`], helpText: suggestedTest ? `A0 \u9009\u5B9A\uFF1A${suggestedTest}` : workerDefaults.test_command ? `\u9ED8\u8BA4\u503C\uFF1A${workerDefaults.test_command}` : void 0 }),
+                /* @__PURE__ */ (0, import_jsx_runtime7.jsx)(Field, { label: "\u63D0\u4EA4\u7B56\u7565", value: worker.submit_strategy || "", onChange: (value) => onWorkerChange(index, "submit_strategy", value), issues: issues[`workers[${index}].submit_strategy`], helpText: workerDefaults.submit_strategy ? `\u9ED8\u8BA4\u503C\uFF1A${workerDefaults.submit_strategy}` : void 0 }),
+                /* @__PURE__ */ (0, import_jsx_runtime7.jsx)(Field, { label: "Git \u540D\u79F0", value: worker.git_identity?.name || "", onChange: (value) => onWorkerChange(index, "git_identity.name", value), helpText: workerDefaults.git_identity?.name ? `\u9ED8\u8BA4\u503C\uFF1A${workerDefaults.git_identity.name}` : void 0 }),
+                /* @__PURE__ */ (0, import_jsx_runtime7.jsx)(Field, { label: "Git \u90AE\u7BB1", value: worker.git_identity?.email || "", onChange: (value) => onWorkerChange(index, "git_identity.email", value), helpText: workerDefaults.git_identity?.email ? `\u9ED8\u8BA4\u503C\uFF1A${workerDefaults.git_identity.email}` : void 0 })
               ] })
             ] })
           ] });
@@ -26660,32 +26784,32 @@ function A0ConsoleView({
     /* @__PURE__ */ (0, import_jsx_runtime8.jsxs)("section", { className: "card", children: [
       /* @__PURE__ */ (0, import_jsx_runtime8.jsxs)("div", { className: "page-header", children: [
         /* @__PURE__ */ (0, import_jsx_runtime8.jsxs)("div", { children: [
-          /* @__PURE__ */ (0, import_jsx_runtime8.jsx)("h2", { children: "A0 Console" }),
-          /* @__PURE__ */ (0, import_jsx_runtime8.jsx)("p", { className: "small", children: "Dedicated manager window for approvals, unblock instructions, and resume notes." })
+          /* @__PURE__ */ (0, import_jsx_runtime8.jsx)("h2", { children: "A0 \u63A7\u5236\u53F0" }),
+          /* @__PURE__ */ (0, import_jsx_runtime8.jsx)("p", { className: "small", children: "\u7528\u4E8E\u5BA1\u6279\u3001\u89E3\u963B\u548C\u6062\u590D\u8BF4\u660E\u7684\u4E13\u7528\u7BA1\u7406\u7A97\u53E3\u3002" })
         ] }),
         /* @__PURE__ */ (0, import_jsx_runtime8.jsxs)("div", { className: "small muted", children: [
           data.a0_console.pending_count,
-          " pending"
+          " \u4E2A\u5F85\u5904\u7406"
         ] })
       ] }),
       /* @__PURE__ */ (0, import_jsx_runtime8.jsxs)("label", { className: "field", children: [
-        /* @__PURE__ */ (0, import_jsx_runtime8.jsx)("span", { className: "field-label", children: "Message to A0" }),
-        /* @__PURE__ */ (0, import_jsx_runtime8.jsx)("textarea", { className: "field-input field-textarea", value: composer, onChange: (event) => onComposerChange(event.target.value), placeholder: "Send a direct note to A0 outside a specific request." })
+        /* @__PURE__ */ (0, import_jsx_runtime8.jsx)("span", { className: "field-label", children: "\u53D1\u7ED9 A0 \u7684\u6D88\u606F" }),
+        /* @__PURE__ */ (0, import_jsx_runtime8.jsx)("textarea", { className: "field-input field-textarea", value: composer, onChange: (event) => onComposerChange(event.target.value), placeholder: "\u5411 A0 \u53D1\u9001\u4E00\u6761\u4E0D\u7ED1\u5B9A\u5177\u4F53\u8BF7\u6C42\u7684\u76F4\u63A5\u6D88\u606F\u3002" })
       ] }),
-      /* @__PURE__ */ (0, import_jsx_runtime8.jsx)("div", { className: "toolbar-group a0-actions", children: /* @__PURE__ */ (0, import_jsx_runtime8.jsx)("button", { type: "button", onClick: onSendMessage, disabled: !composer.trim(), children: "Send to A0" }) })
+      /* @__PURE__ */ (0, import_jsx_runtime8.jsx)("div", { className: "toolbar-group a0-actions", children: /* @__PURE__ */ (0, import_jsx_runtime8.jsx)("button", { type: "button", onClick: onSendMessage, disabled: !composer.trim(), children: "\u53D1\u9001\u7ED9 A0" }) })
     ] }),
     /* @__PURE__ */ (0, import_jsx_runtime8.jsx)(WorkflowPatchCard, { data, draft: workflowDraft, onChange: onWorkflowDraftChange, onSubmit: onApplyWorkflowUpdate }),
     /* @__PURE__ */ (0, import_jsx_runtime8.jsxs)("section", { className: "card", children: [
       /* @__PURE__ */ (0, import_jsx_runtime8.jsx)("div", { className: "panel-title", children: /* @__PURE__ */ (0, import_jsx_runtime8.jsxs)("div", { children: [
-        /* @__PURE__ */ (0, import_jsx_runtime8.jsx)("h2", { children: "Inbox" }),
-        /* @__PURE__ */ (0, import_jsx_runtime8.jsx)("p", { className: "small", children: "Worker messages that still need acknowledgement or closure from A0." })
+        /* @__PURE__ */ (0, import_jsx_runtime8.jsx)("h2", { children: "\u6536\u4EF6\u7BB1" }),
+        /* @__PURE__ */ (0, import_jsx_runtime8.jsx)("p", { className: "small", children: "\u4ECD\u9700\u8981 A0 \u786E\u8BA4\u6216\u5173\u95ED\u7684 Worker \u6D88\u606F\u3002" })
       ] }) }),
-      /* @__PURE__ */ (0, import_jsx_runtime8.jsx)("div", { className: "merge-board", children: inbox.length ? inbox.map((item) => /* @__PURE__ */ (0, import_jsx_runtime8.jsx)(MailboxCard, { item, onAck: onMailboxAck }, item.id)) : /* @__PURE__ */ (0, import_jsx_runtime8.jsx)("div", { className: "small muted", children: "No unresolved mailbox items for A0." }) })
+      /* @__PURE__ */ (0, import_jsx_runtime8.jsx)("div", { className: "merge-board", children: inbox.length ? inbox.map((item) => /* @__PURE__ */ (0, import_jsx_runtime8.jsx)(MailboxCard, { item, onAck: onMailboxAck }, item.id)) : /* @__PURE__ */ (0, import_jsx_runtime8.jsx)("div", { className: "small muted", children: "A0 \u5F53\u524D\u6CA1\u6709\u672A\u89E3\u51B3\u7684\u90AE\u7BB1\u6D88\u606F\u3002" }) })
     ] }),
     /* @__PURE__ */ (0, import_jsx_runtime8.jsxs)("section", { className: "card", children: [
       /* @__PURE__ */ (0, import_jsx_runtime8.jsx)("div", { className: "panel-title", children: /* @__PURE__ */ (0, import_jsx_runtime8.jsxs)("div", { children: [
-        /* @__PURE__ */ (0, import_jsx_runtime8.jsx)("h2", { children: "Pending Requests" }),
-        /* @__PURE__ */ (0, import_jsx_runtime8.jsx)("p", { className: "small", children: "These are the cases where A0 currently needs your decision or confirmation." })
+        /* @__PURE__ */ (0, import_jsx_runtime8.jsx)("h2", { children: "\u5F85\u5904\u7406\u8BF7\u6C42" }),
+        /* @__PURE__ */ (0, import_jsx_runtime8.jsx)("p", { className: "small", children: "\u8FD9\u91CC\u6C47\u603B\u4E86\u5F53\u524D\u9700\u8981\u4F60\u505A\u51B3\u5B9A\u6216\u786E\u8BA4\u7684\u4E8B\u9879\u3002" })
       ] }) }),
       /* @__PURE__ */ (0, import_jsx_runtime8.jsx)("div", { className: "merge-board", children: requests.length ? requests.map((item) => /* @__PURE__ */ (0, import_jsx_runtime8.jsx)(
         A0RequestCard,
@@ -26697,18 +26821,18 @@ function A0ConsoleView({
           onPrepareWorkflow
         },
         item.id
-      )) : /* @__PURE__ */ (0, import_jsx_runtime8.jsx)("div", { className: "small muted", children: "No open A0 requests." }) })
+      )) : /* @__PURE__ */ (0, import_jsx_runtime8.jsx)("div", { className: "small muted", children: "\u5F53\u524D\u6CA1\u6709\u6253\u5F00\u7684 A0 \u8BF7\u6C42\u3002" }) })
     ] }),
     /* @__PURE__ */ (0, import_jsx_runtime8.jsxs)("section", { className: "card", children: [
       /* @__PURE__ */ (0, import_jsx_runtime8.jsx)("div", { className: "panel-title", children: /* @__PURE__ */ (0, import_jsx_runtime8.jsxs)("div", { children: [
-        /* @__PURE__ */ (0, import_jsx_runtime8.jsx)("h2", { children: "Conversation Log" }),
-        /* @__PURE__ */ (0, import_jsx_runtime8.jsx)("p", { className: "small", children: "Recent user-to-A0 messages and request responses recorded by the control plane." })
+        /* @__PURE__ */ (0, import_jsx_runtime8.jsx)("h2", { children: "\u5BF9\u8BDD\u8BB0\u5F55" }),
+        /* @__PURE__ */ (0, import_jsx_runtime8.jsx)("p", { className: "small", children: "\u63A7\u5236\u5E73\u9762\u8BB0\u5F55\u7684\u8FD1\u671F\u7528\u6237\u5230 A0 \u7684\u6D88\u606F\u4E0E\u8BF7\u6C42\u54CD\u5E94\u3002" })
       ] }) }),
       /* @__PURE__ */ (0, import_jsx_runtime8.jsx)("div", { className: "stack-list", children: messages.length ? messages.map((item) => /* @__PURE__ */ (0, import_jsx_runtime8.jsxs)("div", { className: "subcard", children: [
         /* @__PURE__ */ (0, import_jsx_runtime8.jsx)("div", { className: "subcard-title", children: item.action || item.direction }),
         /* @__PURE__ */ (0, import_jsx_runtime8.jsx)("div", { className: "small muted", children: item.created_at }),
         /* @__PURE__ */ (0, import_jsx_runtime8.jsx)("p", { children: item.body })
-      ] }, item.id)) : /* @__PURE__ */ (0, import_jsx_runtime8.jsx)("div", { className: "small muted", children: "No A0 conversation history yet." }) })
+      ] }, item.id)) : /* @__PURE__ */ (0, import_jsx_runtime8.jsx)("div", { className: "small muted", children: "\u5F53\u524D\u8FD8\u6CA1\u6709 A0 \u5BF9\u8BDD\u5386\u53F2\u3002" }) })
     ] })
   ] });
 }
@@ -26764,11 +26888,11 @@ function App() {
         setLaunchModel(nextData.launch_policy.default_model || "");
       }
       if (forceStatus) {
-        setStampedStatus(`state refreshed, last event: ${nextData.last_event || "none"}`);
+        setStampedStatus(`\u72B6\u6001\u5DF2\u5237\u65B0\uFF0C\u6700\u65B0\u4E8B\u4EF6\uFF1A${nextData.last_event || "\u65E0"}`);
       }
     } catch (error) {
       if (error.name !== "AbortError") {
-        setStampedStatus(`refresh failed: ${String(error)}`, true);
+        setStampedStatus(`\u5237\u65B0\u5931\u8D25\uFF1A${String(error)}`, true);
       }
     }
   };
@@ -26789,7 +26913,7 @@ function App() {
     const pendingCount = data?.a0_console?.pending_count || 0;
     if (pendingCount > previousPendingA0Ref.current && document.visibilityState !== "visible" && "Notification" in window) {
       if (Notification.permission === "granted") {
-        new Notification("A0 needs input", { body: `${pendingCount} approval request(s) pending in A0 Console.` });
+        new Notification("A0 \u9700\u8981\u8F93\u5165", { body: `A0 \u63A7\u5236\u53F0\u4E2D\u6709 ${pendingCount} \u4E2A\u5F85\u5904\u7406\u5BA1\u6279\u8BF7\u6C42\u3002` });
       } else if (Notification.permission === "default") {
         void Notification.requestPermission();
       }
@@ -27338,19 +27462,19 @@ function App() {
     await refresh(true);
   });
   const topMeta = data ? [
-    { label: "Startup", value: data.mode.state || "configured" },
-    { label: "Listener", value: data.mode.listener_active ? "active" : "silent" },
-    { label: "Launch", value: data.launch_blockers.length ? `${data.launch_blockers.length} blocker(s)` : "ready" },
-    { label: "Launch Mode", value: launchStrategyLabel(launchStrategy) },
-    { label: "Config", value: data.mode.config_path || "unknown" },
-    { label: "Updated", value: data.updated_at || "unknown" }
+    { label: "\u542F\u52A8\u72B6\u6001", value: translateUiText(data.mode.state || "configured") || "\u5DF2\u914D\u7F6E" },
+    { label: "\u76D1\u542C\u5668", value: data.mode.listener_active ? "\u8FD0\u884C\u4E2D" : "\u9759\u9ED8" },
+    { label: "\u542F\u52A8\u6761\u4EF6", value: data.launch_blockers.length ? `${data.launch_blockers.length} \u4E2A\u963B\u585E\u9879` : "\u5C31\u7EEA" },
+    { label: "\u542F\u52A8\u6A21\u5F0F", value: launchStrategyLabel(launchStrategy) },
+    { label: "\u914D\u7F6E\u6587\u4EF6", value: data.mode.config_path || "\u672A\u77E5" },
+    { label: "\u66F4\u65B0\u65F6\u95F4", value: data.updated_at || "\u672A\u77E5" }
   ] : [];
   if (data && isA0ConsoleView) {
     return /* @__PURE__ */ (0, import_jsx_runtime9.jsxs)("div", { children: [
       /* @__PURE__ */ (0, import_jsx_runtime9.jsx)("header", { children: /* @__PURE__ */ (0, import_jsx_runtime9.jsx)("div", { className: "hero", children: /* @__PURE__ */ (0, import_jsx_runtime9.jsxs)("div", { children: [
         /* @__PURE__ */ (0, import_jsx_runtime9.jsx)("div", { className: "hero-badge", children: "Manager channel" }),
-        /* @__PURE__ */ (0, import_jsx_runtime9.jsx)("h1", { children: "A0 Console" }),
-        /* @__PURE__ */ (0, import_jsx_runtime9.jsx)("p", { className: "small tagline", children: "Focused communication window for manager approvals, unblock decisions, and resume notes." })
+        /* @__PURE__ */ (0, import_jsx_runtime9.jsx)("h1", { children: "A0 \u63A7\u5236\u53F0" }),
+        /* @__PURE__ */ (0, import_jsx_runtime9.jsx)("p", { className: "small tagline", children: "\u7528\u4E8E\u5BA1\u6279\u3001\u89E3\u963B\u548C\u6062\u590D\u8BF4\u660E\u7684\u805A\u7126\u6C9F\u901A\u7A97\u53E3\u3002" })
       ] }) }) }),
       /* @__PURE__ */ (0, import_jsx_runtime9.jsxs)("main", { children: [
         /* @__PURE__ */ (0, import_jsx_runtime9.jsx)("section", { className: "card", children: /* @__PURE__ */ (0, import_jsx_runtime9.jsx)("div", { className: classNames("status", status.error && "error"), children: status.message }) }),
@@ -27377,26 +27501,26 @@ function App() {
   }
   return /* @__PURE__ */ (0, import_jsx_runtime9.jsxs)("div", { children: [
     /* @__PURE__ */ (0, import_jsx_runtime9.jsx)("header", { children: /* @__PURE__ */ (0, import_jsx_runtime9.jsx)("div", { className: "hero", children: /* @__PURE__ */ (0, import_jsx_runtime9.jsxs)("div", { children: [
-      /* @__PURE__ */ (0, import_jsx_runtime9.jsx)("div", { className: "hero-badge", children: "FP8 delivery orchestration" }),
-      /* @__PURE__ */ (0, import_jsx_runtime9.jsx)("h1", { children: "warp control plane" }),
-      /* @__PURE__ */ (0, import_jsx_runtime9.jsx)("p", { className: "small tagline", children: "Cold-start by default, fire-and-forget serving, editable settings forms, strict validation, and an explicit silent listener mode." })
+      /* @__PURE__ */ (0, import_jsx_runtime9.jsx)("div", { className: "hero-badge", children: "FP8 \u4EA4\u4ED8\u7F16\u6392" }),
+      /* @__PURE__ */ (0, import_jsx_runtime9.jsx)("h1", { children: "warp \u63A7\u5236\u5E73\u9762" }),
+      /* @__PURE__ */ (0, import_jsx_runtime9.jsx)("p", { className: "small tagline", children: "\u9ED8\u8BA4\u652F\u6301\u51B7\u542F\u52A8\u3001\u5373\u5F00\u5373\u8D70\u5F0F\u670D\u52A1\u3001\u53EF\u7F16\u8F91\u8BBE\u7F6E\u8868\u5355\u3001\u4E25\u683C\u6821\u9A8C\uFF0C\u4EE5\u53CA\u660E\u786E\u7684\u9759\u9ED8\u76D1\u542C\u6A21\u5F0F\u3002" })
     ] }) }) }),
     /* @__PURE__ */ (0, import_jsx_runtime9.jsxs)("main", { children: [
       /* @__PURE__ */ (0, import_jsx_runtime9.jsxs)("section", { className: "card", children: [
         /* @__PURE__ */ (0, import_jsx_runtime9.jsxs)("div", { className: "toolbar", children: [
           /* @__PURE__ */ (0, import_jsx_runtime9.jsxs)("div", { className: "toolbar-group", children: [
-            /* @__PURE__ */ (0, import_jsx_runtime9.jsx)("button", { disabled: actionInFlight, onClick: () => onLaunch(false), children: "Launch" }),
-            /* @__PURE__ */ (0, import_jsx_runtime9.jsx)("button", { className: "secondary", disabled: actionInFlight, onClick: () => onLaunch(true), children: "Restart" }),
-            /* @__PURE__ */ (0, import_jsx_runtime9.jsx)("button", { className: "secondary", disabled: actionInFlight, onClick: onSoftStop, children: "Soft Stop" }),
-            /* @__PURE__ */ (0, import_jsx_runtime9.jsx)("button", { className: "danger", disabled: actionInFlight, onClick: onStopWorkers, children: "Stop Agents" }),
-            /* @__PURE__ */ (0, import_jsx_runtime9.jsx)("button", { className: "ghost danger-outline", disabled: actionInFlight, onClick: onSilentMode, children: "Silent Mode" }),
-            /* @__PURE__ */ (0, import_jsx_runtime9.jsx)("button", { className: "danger ghost-danger", disabled: actionInFlight, onClick: onStopAll, children: "Stop All" }),
-            /* @__PURE__ */ (0, import_jsx_runtime9.jsx)("button", { className: "ghost", disabled: actionInFlight, onClick: () => void refresh(true), children: "Refresh" })
+            /* @__PURE__ */ (0, import_jsx_runtime9.jsx)("button", { disabled: actionInFlight, onClick: () => onLaunch(false), children: "\u542F\u52A8" }),
+            /* @__PURE__ */ (0, import_jsx_runtime9.jsx)("button", { className: "secondary", disabled: actionInFlight, onClick: () => onLaunch(true), children: "\u91CD\u542F" }),
+            /* @__PURE__ */ (0, import_jsx_runtime9.jsx)("button", { className: "secondary", disabled: actionInFlight, onClick: onSoftStop, children: "\u8F6F\u505C\u6B62" }),
+            /* @__PURE__ */ (0, import_jsx_runtime9.jsx)("button", { className: "danger", disabled: actionInFlight, onClick: onStopWorkers, children: "\u505C\u6B62 Agent" }),
+            /* @__PURE__ */ (0, import_jsx_runtime9.jsx)("button", { className: "ghost danger-outline", disabled: actionInFlight, onClick: onSilentMode, children: "\u9759\u9ED8\u6A21\u5F0F" }),
+            /* @__PURE__ */ (0, import_jsx_runtime9.jsx)("button", { className: "danger ghost-danger", disabled: actionInFlight, onClick: onStopAll, children: "\u5168\u90E8\u505C\u6B62" }),
+            /* @__PURE__ */ (0, import_jsx_runtime9.jsx)("button", { className: "ghost", disabled: actionInFlight, onClick: () => void refresh(true), children: "\u5237\u65B0" })
           ] }),
           /* @__PURE__ */ (0, import_jsx_runtime9.jsxs)("div", { className: "toolbar-group", children: [
             data ? /* @__PURE__ */ (0, import_jsx_runtime9.jsxs)(import_jsx_runtime9.Fragment, { children: [
               /* @__PURE__ */ (0, import_jsx_runtime9.jsxs)("label", { className: "field field-compact", children: [
-                /* @__PURE__ */ (0, import_jsx_runtime9.jsx)("span", { className: "field-label", children: "Launch Mode" }),
+                /* @__PURE__ */ (0, import_jsx_runtime9.jsx)("span", { className: "field-label", children: "\u542F\u52A8\u6A21\u5F0F" }),
                 /* @__PURE__ */ (0, import_jsx_runtime9.jsx)(
                   "select",
                   {
@@ -27430,13 +27554,13 @@ function App() {
                 )
               ] }) : null,
               launchStrategy === "selected_model" ? /* @__PURE__ */ (0, import_jsx_runtime9.jsxs)("label", { className: "field field-compact field-compact-wide", children: [
-                /* @__PURE__ */ (0, import_jsx_runtime9.jsx)("span", { className: "field-label", children: "Model" }),
+                /* @__PURE__ */ (0, import_jsx_runtime9.jsx)("span", { className: "field-label", children: "\u6A21\u578B" }),
                 /* @__PURE__ */ (0, import_jsx_runtime9.jsx)(
                   "input",
                   {
                     className: "field-input compact-input",
                     value: launchModel,
-                    placeholder: data.launch_policy.default_model || "model id",
+                    placeholder: data.launch_policy.default_model || "\u6A21\u578B ID",
                     onChange: (event) => {
                       setLaunchDirty(true);
                       setLaunchModel(event.target.value);
@@ -27445,19 +27569,19 @@ function App() {
                 )
               ] }) : null
             ] }) : null,
-            /* @__PURE__ */ (0, import_jsx_runtime9.jsx)("button", { className: "ghost", disabled: actionInFlight, onClick: () => onCopy("serve"), children: "Copy Serve" }),
-            /* @__PURE__ */ (0, import_jsx_runtime9.jsx)("button", { className: "ghost", disabled: actionInFlight, onClick: () => onCopy("up"), children: "Copy Up" }),
-            /* @__PURE__ */ (0, import_jsx_runtime9.jsx)("button", { className: "ghost", disabled: actionInFlight, onClick: onOpenA0Console, children: "A0 Console" }),
+            /* @__PURE__ */ (0, import_jsx_runtime9.jsx)("button", { className: "ghost", disabled: actionInFlight, onClick: () => onCopy("serve"), children: "\u590D\u5236 Serve" }),
+            /* @__PURE__ */ (0, import_jsx_runtime9.jsx)("button", { className: "ghost", disabled: actionInFlight, onClick: () => onCopy("up"), children: "\u590D\u5236 Up" }),
+            /* @__PURE__ */ (0, import_jsx_runtime9.jsx)("button", { className: "ghost", disabled: actionInFlight, onClick: onOpenA0Console, children: "A0 \u63A7\u5236\u53F0" }),
             /* @__PURE__ */ (0, import_jsx_runtime9.jsxs)("label", { className: "toggle", children: [
               /* @__PURE__ */ (0, import_jsx_runtime9.jsx)("input", { type: "checkbox", checked: autoRefresh, onChange: (event) => setAutoRefresh(event.target.checked) }),
-              " Auto refresh"
+              " \u81EA\u52A8\u5237\u65B0"
             ] })
           ] })
         ] }),
         /* @__PURE__ */ (0, import_jsx_runtime9.jsx)("div", { className: classNames("status", status.error && "error"), children: status.message })
       ] }),
       /* @__PURE__ */ (0, import_jsx_runtime9.jsx)("section", { className: "card", children: /* @__PURE__ */ (0, import_jsx_runtime9.jsxs)("div", { className: "toolbar", children: [
-        /* @__PURE__ */ (0, import_jsx_runtime9.jsx)("div", { className: "tab-nav", role: "tablist", "aria-label": "Dashboard sections", children: ["overview", "operations", "settings"].map((name) => /* @__PURE__ */ (0, import_jsx_runtime9.jsx)("button", { className: classNames("nav-button", tab === name && "active"), onClick: () => setTab(name), children: name[0].toUpperCase() + name.slice(1) }, name)) }),
+        /* @__PURE__ */ (0, import_jsx_runtime9.jsx)("div", { className: "tab-nav", role: "tablist", "aria-label": "Dashboard \u5206\u533A", children: ["overview", "operations", "settings"].map((name) => /* @__PURE__ */ (0, import_jsx_runtime9.jsx)("button", { className: classNames("nav-button", tab === name && "active"), onClick: () => setTab(name), children: tabLabel(name) }, name)) }),
         /* @__PURE__ */ (0, import_jsx_runtime9.jsx)("div", { className: "pill-row", children: topMeta.map((item) => /* @__PURE__ */ (0, import_jsx_runtime9.jsxs)("div", { className: "key-pair", children: [
           /* @__PURE__ */ (0, import_jsx_runtime9.jsx)("span", { className: "muted", children: item.label }),
           /* @__PURE__ */ (0, import_jsx_runtime9.jsx)("strong", { children: item.value })
@@ -27484,7 +27608,7 @@ function App() {
           onResetWorkerDefaults,
           onResetWorkerOverrides
         }
-      ) : /* @__PURE__ */ (0, import_jsx_runtime9.jsx)("section", { className: "card", children: /* @__PURE__ */ (0, import_jsx_runtime9.jsx)("div", { className: "small muted", children: "Loading dashboard state..." }) })
+      ) : /* @__PURE__ */ (0, import_jsx_runtime9.jsx)("section", { className: "card", children: /* @__PURE__ */ (0, import_jsx_runtime9.jsx)("div", { className: "small muted", children: "\u6B63\u5728\u52A0\u8F7D Dashboard \u72B6\u6001\u2026" }) })
     ] })
   ] });
 }

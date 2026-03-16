@@ -12,6 +12,7 @@ from typing import Any
 
 from .constants import (
     CONFIG_TEMPLATE_PATH,
+    CONTROL_PLANE_LOG,
     CONTROL_PLANE_ALLOW_NESTED_ENV,
     CONTROL_PLANE_RECURSION_POLICY_ENV,
     CONTROL_PLANE_WORKER_AGENT_ENV,
@@ -59,7 +60,7 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument(
         "--log-file",
         type=Path,
-        default=RUNTIME_DIR / "control_plane.log",
+        default=CONTROL_PLANE_LOG,
         help="log file used when --detach is enabled",
     )
     return parser.parse_args()

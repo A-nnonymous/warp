@@ -1,46 +1,42 @@
 # CODE_INDEX — runtime/web/src/
 
-Frontend React dashboard for the WARP control plane. Built with React 18,
-TypeScript, and bundled via esbuild.
+React dashboard frontend for the WARP control plane. UI copy is Chinese-first; backend-generated durable prompts and reports are also localized to Chinese.
 
-## Library Modules (lib/)
+## Library modules (`lib/`)
 
-| Module | Lines | Responsibility | Key Exports |
-|---|---|---|---|
-| `local-types.ts` | 127 | Frontend-only type definitions and constants | Types: `AgentRow`, `ProgressModel`, `IssueMap`, `SectionStatusMap`, `PlannedWorker`, `WorkerPlanView`, `WorkerResetScope`, `MailboxDraft`, `WorkflowDraft`, `WorkflowPresetAction`. Constants: `AUTO_REFRESH_MS`, `A0_CONSOLE_VIEW`, `DEFAULT_MAILBOX_DRAFT`, `DEFAULT_WORKFLOW_DRAFT` |
-| `utils.ts` | 135 | Pure utility functions (text, state, config normalization) | `normalizedText`, `isAutoManagedBlank`, `isAutoManagedCommandBlank`, `isPlaceholderPath`, `firstMeaningfulValue`, `firstMeaningfulCommand`, `firstMeaningfulPath`, `classNames`, `displayState`, `stateClass`, `renderCell`, `formatTokenCount`, `cloneConfig`, `normalizeConfig`, `parseQueue`, `stringifyQueue`, `launchStrategyLabel`, `slugify`, `preferredLaunchProvider`, `writeClipboard`, `projectReferenceWorkspace` |
-| `config.ts` | 433 | Config transformation, hydration, derivation, validation | `mergeWorkerWithDefaults`, `resetWorkerDefaultsToA0`, `resetWorkerOverridesToA0`, `deriveWorktreePath`, `deriveBranchName`, `deriveDefaultEnvironmentPath`, `normalizeDerivedPaths`, `mergeSavedSection`, `buildSectionValue`, `configForProjectSave`, `buildRuntimeWorkerMap`, `buildResolvedWorkerMap`, `deriveDefaultPoolQueue`, `inferRuntimeWorkerValue`, `buildPlannedWorkers`, `workerPlanView`, `hydrateConfigForA0`, `sectionMatchesField`, `collectSectionIssues`, `sectionRouteUnavailable` |
-| `workflow.ts` | 128 | Workflow draft manipulation and brief generation | `workflowDraftFromTask`, `workflowDraftFromRequest`, `pickWorkflowTask`, `workflowBriefLines`, `workflowPeekTasks`, `mailboxPeekMessages` |
-| `data.ts` | 269 | Derived view-model builders from DashboardState | `buildAgentRows`, `buildProgressModel`, `getLocalValidationIssues`, `buildIssueMap`, `summarizeValidationMessages`, `formatLaunchErrorMessage`, `renderValidation` |
+| Module | Responsibility | Key exports |
+|---|---|---|
+| `local-types.ts` | Frontend-only types, constants, drafts, view enums | `AgentRow`, `ProgressModel`, `MailboxDraft`, `WorkflowDraft`, `AUTO_REFRESH_MS`, ... |
+| `utils.ts` | Text translation, config normalization, display-state helpers, clipboard/path utilities | `translateUiText`, `translateColumnLabel`, `translateOptionLabel`, `tabLabel`, `displayState`, `normalizeConfig`, `parseQueue`, `writeClipboard`, ... |
+| `config.ts` | Config hydration, reset-to-A0 behavior, derived worker paths/queues, validation helpers | `hydrateConfigForA0`, `buildPlannedWorkers`, `workerPlanView`, `configForProjectSave`, ... |
+| `workflow.ts` | Workflow draft hydration, brief generation, mailbox/task peeks | `workflowDraftFromTask`, `workflowDraftFromRequest`, `workflowBriefLines`, `workflowPeekTasks`, `mailboxPeekMessages` |
+| `data.ts` | Dashboard-state to view-model shaping, validation summaries, localized launch error formatting | `buildAgentRows`, `buildProgressModel`, `buildIssueMap`, `formatLaunchErrorMessage`, `renderValidation` |
 
-## Component Modules (components/)
+## Component modules (`components/`)
 
-| Module | Lines | Responsibility | Key Exports |
-|---|---|---|---|
-| `shared.tsx` | 142 | Reusable stateless presentational components | `DataTable`, `Field`, `SelectField`, `SectionIssueList`, `SectionHeader`, `Metric`, `ProgressRow`, `HelperCard` |
-| `cards.tsx` | 402 | Feature-specific card components used across tabs | `MergeCard`, `AgentCard`, `A0RequestCard`, `MailboxCard`, `CleanupWorkerCard`, `MailboxComposerCard`, `WorkflowBriefCard`, `MailboxPeekCard`, `WorkflowPatchCard`, `AutomationSummary` |
-| `OverviewTab.tsx` | 92 | Overview dashboard tab (progress, agents, merge board, agent peek) | `OverviewTab` |
-| `OperationsTab.tsx` | 100 | Operations dashboard tab (workflow, mailbox, cleanup) | `OperationsTab` |
-| `SettingsTab.tsx` | 225 | Settings dashboard tab (pools, project, workers) | `SettingsTab` |
-| `A0ConsoleView.tsx` | 105 | A0 console view (requests, conversation, workflow) | `A0ConsoleView` |
-| `AgentPeekPanel.tsx` | 72 | Real-time sliding window peek into each agent's output | `AgentPeekPanel` |
+| Module | Responsibility | Key exports |
+|---|---|---|
+| `shared.tsx` | Reusable stateless UI primitives for tables, fields, issue lists, metrics | `DataTable`, `Field`, `SelectField`, `SectionIssueList`, `Metric`, `HelperCard` |
+| `cards.tsx` | Overview/operations cards for merge, mailbox, workflow, cleanup, automation summary | `MergeCard`, `AgentCard`, `A0RequestCard`, `MailboxCard`, `CleanupWorkerCard`, `WorkflowPatchCard`, ... |
+| `OverviewTab.tsx` | Task DAG, progress, merge board, live agent peek | `OverviewTab` |
+| `OperationsTab.tsx` | Workflow, mailbox, cleanup, manager-facing operations | `OperationsTab` |
+| `SettingsTab.tsx` | Project paths, pools, defaults, per-worker overrides | `SettingsTab` |
+| `A0ConsoleView.tsx` | A0 console pop-out for approvals, unblock guidance, workflow editing | `A0ConsoleView` |
+| `AgentPeekPanel.tsx` | Sliding window live output per agent | `AgentPeekPanel` |
+| `TaskDAG.tsx` | DAG visualization for backlog dependencies | `TaskDAG` |
 
-## Top-Level Files
+## Top-level files
 
-| Module | Lines | Responsibility | Key Exports |
-|---|---|---|---|
-| `App.tsx` | 898 | Application shell — state, effects, event handlers, tab routing | `App` |
-| `types.ts` | — | Shared API type definitions (DashboardState, ConfigShape, etc.) | All API-facing types |
-| `api.ts` | — | API fetch helpers | `fetchState`, `postAction`, etc. |
-| `main.tsx` | — | React entry point (renders `<App />`) | — |
-| `styles.css` | — | Global stylesheet | — |
-
-**Total: 13 source modules, ~3 125 lines** (from original single-file `App.tsx` at 2 959 lines, plus module overhead).
+| File | Responsibility |
+|---|---|
+| `App.tsx` | Application shell, polling, tab routing, dashboard actions, A0 console integration |
+| `api.ts` | Fetch wrappers for dashboard APIs |
+| `types.ts` | Shared API-facing type definitions |
+| `main.tsx` | React entry point |
+| `styles.css` | Global stylesheet |
 
 ## Build
 
 ```bash
-cd runtime/web
-npx esbuild src/main.tsx --bundle --format=esm --target=es2020 \
-  --jsx=automatic --outdir=static --entry-names=app --loader:.css=css
+source ~/.bashrc && cd runtime/web && npm run build
 ```

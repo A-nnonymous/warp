@@ -1,6 +1,6 @@
 import type { MailboxDraft, WorkflowDraft } from '../lib/local-types';
 import type { DashboardState } from '../types';
-import { classNames } from '../lib/utils';
+import { classNames, translateUiText } from '../lib/utils';
 import { projectReferenceWorkspace } from '../lib/utils';
 import { renderValidation } from '../lib/data';
 import { DataTable } from './shared';
@@ -55,20 +55,20 @@ export function OperationsTab({
         <MailboxPeekCard data={data} />
       </section>
       <section className="grid">
-        <section className="card"><h2>Commands</h2><pre>{`serve:\n${data.commands.serve}\n\nup:\n${data.commands.up}`}</pre></section>
-        <section className="card"><h2>Validation</h2><pre>{renderValidation(data)}</pre></section>
+        <section className="card"><h2>命令</h2><pre>{`serve:\n${data.commands.serve}\n\nup:\n${data.commands.up}`}</pre></section>
+        <section className="card"><h2>校验</h2><pre>{renderValidation(data)}</pre></section>
       </section>
       <section className="grid">
-        <section className="card"><h2>Provider Queue</h2><DataTable columns={['resource_pool', 'provider', 'priority', 'binary_found', 'recursion_guard', 'launch_wrapper', 'auth_mode', 'auth_ready', 'launch_ready', 'active_workers', 'progress_pct', 'total_tokens', 'auth_detail', 'connection_quality', 'work_quality', 'score']} rows={providerRows} /></section>
-        <section className="card"><h2>Merge Queue</h2><DataTable columns={['agent', 'branch', 'submit_strategy', 'worker_identity', 'merge_target', 'status', 'manager_action']} rows={mergeRows} /></section>
+        <section className="card"><h2>Provider 队列</h2><DataTable columns={['resource_pool', 'provider', 'priority', 'binary_found', 'recursion_guard', 'launch_wrapper', 'auth_mode', 'auth_ready', 'launch_ready', 'active_workers', 'progress_pct', 'total_tokens', 'auth_detail', 'connection_quality', 'work_quality', 'score']} rows={providerRows} /></section>
+        <section className="card"><h2>合并队列</h2><DataTable columns={['agent', 'branch', 'submit_strategy', 'worker_identity', 'merge_target', 'status', 'manager_action']} rows={mergeRows} /></section>
       </section>
       <section className="grid">
-        <section className="card"><h2>Active Processes</h2><DataTable columns={['agent', 'provider', 'model', 'alive', 'pid', 'resource_pool', 'progress_pct', 'total_tokens', 'phase', 'recursion_guard', 'wrapper_path', 'returncode']} rows={processRows} /></section>
-        <section className="card"><h2>Project</h2><DataTable columns={['key', 'value']} rows={projectRows} /></section>
+        <section className="card"><h2>活跃进程</h2><DataTable columns={['agent', 'provider', 'model', 'alive', 'pid', 'resource_pool', 'progress_pct', 'total_tokens', 'phase', 'recursion_guard', 'wrapper_path', 'returncode']} rows={processRows} /></section>
+        <section className="card"><h2>项目</h2><DataTable columns={['key', 'value']} rows={projectRows} /></section>
       </section>
       <section className="grid">
-        <section className="card"><h2>Runtime Topology</h2><DataTable columns={['agent', 'resource_pool', 'provider', 'model', 'branch', 'recursion_guard', 'launch_wrapper', 'status']} rows={data.runtime.workers || []} /></section>
-        <section className="card"><h2>Heartbeats</h2><DataTable columns={['agent', 'state', 'last_seen', 'expected_next_checkin']} rows={data.heartbeats.agents || []} /></section>
+        <section className="card"><h2>运行时拓扑</h2><DataTable columns={['agent', 'resource_pool', 'provider', 'model', 'branch', 'recursion_guard', 'launch_wrapper', 'status']} rows={data.runtime.workers || []} /></section>
+        <section className="card"><h2>心跳</h2><DataTable columns={['agent', 'state', 'last_seen', 'expected_next_checkin']} rows={data.heartbeats.agents || []} /></section>
       </section>
       <section className="grid">
         <section className="card"><h2>Backlog</h2><DataTable columns={['id', 'owner', 'claimed_by', 'claim_state', 'plan_state', 'status', 'gate', 'title']} rows={backlogRows} /></section>
@@ -79,22 +79,22 @@ export function OperationsTab({
       <section className="card">
         <div className="panel-title">
           <div>
-            <h2>Cleanup Readiness</h2>
-            <p className="small">Cleanup remains blocked while workers are alive, reviews are unresolved, or single-writer locks are still held.</p>
+            <h2>清理就绪度</h2>
+            <p className="small">只要 Worker 仍在运行、评审未解决，或仍持有单写锁，清理就会被阻塞。</p>
           </div>
-          <div className={classNames('chip', cleanup.ready ? 'state-active' : 'state-stale')}>{cleanup.ready ? 'Ready' : 'Blocked'}</div>
+          <div className={classNames('chip', cleanup.ready ? 'state-active' : 'state-stale')}>{cleanup.ready ? '就绪' : '阻塞'}</div>
         </div>
-        {cleanup.blockers.length ? <div className="merge-list-block"><strong>Cleanup blockers</strong><ul>{cleanup.blockers.map((entry) => <li key={entry}>{entry}</li>)}</ul></div> : <div className="small muted">No cleanup blockers remain. The team cleanup gate can be confirmed safely.</div>}
+        {cleanup.blockers.length ? <div className="merge-list-block"><strong>清理阻塞项</strong><ul>{cleanup.blockers.map((entry) => <li key={entry}>{translateUiText(entry)}</li>)}</ul></div> : <div className="small muted">当前已无清理阻塞项，可以安全确认团队清理 Gate。</div>}
         <div className="toolbar-group a0-actions">
-          <label className="toggle"><input type="checkbox" checked={cleanupReleaseListener} onChange={(event) => onCleanupReleaseChange(event.target.checked)} /> Auto-release listener after confirm</label>
-          <button type="button" onClick={onConfirmCleanup} disabled={actionInFlight || !cleanup.ready}>Confirm cleanup gate</button>
+          <label className="toggle"><input type="checkbox" checked={cleanupReleaseListener} onChange={(event) => onCleanupReleaseChange(event.target.checked)} /> 确认后自动释放监听器</label>
+          <button type="button" onClick={onConfirmCleanup} disabled={actionInFlight || !cleanup.ready}>确认清理 Gate</button>
         </div>
         <div className="merge-board">
           {(cleanup.workers || []).map((item) => <CleanupWorkerCard key={item.agent} item={item} onStopWorker={onStopWorker} disabled={actionInFlight} />)}
         </div>
       </section>
-      <section className="card"><h2>Team Mailbox</h2><DataTable columns={['id', 'from', 'to', 'topic', 'ack_state', 'related_task_ids', 'created_at', 'body']} rows={mailboxRows} /></section>
-      <section className="card"><h2>Manager Report</h2><pre>{data.manager_report}</pre></section>
+      <section className="card"><h2>团队邮箱</h2><DataTable columns={['id', 'from', 'to', 'topic', 'ack_state', 'related_task_ids', 'created_at', 'body']} rows={mailboxRows} /></section>
+      <section className="card"><h2>管理者报告</h2><pre>{data.manager_report}</pre></section>
     </div>
   );
 }

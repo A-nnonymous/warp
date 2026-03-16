@@ -1,7 +1,7 @@
 import type { A0ConsoleRequest, BacklogItem, DashboardState, TeamMailboxMessage } from '../types';
 import type { WorkflowDraft, WorkflowPresetAction } from './local-types';
 import { DEFAULT_WORKFLOW_DRAFT } from './local-types';
-import { stringifyQueue } from './utils';
+import { stringifyQueue, translateUiText } from './utils';
 
 export function workflowDraftFromTask(task?: BacklogItem): WorkflowDraft {
   if (!task) {
@@ -46,7 +46,7 @@ export function workflowDraftFromRequest(data: DashboardState, request: A0Consol
       planState: 'pending_review',
       planSummary: base.planSummary || contextNote,
       reviewNote: '',
-      managerNote: `Replan requested from ${request.id}: ${contextNote}`.trim(),
+      managerNote: `来自 ${request.id} 的重规划请求：${contextNote}`.trim(),
     };
   }
   if (action === 'reassign') {
@@ -60,7 +60,7 @@ export function workflowDraftFromRequest(data: DashboardState, request: A0Consol
       claimState: 'unclaimed',
       claimNote: '',
       reviewNote: '',
-      managerNote: `Reassign requested from ${request.id}: ${contextNote}`.trim(),
+      managerNote: `来自 ${request.id} 的重新分配请求：${contextNote}`.trim(),
     };
   }
   return {
@@ -71,8 +71,8 @@ export function workflowDraftFromRequest(data: DashboardState, request: A0Consol
     claimedBy: base.claimedBy || agent,
     status: 'pending',
     claimState: (base.claimedBy || agent) ? 'claimed' : 'unclaimed',
-    reviewNote: `Reopened from ${request.id}: ${contextNote}`.trim(),
-    managerNote: `Reopen requested from ${request.id}: ${contextNote}`.trim(),
+    reviewNote: `由 ${request.id} 重新打开：${contextNote}`.trim(),
+    managerNote: `来自 ${request.id} 的重新打开请求：${contextNote}`.trim(),
   };
 }
 
@@ -105,9 +105,9 @@ export function workflowBriefLines(data: DashboardState): string[] {
   const planPending = items.filter((item) => item.plan_state === 'pending_review');
   const cleanupBlockers = data.cleanup.blockers || [];
   return [
-    `${active.length} active task(s), ${review.length} awaiting review, ${blocked.length} blocked`,
-    `${planPending.length} plan approval request(s), ${data.a0_console.pending_count} A0 queue item(s)`,
-    cleanupBlockers.length ? `${cleanupBlockers.length} cleanup blocker(s) still open` : 'cleanup lane is clear',
+    `${active.length} 个任务进行中，${review.length} 个待评审，${blocked.length} 个阻塞`,
+    `${planPending.length} 个计划待审批，A0 队列中有 ${data.a0_console.pending_count} 项`,
+    cleanupBlockers.length ? `仍有 ${cleanupBlockers.length} 个清理阻塞项` : '清理通道已畅通',
   ];
 }
 

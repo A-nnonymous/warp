@@ -24,7 +24,12 @@ This package is optimized for low token cost:
 8. `governance/documentation_architecture.md`
 9. `governance/control_plane_playbook.md`
 
-After that, read only the files directly relevant to the task.
+After that, do a mandatory bootstrap maintenance pass before task-specific reading:
+
+1. list the exact files still needed for the request
+2. identify bootstrap confusion, redundancy, or drift
+3. fix the small and obvious issues immediately
+4. only then continue into task-specific files
 
 ## About Governance Files
 
@@ -66,8 +71,9 @@ Then produce a short takeover report that includes:
 - the current default operator path
 - the settled invariants you must not regress
 - the exact repo files you now need to inspect for the requested task
+- the bootstrap issues you found and which ones you will fix immediately
 - the validation commands you will run before finishing
-- redundancies, contradictions, or confusing passages found during bootstrap reading, with concrete fix proposals
+- concrete proposals for any larger bootstrap issues you will not fix immediately
 
 Only after that report, fix any bootstrap doc issues you found, then inspect the task-specific files and implement the requested change.
 
@@ -100,6 +106,19 @@ Every bootstrap must include a feedback pass before starting real work:
 3. If the fix is large, record it as a backlog item with a concrete proposal.
 
 This is not optional. The bootstrap package degrades silently unless every new agent actively maintains it.
+
+## Bootstrap Self-Evolution Loop
+
+Treat bootstrap maintenance as part of normal delivery rather than a separate cleanup pass.
+
+Every meaningful takeover should leave behind at least one of:
+
+- a smaller or clearer bootstrap doc
+- a corrected prompt or read order
+- a newly documented invariant that future agents would otherwise rediscover
+- a concrete backlog proposal for a larger bootstrap improvement
+
+If you finish a task without making bootstrap cheaper for the next agent, assume you missed an optimization opportunity.
 
 ## Expected Finish Quality
 

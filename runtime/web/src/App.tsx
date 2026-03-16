@@ -14,7 +14,7 @@ import { AUTO_REFRESH_MS, A0_CONSOLE_VIEW, DEFAULT_MAILBOX_DRAFT, DEFAULT_WORKFL
 import {
   normalizedText, isAutoManagedBlank, isPlaceholderPath, classNames,
   cloneConfig, normalizeConfig, parseQueue, writeClipboard,
-  launchStrategyLabel, preferredLaunchProvider, projectReferenceWorkspace,
+  launchStrategyLabel, preferredLaunchProvider, projectReferenceWorkspace, tabLabel, translateUiText,
 } from './lib/utils';
 import {
   mergeWorkerWithDefaults, resetWorkerDefaultsToA0, resetWorkerOverridesToA0,
@@ -82,11 +82,11 @@ export function App() {
         setLaunchModel(nextData.launch_policy.default_model || '');
       }
       if (forceStatus) {
-        setStampedStatus(`state refreshed, last event: ${nextData.last_event || 'none'}`);
+        setStampedStatus(`状态已刷新，最新事件：${nextData.last_event || '无'}`);
       }
     } catch (error) {
       if ((error as Error).name !== 'AbortError') {
-        setStampedStatus(`refresh failed: ${String(error)}`, true);
+        setStampedStatus(`刷新失败：${String(error)}`, true);
       }
     }
   };
@@ -110,7 +110,7 @@ export function App() {
     const pendingCount = data?.a0_console?.pending_count || 0;
     if (pendingCount > previousPendingA0Ref.current && document.visibilityState !== 'visible' && 'Notification' in window) {
       if (Notification.permission === 'granted') {
-        new Notification('A0 needs input', { body: `${pendingCount} approval request(s) pending in A0 Console.` });
+        new Notification('A0 需要输入', { body: `A0 控制台中有 ${pendingCount} 个待处理审批请求。` });
       } else if (Notification.permission === 'default') {
         void Notification.requestPermission();
       }
@@ -728,12 +728,12 @@ export function App() {
   });
 
   const topMeta = data ? [
-    { label: 'Startup', value: data.mode.state || 'configured' },
-    { label: 'Listener', value: data.mode.listener_active ? 'active' : 'silent' },
-    { label: 'Launch', value: data.launch_blockers.length ? `${data.launch_blockers.length} blocker(s)` : 'ready' },
-    { label: 'Launch Mode', value: launchStrategyLabel(launchStrategy) },
-    { label: 'Config', value: data.mode.config_path || 'unknown' },
-    { label: 'Updated', value: data.updated_at || 'unknown' },
+    { label: '启动状态', value: translateUiText(data.mode.state || 'configured') || '已配置' },
+    { label: '监听器', value: data.mode.listener_active ? '运行中' : '静默' },
+    { label: '启动条件', value: data.launch_blockers.length ? `${data.launch_blockers.length} 个阻塞项` : '就绪' },
+    { label: '启动模式', value: launchStrategyLabel(launchStrategy) },
+    { label: '配置文件', value: data.mode.config_path || '未知' },
+    { label: '更新时间', value: data.updated_at || '未知' },
   ] : [];
 
   if (data && isA0ConsoleView) {
@@ -743,8 +743,8 @@ export function App() {
           <div className="hero">
             <div>
               <div className="hero-badge">Manager channel</div>
-              <h1>A0 Console</h1>
-              <p className="small tagline">Focused communication window for manager approvals, unblock decisions, and resume notes.</p>
+              <h1>A0 控制台</h1>
+              <p className="small tagline">用于审批、解阻和恢复说明的聚焦沟通窗口。</p>
             </div>
           </div>
         </header>
@@ -776,30 +776,30 @@ export function App() {
     <div>
       <header>
         <div className="hero">
-          <div>
-            <div className="hero-badge">FP8 delivery orchestration</div>
-            <h1>warp control plane</h1>
-            <p className="small tagline">Cold-start by default, fire-and-forget serving, editable settings forms, strict validation, and an explicit silent listener mode.</p>
+            <div>
+              <div className="hero-badge">FP8 交付编排</div>
+              <h1>warp 控制平面</h1>
+              <p className="small tagline">默认支持冷启动、即开即走式服务、可编辑设置表单、严格校验，以及明确的静默监听模式。</p>
+            </div>
           </div>
-        </div>
-      </header>
+        </header>
       <main>
         <section className="card">
           <div className="toolbar">
             <div className="toolbar-group">
-              <button disabled={actionInFlight} onClick={() => onLaunch(false)}>Launch</button>
-              <button className="secondary" disabled={actionInFlight} onClick={() => onLaunch(true)}>Restart</button>
-              <button className="secondary" disabled={actionInFlight} onClick={onSoftStop}>Soft Stop</button>
-              <button className="danger" disabled={actionInFlight} onClick={onStopWorkers}>Stop Agents</button>
-              <button className="ghost danger-outline" disabled={actionInFlight} onClick={onSilentMode}>Silent Mode</button>
-              <button className="danger ghost-danger" disabled={actionInFlight} onClick={onStopAll}>Stop All</button>
-              <button className="ghost" disabled={actionInFlight} onClick={() => void refresh(true)}>Refresh</button>
+               <button disabled={actionInFlight} onClick={() => onLaunch(false)}>启动</button>
+               <button className="secondary" disabled={actionInFlight} onClick={() => onLaunch(true)}>重启</button>
+               <button className="secondary" disabled={actionInFlight} onClick={onSoftStop}>软停止</button>
+               <button className="danger" disabled={actionInFlight} onClick={onStopWorkers}>停止 Agent</button>
+               <button className="ghost danger-outline" disabled={actionInFlight} onClick={onSilentMode}>静默模式</button>
+               <button className="danger ghost-danger" disabled={actionInFlight} onClick={onStopAll}>全部停止</button>
+               <button className="ghost" disabled={actionInFlight} onClick={() => void refresh(true)}>刷新</button>
             </div>
             <div className="toolbar-group">
               {data ? (
                 <>
                   <label className="field field-compact">
-                    <span className="field-label">Launch Mode</span>
+                    <span className="field-label">启动模式</span>
                     <select
                       className="field-input compact-input"
                       value={launchStrategy}
@@ -836,11 +836,11 @@ export function App() {
                   ) : null}
                   {launchStrategy === 'selected_model' ? (
                     <label className="field field-compact field-compact-wide">
-                      <span className="field-label">Model</span>
+                      <span className="field-label">模型</span>
                       <input
                         className="field-input compact-input"
                         value={launchModel}
-                        placeholder={data.launch_policy.default_model || 'model id'}
+                        placeholder={data.launch_policy.default_model || '模型 ID'}
                         onChange={(event) => {
                           setLaunchDirty(true);
                           setLaunchModel(event.target.value);
@@ -850,10 +850,10 @@ export function App() {
                   ) : null}
                 </>
               ) : null}
-              <button className="ghost" disabled={actionInFlight} onClick={() => onCopy('serve')}>Copy Serve</button>
-              <button className="ghost" disabled={actionInFlight} onClick={() => onCopy('up')}>Copy Up</button>
-              <button className="ghost" disabled={actionInFlight} onClick={onOpenA0Console}>A0 Console</button>
-              <label className="toggle"><input type="checkbox" checked={autoRefresh} onChange={(event) => setAutoRefresh(event.target.checked)} /> Auto refresh</label>
+               <button className="ghost" disabled={actionInFlight} onClick={() => onCopy('serve')}>复制 Serve</button>
+               <button className="ghost" disabled={actionInFlight} onClick={() => onCopy('up')}>复制 Up</button>
+               <button className="ghost" disabled={actionInFlight} onClick={onOpenA0Console}>A0 控制台</button>
+               <label className="toggle"><input type="checkbox" checked={autoRefresh} onChange={(event) => setAutoRefresh(event.target.checked)} /> 自动刷新</label>
             </div>
           </div>
           <div className={classNames('status', status.error && 'error')}>{status.message}</div>
@@ -861,9 +861,9 @@ export function App() {
 
         <section className="card">
           <div className="toolbar">
-            <div className="tab-nav" role="tablist" aria-label="Dashboard sections">
+            <div className="tab-nav" role="tablist" aria-label="Dashboard 分区">
               {(['overview', 'operations', 'settings'] as TabKey[]).map((name) => (
-                <button key={name} className={classNames('nav-button', tab === name && 'active')} onClick={() => setTab(name)}>{name[0].toUpperCase() + name.slice(1)}</button>
+                <button key={name} className={classNames('nav-button', tab === name && 'active')} onClick={() => setTab(name)}>{tabLabel(name)}</button>
               ))}
             </div>
             <div className="pill-row">
@@ -897,7 +897,7 @@ export function App() {
                   onResetWorkerOverrides={onResetWorkerOverrides}
                 />
         ) : (
-          <section className="card"><div className="small muted">Loading dashboard state...</div></section>
+          <section className="card"><div className="small muted">正在加载 Dashboard 状态…</div></section>
         )}
       </main>
     </div>

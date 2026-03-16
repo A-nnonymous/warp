@@ -1,0 +1,11 @@
+requests: {}
+messages:
+- id: note_2026_03_16t15_07_10_0
+  direction: user_to_a0
+  request_id: ''
+  action: note
+  body: "Error: \u542F\u52A8\u5931\u8D25\uFF1Alaunch failed for 7 worker(s): A1: /bin/sh:\
+    \ line 1: uv: command not found; A2: /bin/sh: line 1: uv: command not found; A3:\
+    \ /bin/sh: line 1: uv: command not found; A4: /bin/sh: line 1: uv: command not\
+    \ found; ... (+3 more)"
+  created_at: '2026-03-16T15:07:10'

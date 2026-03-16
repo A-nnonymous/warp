@@ -1,63 +1,59 @@
 project: sonicmoe-fp8
-last_updated: '2026-03-13T18:04:29'
-policy:
-  manager_review_cycle: every handoff or resume
-  planning_window: one manager review cycle
-  implementation_window: manager-defined
+last_updated: '2026-03-16T15:06:56'
 agents:
 - agent: A0
   role: manager
   state: healthy
-  last_seen: 2026-03-10
+  last_seen: '2026-03-10'
   evidence: current control-plane maintenance
   expected_next_checkin: next handoff or resume
   escalation: none
 - agent: A1
   role: protocol
-  state: offline
-  last_seen: '2026-03-13T18:04:29'
-  evidence: manager_stop
+  state: stale
+  last_seen: '2026-03-16T15:06:55'
+  evidence: launch_failed
   expected_next_checkin: while worker process is alive
-  escalation: none
+  escalation: '/bin/sh: line 1: uv: command not found'
 - agent: A2
   role: hopper-backend
-  state: offline
-  last_seen: '2026-03-13T16:17:16'
-  evidence: manager_stop
+  state: stale
+  last_seen: '2026-03-16T15:06:55'
+  evidence: launch_failed
   expected_next_checkin: while worker process is alive
-  escalation: none
+  escalation: '/bin/sh: line 1: uv: command not found'
 - agent: A3
   role: blackwell-backend
-  state: offline
-  last_seen: '2026-03-13T16:17:16'
-  evidence: manager_stop
+  state: stale
+  last_seen: '2026-03-16T15:06:55'
+  evidence: launch_failed
   expected_next_checkin: while worker process is alive
-  escalation: none
+  escalation: '/bin/sh: line 1: uv: command not found'
 - agent: A4
   role: torch-functional
-  state: offline
-  last_seen: '2026-03-13T16:17:16'
-  evidence: manager_stop
+  state: stale
+  last_seen: '2026-03-16T15:06:55'
+  evidence: launch_failed
   expected_next_checkin: while worker process is alive
-  escalation: none
+  escalation: '/bin/sh: line 1: uv: command not found'
 - agent: A5
   role: tests
-  state: offline
-  last_seen: '2026-03-13T16:17:16'
-  evidence: manager_stop
+  state: stale
+  last_seen: '2026-03-16T15:06:55'
+  evidence: launch_failed
   expected_next_checkin: while worker process is alive
-  escalation: none
+  escalation: '/bin/sh: line 1: uv: command not found'
 - agent: A6
   role: baseline-compat
-  state: offline
-  last_seen: '2026-03-13T18:04:29'
-  evidence: manager_stop
+  state: stale
+  last_seen: '2026-03-16T15:06:55'
+  evidence: launch_failed
   expected_next_checkin: while worker process is alive
-  escalation: none
+  escalation: '/bin/sh: line 1: uv: command not found'
 - agent: A7
   role: perf-delivery
-  state: offline
-  last_seen: '2026-03-13T16:17:16'
-  evidence: manager_stop
+  state: stale
+  last_seen: '2026-03-16T15:06:56'
+  evidence: launch_failed
   expected_next_checkin: while worker process is alive
-  escalation: none
+  escalation: '/bin/sh: line 1: uv: command not found'

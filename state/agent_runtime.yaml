@@ -1,5 +1,4 @@
 project: sonicmoe_fp8
-last_updated: '2026-03-13T18:04:29'
 schema:
   required_fields:
   - agent
@@ -18,6 +17,7 @@ schema:
   - test_command
   - submit_strategy
   - status
+last_updated: '2026-03-16T15:06:56'
 workers:
 - agent: A0
   repository_name: target-repo
@@ -35,11 +35,17 @@ workers:
   test_command: none
   submit_strategy: direct_manager_edit
   status: active
+  task_id: ''
+  recursion_guard: ''
+  launch_wrapper: ''
+  merge_target: ''
+  git_author_name: ''
+  git_author_email: ''
 - agent: A1
   repository_name: target-repo
-  resource_pool: ducc_pool
-  provider: ducc
-  model: Claude Opus 4.6
+  resource_pool: copilot_pool
+  provider: unassigned
+  model: unassigned
   launch_owner: manager
   local_workspace_root: /root/paddlejob/share-storage/gpfs/system-public/panzhaowu/lab/supersonic-moe
   repository_root: /root/paddlejob/share-storage/gpfs/system-public/panzhaowu/lab/warp
@@ -50,17 +56,18 @@ workers:
   sync_command: uv sync
   test_command: uv run pytest tests/moe_test.py -k protocol
   submit_strategy: patch_handoff
-  status: stopped
-  recursion_guard: env+exec-wrapper
-  launch_wrapper: /root/paddlejob/share-storage/gpfs/system-public/panzhaowu/lab/warp/runtime/generated_wrappers/ducc_single_layer.sh
+  status: 'launch_failed: /bin/sh: line 1: uv: command not found'
+  recursion_guard: env-only
+  launch_wrapper: ''
   merge_target: main
   git_author_name: A1-Protocol
   git_author_email: panzhaowu@baidu.com
+  task_id: ''
 - agent: A2
   repository_name: target-repo
-  resource_pool: ducc_pool
-  provider: ducc
-  model: Claude Opus 4.6
+  resource_pool: copilot_pool
+  provider: unassigned
+  model: unassigned
   launch_owner: manager
   local_workspace_root: /root/paddlejob/share-storage/gpfs/system-public/panzhaowu/lab/supersonic-moe
   repository_root: /root/paddlejob/share-storage/gpfs/system-public/panzhaowu/lab/warp
@@ -71,17 +78,18 @@ workers:
   sync_command: uv sync
   test_command: uv run pytest tests/moe_test.py -k test_moe
   submit_strategy: patch_handoff
-  status: stopped
-  recursion_guard: env+exec-wrapper
-  launch_wrapper: /root/paddlejob/share-storage/gpfs/system-public/panzhaowu/lab/warp/runtime/generated_wrappers/ducc_single_layer.sh
+  status: 'launch_failed: /bin/sh: line 1: uv: command not found'
+  recursion_guard: env-only
+  launch_wrapper: ''
   merge_target: main
-  git_author_name: FP8 Worker
-  git_author_email: fp8-worker@example.com
+  git_author_name: A2-Hopper
+  git_author_email: panzhaowu@baidu.com
+  task_id: ''
 - agent: A3
   repository_name: target-repo
-  resource_pool: ducc_pool
-  provider: ducc
-  model: Claude Opus 4.6
+  resource_pool: copilot_pool
+  provider: unassigned
+  model: unassigned
   launch_owner: manager
   local_workspace_root: /root/paddlejob/share-storage/gpfs/system-public/panzhaowu/lab/supersonic-moe
   repository_root: /root/paddlejob/share-storage/gpfs/system-public/panzhaowu/lab/warp
@@ -92,17 +100,18 @@ workers:
   sync_command: uv sync
   test_command: USE_QUACK_GEMM=1 uv run pytest tests/moe_test.py -k test_moe
   submit_strategy: patch_handoff
-  status: stopped
-  recursion_guard: env+exec-wrapper
-  launch_wrapper: /root/paddlejob/share-storage/gpfs/system-public/panzhaowu/lab/warp/runtime/generated_wrappers/ducc_single_layer.sh
+  status: 'launch_failed: /bin/sh: line 1: uv: command not found'
+  recursion_guard: env-only
+  launch_wrapper: ''
   merge_target: main
-  git_author_name: FP8 Worker
-  git_author_email: fp8-worker@example.com
+  git_author_name: A3-Blackwell
+  git_author_email: panzhaowu@baidu.com
+  task_id: ''
 - agent: A4
   repository_name: target-repo
-  resource_pool: ducc_pool
-  provider: ducc
-  model: Claude Opus 4.6
+  resource_pool: copilot_pool
+  provider: unassigned
+  model: unassigned
   launch_owner: manager
   local_workspace_root: /root/paddlejob/share-storage/gpfs/system-public/panzhaowu/lab/supersonic-moe
   repository_root: /root/paddlejob/share-storage/gpfs/system-public/panzhaowu/lab/warp
@@ -113,17 +122,18 @@ workers:
   sync_command: uv sync
   test_command: uv run pytest tests/moe_test.py -k test_moe
   submit_strategy: patch_handoff
-  status: stopped
-  recursion_guard: env+exec-wrapper
-  launch_wrapper: /root/paddlejob/share-storage/gpfs/system-public/panzhaowu/lab/warp/runtime/generated_wrappers/ducc_single_layer.sh
+  status: 'launch_failed: /bin/sh: line 1: uv: command not found'
+  recursion_guard: env-only
+  launch_wrapper: ''
   merge_target: main
-  git_author_name: FP8 Worker
-  git_author_email: fp8-worker@example.com
+  git_author_name: A4-Reference
+  git_author_email: panzhaowu@baidu.com
+  task_id: ''
 - agent: A5
   repository_name: target-repo
-  resource_pool: ducc_pool
-  provider: ducc
-  model: Claude Opus 4.6
+  resource_pool: copilot_pool
+  provider: unassigned
+  model: unassigned
   launch_owner: manager
   local_workspace_root: /root/paddlejob/share-storage/gpfs/system-public/panzhaowu/lab/supersonic-moe
   repository_root: /root/paddlejob/share-storage/gpfs/system-public/panzhaowu/lab/warp
@@ -134,17 +144,18 @@ workers:
   sync_command: uv sync
   test_command: uv run pytest tests/moe_test.py -k test_moe
   submit_strategy: patch_handoff
-  status: stopped
-  recursion_guard: env+exec-wrapper
-  launch_wrapper: /root/paddlejob/share-storage/gpfs/system-public/panzhaowu/lab/warp/runtime/generated_wrappers/ducc_single_layer.sh
+  status: 'launch_failed: /bin/sh: line 1: uv: command not found'
+  recursion_guard: env-only
+  launch_wrapper: ''
   merge_target: main
-  git_author_name: FP8 Worker
-  git_author_email: fp8-worker@example.com
+  git_author_name: A5-Tests
+  git_author_email: panzhaowu@baidu.com
+  task_id: ''
 - agent: A6
   repository_name: target-repo
-  resource_pool: ducc_pool
-  provider: ducc
-  model: Claude Opus 4.6
+  resource_pool: copilot_pool
+  provider: unassigned
+  model: unassigned
   launch_owner: manager
   local_workspace_root: /root/paddlejob/share-storage/gpfs/system-public/panzhaowu/lab/supersonic-moe
   repository_root: /root/paddlejob/share-storage/gpfs/system-public/panzhaowu/lab/warp
@@ -155,17 +166,18 @@ workers:
   sync_command: uv sync
   test_command: uv run pytest tests/moe_test.py -k baseline
   submit_strategy: patch_handoff
-  status: stopped
-  recursion_guard: env+exec-wrapper
-  launch_wrapper: /root/paddlejob/share-storage/gpfs/system-public/panzhaowu/lab/warp/runtime/generated_wrappers/ducc_single_layer.sh
+  status: 'launch_failed: /bin/sh: line 1: uv: command not found'
+  recursion_guard: env-only
+  launch_wrapper: ''
   merge_target: main
   git_author_name: A6-Baseline
   git_author_email: panzhaowu@baidu.com
+  task_id: ''
 - agent: A7
   repository_name: target-repo
-  resource_pool: ducc_pool
-  provider: ducc
-  model: Claude Opus 4.6
+  resource_pool: copilot_pool
+  provider: unassigned
+  model: unassigned
   launch_owner: manager
   local_workspace_root: /root/paddlejob/share-storage/gpfs/system-public/panzhaowu/lab/supersonic-moe
   repository_root: /root/paddlejob/share-storage/gpfs/system-public/panzhaowu/lab/warp
@@ -176,9 +188,10 @@ workers:
   sync_command: uv sync
   test_command: python -m py_compile benchmarks/bench_triton_moe.py
   submit_strategy: patch_handoff
-  status: stopped
-  recursion_guard: env+exec-wrapper
-  launch_wrapper: /root/paddlejob/share-storage/gpfs/system-public/panzhaowu/lab/warp/runtime/generated_wrappers/ducc_single_layer.sh
+  status: 'launch_failed: /bin/sh: line 1: uv: command not found'
+  recursion_guard: env-only
+  launch_wrapper: ''
   merge_target: main
-  git_author_name: FP8 Worker
-  git_author_email: fp8-worker@example.com
+  git_author_name: A7-Benchmark
+  git_author_email: panzhaowu@baidu.com
+  task_id: ''

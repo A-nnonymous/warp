@@ -15,7 +15,7 @@ from pathlib import Path
 from typing import Any, TextIO
 from urllib.parse import unquote, urlparse
 
-from .constants import DEFAULT_DASHBOARD_HOST, DEFAULT_DASHBOARD_PORT, RUNTIME_DIR, SESSION_STATE
+from .constants import DEFAULT_DASHBOARD_HOST, DEFAULT_DASHBOARD_PORT, SESSION_DIR, SESSION_STATE
 from .utils import terminate_process_tree
 
 
@@ -144,7 +144,7 @@ def load_session_state_file() -> dict[str, Any]:
 
 
 def session_state_path_for_port(port: int) -> Path:
-    return RUNTIME_DIR / f"session_state_{port}.json"
+    return SESSION_DIR / f"session_state_{port}.json"
 
 
 def load_preferred_session_state(preferred_port: int | None = None) -> dict[str, Any]:

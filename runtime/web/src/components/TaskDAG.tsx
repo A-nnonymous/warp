@@ -1,5 +1,6 @@
 import { useMemo } from 'react';
 import type { DashboardState, BacklogItem } from '../types';
+import { translateUiText } from '../lib/utils';
 
 type DagNode = {
   id: string;
@@ -122,7 +123,7 @@ export function TaskDAG({ data }: { data: DashboardState }) {
     return (
       <section className="card">
         <h2>Task DAG</h2>
-        <div className="small muted">No backlog items to visualize.</div>
+        <div className="small muted">当前没有可视化的 backlog 项。</div>
       </section>
     );
   }
@@ -143,7 +144,7 @@ export function TaskDAG({ data }: { data: DashboardState }) {
       <div className="panel-title">
         <div>
           <h2>Task DAG</h2>
-          <p className="small">Dependency graph showing task flow, status, and gate assignments.</p>
+          <p className="small">展示任务流转、状态与 Gate 分配关系的依赖图。</p>
         </div>
       </div>
       <div className="dag-container">
@@ -198,7 +199,7 @@ export function TaskDAG({ data }: { data: DashboardState }) {
                   {node.owner} · {node.gate}
                 </text>
                 <text x={node.x + NODE_W / 2} y={node.y + 52} textAnchor="middle" fill={style.text} fontSize={10} opacity={0.8}>
-                  {node.status}
+                  {translateUiText(node.status)}
                 </text>
               </g>
             );

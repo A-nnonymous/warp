@@ -35,6 +35,33 @@ When meaningful progress is made, the agent should record:
 
 The checkpoint must be cheap for another agent to pick up and continue without reconstructing hidden reasoning from scratch.
 
+## Human-First Collaboration Surfaces
+
+The manager should optimize for human clarity and comfort, not for forcing every interaction into one UI surface.
+
+The key architectural assumption is that `warp` is highly agent-autonomous:
+
+- A0 is the default decision-maker and workflow shaper
+- workers are expected to execute with bounded local autonomy
+- the control plane exists so humans can observe, audit, and intervene when autonomy hits a safe limit
+
+Therefore the human should not be modeled as the routine driver of A0. The human is the escalation target and exception handler.
+
+Use this split by default:
+
+- the **control plane** is the durable operating surface for observation and intervention
+- the **A0 Console** is for manager decisions and official human intervention when A0 needs it
+- an **external Copilot session** is for high-bandwidth engineering work
+
+Implications:
+
+- routine workflow shaping should remain with A0 whenever safe
+- approvals, unblock instructions, ownership changes, and workflow steering belong in the control plane when human involvement is needed
+- implementation-heavy discussion, debugging, and design iteration may happen outside the control plane
+- when outside work changes durable state, the manager must write the result back into workflow state, mailbox, or checkpoints before the session ends
+
+The goal is not tool purity. The goal is to keep the durable record clean while preserving a humane, fast working style.
+
 ## Interrupt Hierarchy
 
 The manager must support graded interruption and steering. Priority is strictly ordered:
@@ -129,17 +156,32 @@ For `warp`, that means every lane should make its state visible through reposito
 - runtime topology
 - manager report summaries
 
+## Durable Write-Back Rules
+
+The manager should decide the write-back surface based on the kind of change:
+
+- use **workflow updates** when task state changed
+- use **mailbox messages** when another worker or future session needs durable context
+- use **checkpoints** when progress exists but the lane is pausing, handing off, or at risk of interruption
+
+Checkpoint expectation:
+
+- every meaningful lane should be resumable
+- every handoff should leave behind the next safe step
+- every paused lane should make hidden reasoning unnecessary for continuation
+
 ## Practical Manager Loop
 
 At a high level, the manager should repeatedly do this:
 
 1. clarify or refine the overall goal with the human when needed
-2. compress goal and plan into low-noise markdown
-3. spawn or steer workers only when decomposition is coherent
-4. watch interruption signals in priority order
-5. collect worker feedback and failures
-6. decide whether the next action is delivery work or control-plane self-improvement
-7. checkpoint the new state before leaving the turn
+2. choose the most humane interaction surface for the next step
+3. compress goal and plan into low-noise markdown and durable control-plane state
+4. spawn or steer workers only when decomposition is coherent
+5. watch interruption signals in priority order
+6. collect worker feedback and failures
+7. decide whether the next action is delivery work or control-plane self-improvement
+8. checkpoint the new state before leaving the turn
 
 ## What Must Never Be Lost
 
