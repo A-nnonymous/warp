@@ -5,7 +5,7 @@ import os
 import time
 from typing import Any
 
-from .contracts import ManagerConsoleState
+from .contracts import ManagerConsoleState, ProcessSnapshot
 from .constants import (
     PROVIDER_STATS_PATH,
     MANAGER_CONSOLE_PATH,
@@ -213,8 +213,8 @@ class StateMixin:
             "last_activity_at": last_activity_at,
         }
 
-    def process_snapshot(self) -> dict[str, Any]:
-        snapshot: dict[str, Any] = {}
+    def process_snapshot(self) -> dict[str, ProcessSnapshot]:
+        snapshot: dict[str, ProcessSnapshot] = {}
         for agent, worker in self.processes.items():
             telemetry = self.worker_process_telemetry(worker)
             snapshot[agent] = {

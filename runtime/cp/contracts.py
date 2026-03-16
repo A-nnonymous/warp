@@ -385,6 +385,16 @@ class CommandMap(TypedDict, total=False):
     up: str
 
 
+class LaunchPolicyState(TypedDict, total=False):
+    default_strategy: str
+    default_provider: str | None
+    default_model: str | None
+    available_strategies: list[str]
+    available_providers: list[str]
+    initial_provider: str
+    has_launch_history: bool
+
+
 class DashboardMode(TypedDict, total=False):
     state: str
     cold_start: bool
@@ -400,7 +410,7 @@ class DashboardState(TypedDict, total=False):
     mode: DashboardMode
     project: ProjectConfig
     commands: CommandMap
-    launch_policy: dict[str, Any]
+    launch_policy: LaunchPolicyState
     manager_report: str
     runtime: RuntimeState
     heartbeats: HeartbeatState

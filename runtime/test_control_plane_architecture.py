@@ -9,8 +9,12 @@ from runtime.cp.contracts import (
     A0ConsoleState,
     BacklogItem,
     CleanupState,
+    CleanupWorkerState,
     DashboardState,
+    LaunchPolicyState,
     ManagerControlState,
+    ProcessSnapshot,
+    ProviderQueueItem,
     RuntimeWorkerEntry,
     TeamMailboxMessage,
     WorkerHandoffSummary,
@@ -38,25 +42,30 @@ class ControlPlaneArchitectureTest(unittest.TestCase):
     def test_contracts_are_runtime_typing_shapes(self) -> None:
         backlog_item: BacklogItem = {"id": "A1-001", "status": "pending", "title": "Task"}
         runtime_worker: RuntimeWorkerEntry = {"agent": "A1", "resource_pool": "ducc_pool", "status": "active"}
-        cleanup_state: CleanupState = {"ready": False, "blockers": ["active workers"]}
+        cleanup_worker: CleanupWorkerState = {"agent": "A1", "ready": False, "blockers": ["active workers"]}
+        cleanup_state: CleanupState = {"ready": False, "blockers": ["active workers"], "workers": [cleanup_worker]}
         workflow_patch: WorkflowPatch = {"status": "review", "dependencies": ["A0-001"]}
         mailbox_message: TeamMailboxMessage = {"from": "A1", "to": "A0", "topic": "status_note"}
         a0_console: A0ConsoleState = {"requests": [], "messages": [], "inbox": [], "pending_count": 0}
         handoff: WorkerHandoffSummary = {"checkpoint_status": "checkpointed", "pending_work": ["merge patch"]}
         control: ManagerControlState = {"worker_count": 1, "active_agents": ["A1"]}
+        launch_policy: LaunchPolicyState = {"default_strategy": "elastic", "available_strategies": ["elastic"]}
+        process_snapshot: ProcessSnapshot = {"provider": "ducc", "alive": True, "command": ["ducc"]}
+        provider_queue_item: ProviderQueueItem = {"resource_pool": "ducc_pool", "provider": "ducc", "launch_ready": True}
         dashboard: DashboardState = {
             "updated_at": "2026-03-16T00:00:00Z",
             "last_event": "boot",
             "mode": {"state": "configured", "cold_start": False, "listener_active": True},
             "project": {"repository_name": "warp"},
             "commands": {"serve": "python serve", "up": "python up"},
+            "launch_policy": launch_policy,
             "manager_report": "ok",
             "runtime": {"workers": [runtime_worker]},
             "heartbeats": {"agents": [{"agent": "A0", "state": "healthy"}]},
             "backlog": {"items": [backlog_item]},
             "gates": {"gates": [{"id": "G1", "status": "open"}]},
-            "processes": {},
-            "provider_queue": [],
+            "processes": {"A1": process_snapshot},
+            "provider_queue": [provider_queue_item],
             "resolved_workers": [],
             "merge_queue": [{"agent": "A1", "checkpoint_status": handoff["checkpoint_status"]}],
             "a0_console": a0_console,
@@ -71,9 +80,13 @@ class ControlPlaneArchitectureTest(unittest.TestCase):
         self.assertEqual(backlog_item["id"], "A1-001")
         self.assertEqual(runtime_worker["agent"], "A1")
         self.assertIn("active workers", cleanup_state["blockers"])
+        self.assertEqual(cleanup_state["workers"][0]["agent"], "A1")
         self.assertEqual(workflow_patch["status"], "review")
         self.assertEqual(mailbox_message["from"], "A1")
         self.assertEqual(a0_console["pending_count"], 0)
+        self.assertEqual(launch_policy["default_strategy"], "elastic")
+        self.assertEqual(process_snapshot["provider"], "ducc")
+        self.assertEqual(provider_queue_item["resource_pool"], "ducc_pool")
         self.assertEqual(control["worker_count"], 1)
         self.assertEqual(dashboard["runtime"]["workers"][0]["agent"], "A1")
 

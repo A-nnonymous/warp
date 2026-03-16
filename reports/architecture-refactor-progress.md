@@ -1,5 +1,22 @@
 # Architecture Refactor Progress
 
+- 时间：2026-03-16 08:5x CST
+- 当前阶段：已把 dashboard 下钻子视图中最顺手的一刀收成明确 typed contract，provider/process/cleanup/launch-policy 这组返回面不再继续裸奔。
+- 本阶段代码成果：
+  - 在 `runtime/cp/contracts.py` 新增 `LaunchPolicyState`，并把 `DashboardState.launch_policy` 从 `dict[str, Any]` 收紧为明确 contract；同时把既有的 `ProcessSnapshot` / `ProviderQueueItem` / `CleanupState` 真正接到对应子视图返回面。
+  - `provider_mixin.py` 的 `evaluate_resource_pool()` / `provider_queue()` / `launch_policy_state()` 全部改为返回 typed contract，让 dashboard 的 provider queue 与 launch policy 子视图直接暴露稳定 shape，而不是继续用松散 dict。
+  - `state_mixin.py` 的 `process_snapshot()` 改成返回 `dict[str, ProcessSnapshot]`；`mailbox_mixin.py` 的 `cleanup_status()` 改成返回 `CleanupState`，并把 worker rows 明确成 `CleanupWorkerState` 列表，dashboard 的 process/cleanup 子视图正式接上 contracts。
+  - 更新 `runtime/test_control_plane_architecture.py` 与 `runtime/cp/CODE_INDEX.md`，把 `LaunchPolicyState`、`ProcessSnapshot`、`ProviderQueueItem`、`CleanupWorkerState` 这些子视图 contract 纳入架构测试面与索引。
+- 已验证：
+  - `uv run --no-project --with 'PyYAML>=6.0.2' python -m unittest runtime.test_control_plane_architecture runtime.test_control_plane_integration.ControlPlaneIntegrationTest.test_session_backed_provider_launches_without_api_key runtime.test_control_plane_integration.ControlPlaneIntegrationTest.test_session_probe_failure_surfaces_actionable_error runtime.test_control_plane_integration.ControlPlaneIntegrationTest.test_initial_launch_provider_falls_back_to_configured_ducc runtime.test_control_plane_integration.ControlPlaneIntegrationTest.test_ducc_prompt_file_flag_is_sanitized_for_stale_configs` ✅
+- 当前断点：
+  - dashboard 四个候选子视图里，这一刀已经把 `launch_policy_state()`、`provider_queue()`、`process_snapshot()`、`cleanup_status()` 的返回 contract 接上了，但字段内部仍有少量嵌套 `dict[str, Any]`（例如 `running_agents` / `usage` / command telemetry），如果下一阶段继续收紧，可以进一步把这些内层 payload 也拆成更细 typed shape。
+  - `backlog_mixin.py` 的 mailbox fanout / notification routing service 仍是另一条自然支线；但若继续优先 dashboard，这时可以顺手补 provider/process/cleanup 子视图相关纯 helper 或更细粒度 contract，而不是回头做顶层 assembler。
+- 下一步：
+  1. 继续沿 dashboard 子视图往内收：优先把 `provider_queue` / `process_snapshot` 内层 usage、running-agent、command telemetry 再细分成 typed contract。
+  2. 或在确认 dashboard 再往内一刀性价比下降后，切到 `backlog_mixin.py`，抽 mailbox fanout / notification routing service。
+  3. 继续坚持“单阶段、单刀口、定向测试、单 commit”节奏。
+
 - 时间：2026-03-16 03:3x CST
 - 当前阶段：已把 dashboard/runtime assembler 的顶层视图 contract typed 化，dashboard 现在不只 service 层 typed，连 assembler 返回面也开始有统一 shape。
 - 本阶段代码成果：

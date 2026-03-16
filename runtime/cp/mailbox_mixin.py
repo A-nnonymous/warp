@@ -2,7 +2,7 @@ from __future__ import annotations
 
 from typing import Any
 
-from .contracts import A0ConsoleState, TeamMailboxMessage, TeamMailboxState
+from .contracts import A0ConsoleState, CleanupState, CleanupWorkerState, HeartbeatState, RuntimeState, TeamMailboxMessage, TeamMailboxState
 from .constants import (
     MAILBOX_ACK_STATES,
     STATE_DIR,
@@ -106,9 +106,9 @@ class MailboxMixin:
 
     def cleanup_status(
         self,
-        runtime_state: dict[str, Any] | None = None,
-        heartbeat_state: dict[str, Any] | None = None,
-    ) -> dict[str, Any]:
+        runtime_state: RuntimeState | None = None,
+        heartbeat_state: HeartbeatState | None = None,
+    ) -> CleanupState:
         runtime_state = runtime_state or self.dashboard_runtime_state()
         heartbeat_state = heartbeat_state or self.dashboard_heartbeats_state(runtime_state=runtime_state)
         runtime_workers = {
@@ -153,7 +153,7 @@ class MailboxMixin:
             locked_files.append({"path": path, "owner": owner, "state": state})
             locked_files_by_owner.setdefault(owner, []).append(path)
 
-        worker_rows = []
+        worker_rows: list[CleanupWorkerState] = []
         for worker in self.workers:
             agent = str(worker.get("agent") or "").strip()
             runtime_entry = runtime_workers.get(agent, {})

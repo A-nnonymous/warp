@@ -20,6 +20,7 @@ from .constants import (
     STATE_DIR,
     WRAPPER_DIR,
 )
+from .contracts import LaunchPolicyState, ProviderQueueItem
 from .network import LaunchPolicy
 from .services import best_pool_for_provider, best_pool_for_worker, queue_pool_candidates
 from .utils import format_command, load_yaml, run_command, slugify
@@ -181,7 +182,7 @@ class ProviderMixin:
         denominator = numerator + launch_failures + failed_exits + 1
         return round(numerator / denominator, 3)
 
-    def evaluate_resource_pool(self, pool_name: str) -> dict[str, Any]:
+    def evaluate_resource_pool(self, pool_name: str) -> ProviderQueueItem:
         pool = self.resource_pools[pool_name]
         provider_name = str(pool.get("provider", "unassigned"))
         provider = self.providers.get(provider_name, {})
@@ -274,8 +275,8 @@ class ProviderMixin:
             "last_failure": failure_detail,
         }
 
-    def provider_queue(self) -> list[dict[str, Any]]:
-        evaluations = [self.evaluate_resource_pool(pool_name) for pool_name in self.resource_pools]
+    def provider_queue(self) -> list[ProviderQueueItem]:
+        evaluations: list[ProviderQueueItem] = [self.evaluate_resource_pool(pool_name) for pool_name in self.resource_pools]
         return sorted(evaluations, key=lambda item: (-item["score"], -item["priority"], item["resource_pool"]))
 
     def has_launch_history(self) -> bool:
@@ -335,7 +336,7 @@ class ProviderMixin:
             raise ValueError(f"unknown provider: {provider}")
         return LaunchPolicy(strategy=raw_strategy, provider=provider, model=model)
 
-    def launch_policy_state(self) -> dict[str, Any]:
+    def launch_policy_state(self) -> LaunchPolicyState:
         default_policy = self.default_launch_policy()
         return {
             "default_strategy": default_policy.strategy,
