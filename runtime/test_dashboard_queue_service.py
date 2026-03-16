@@ -50,7 +50,7 @@ class DashboardQueueServiceTest(unittest.TestCase):
         self.assertEqual(queue[1]["worker_identity"], "environment default")
         self.assertEqual(queue[1]["manager_action"], "A0 merges feat/a2 into main")
 
-    def test_build_a0_request_catalog_merges_reviews_interventions_and_inbox(self) -> None:
+    def test_build_a0_request_catalog_merges_reviews_interventions_unlocks_and_inbox(self) -> None:
         backlog_items = [
             {
                 "id": "A1-001",
@@ -81,7 +81,7 @@ class DashboardQueueServiceTest(unittest.TestCase):
             {
                 "agent": "A4",
                 "status": "waiting",
-                "attention_summary": "",
+                "attention_summary": "needs lock release",
                 "blockers": ["waiting for config"],
                 "requested_unlocks": ["config.yaml"],
                 "resume_instruction": "apply config and continue",
@@ -99,9 +99,13 @@ class DashboardQueueServiceTest(unittest.TestCase):
                 "response_note": "recheck naming",
                 "created_at": "2026-03-16T01:06:00Z",
             },
-            slugify("A3_stale_A3 needs intervention_worker exited with 7"): {
+            slugify("A3_intervention_stale_worker exited with 7"): {
                 "response_state": "pending",
                 "created_at": "2026-03-16T01:07:00Z",
+            },
+            slugify("A4_unlock_waiting_config.yaml"): {
+                "response_state": "acknowledged",
+                "created_at": "2026-03-16T01:08:00Z",
             },
         }
         messages = [{"id": "old", "body": "kept"}]
@@ -109,14 +113,18 @@ class DashboardQueueServiceTest(unittest.TestCase):
         mailbox_catalog = build_team_mailbox_catalog(mailbox_messages)
         catalog = build_a0_request_catalog(backlog_items, merge_queue, mailbox_catalog, request_state, messages)
 
-        self.assertEqual(catalog["pending_count"], 4)
-        self.assertEqual([item["agent"] for item in catalog["requests"]], ["A1", "A3", "A4", "A2"])
+        self.assertEqual(catalog["pending_count"], 3)
+        self.assertEqual([item["agent"] for item in catalog["requests"]], ["A1", "A3", "A2", "A4"])
         by_agent = {item["agent"]: item for item in catalog["requests"]}
         self.assertEqual(by_agent["A1"]["request_type"], "plan_review")
+        self.assertEqual(by_agent["A2"]["request_type"], "task_review")
         self.assertEqual(by_agent["A2"]["response_state"], "resume")
+        self.assertEqual(by_agent["A3"]["request_type"], "worker_intervention")
         self.assertEqual(by_agent["A3"]["title"], "A3 needs intervention")
         self.assertIn("provider auth missing", by_agent["A3"]["body"])
+        self.assertEqual(by_agent["A4"]["request_type"], "unlock")
         self.assertEqual(by_agent["A4"]["title"], "A4 requests unlock")
+        self.assertIn("needs lock release", by_agent["A4"]["body"])
         self.assertEqual([item["id"] for item in catalog["inbox"]], ["m1"])
         self.assertEqual(catalog["messages"], messages)
 

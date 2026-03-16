@@ -1,5 +1,21 @@
 # Architecture Refactor Progress
 
+- 时间：2026-03-16 10:1x CST
+- 当前阶段：收 `dashboard_queue.py` 的 A0 request catalog 尾巴，把 backlog review request 与 merge-queue intervention/unlock request 生成从大函数内联分支拆成明确 helper，优先一刀收掉 manager-facing request shaping 残留。
+- 本阶段代码成果：
+  - 重构 `runtime/cp/services/dashboard_queue.py`，新增 `backlog_plan_review_request()`、`backlog_task_review_request()`、`merge_queue_intervention_request()`、`merge_queue_unlock_request()` 与共用 saved/body helper，把 `build_a0_request_catalog()` 压回聚合/排序层，不再内嵌四类 request 的具体 shaping。
+  - merge queue 的 unlock 请求现在单独产出 `request_type="unlock"`，与 `worker_intervention` 明确分流；unlock/intervention 的 request id 也改成按语义稳定生成，避免继续把标题文案耦进持久化 key。
+  - 更新 `runtime/test_dashboard_queue_service.py` 与 `runtime/cp/CODE_INDEX.md`，把 plan/task review、worker intervention、unlock request 的分流与排序行为纳入定向单测与索引说明。
+- 已验证：
+  - `uv run --no-project --with 'PyYAML>=6.0.2' python3 -m unittest runtime.test_dashboard_queue_service runtime.test_control_plane_architecture runtime.test_control_plane_integration.ControlPlaneIntegrationTest.test_task_actions_drive_plan_and_review_flow runtime.test_control_plane_integration.ControlPlaneIntegrationTest.test_a0_console_records_user_reply runtime.test_control_plane_integration.ControlPlaneIntegrationTest.test_team_mailbox_send_and_acknowledge_flow` ✅
+- 当前断点：
+  - `build_a0_request_catalog()` 的 request shaping 残留已基本收干净，但 `dashboard_queue.py` 仍同时承载 merge queue row shaping 与 A0 request aggregation；若还要继续细收，可再评估是否把 A0 request builders 独立成更专门模块。
+  - mailbox/cleanup 侧残留仍主要在 `mailbox_mixin.py` 的 `cleanup_status()` blockers / worker-row shaping，以及 `record_a0_user_message()` 这类 manager-console 写入编排，已比 request catalog 更像最后一刀范围。
+- 下一步：
+  1. 优先转去 `mailbox_mixin.py` 的 `cleanup_status()`，把 pending review / lock / blocker / worker row shaping 抽成纯 view service，收掉 manager-facing cleanup 尾巴。
+  2. 若坚持继续细拆 dashboard queue，则只做更彻底的模块分离，不再回到 request 字段微调。
+  3. 继续坚持“单阶段、单刀口、定向测试、单 commit”节奏。
+
 - 时间：2026-03-16 10:0x CST
 - 当前阶段：收 mailbox/mailbox_mixin 尾巴，把 mailbox catalog / A0 inbox filtering / pending 统计从 mixin/dashboard 消费面一起抽到独立 view service，优先压缩 backlog-mailbox 剩余面。
 - 本阶段代码成果：
